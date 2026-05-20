@@ -1,0 +1,15 @@
+{
+  "name": "symmetra",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TypeScript for the GPU — CUDA-native runtime",
+  "scripts": {
+    "build:engine": "cmake --build engine/build --config Release",
+    "build:sdk": "pnpm -r build",
+    "build": "pnpm run build:engine && pnpm run build:sdk",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

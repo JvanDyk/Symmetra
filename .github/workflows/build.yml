@@ -1,0 +1,58 @@
+name: Build Engine
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.14
+        with:
+          cuda: '12.3.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "nvrtc", "cuda_profiler_api"]'
+
+      - name: Configure CMake
+        run: cmake -B engine/build -S engine -DCMAKE_BUILD_TYPE=Release
+        working-directory: ${{ github.workspace }}
+
+      - name: Build engine
+        run: cmake --build engine/build --config Release
+        working-directory: ${{ github.workspace }}
+
+      - name: Upload symmetra.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: symmetra-windows-x64
+          path: engine/build/Release/symmetra.exe
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.14
+        with:
+          cuda: '12.3.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "nvrtc"]'
+
+      - name: Configure CMake
+        run: cmake -B engine/build -S engine -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build engine
+        run: cmake --build engine/build --config Release
+
+      - name: Upload symmetra binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: symmetra-linux-x64
+          path: engine/build/symmetra

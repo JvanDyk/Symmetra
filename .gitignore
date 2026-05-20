@@ -1,0 +1,15 @@
+build/
+dist/
+*.node
+*.exe
+*.dll
+*.so
+*.pdb
+*.obj
+*.o
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+symmetra-tmp-*.js

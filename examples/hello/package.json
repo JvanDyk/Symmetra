@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra-examples/hello",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Symmetra hello world — GPU HTTP server in 8 lines",
+  "scripts": {
+    "start": "symmetra ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "workspace:*"
+  }
+}

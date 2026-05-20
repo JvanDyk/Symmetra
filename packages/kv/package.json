@@ -1,0 +1,17 @@
+{
+  "name": "@symmetra/kv",
+  "version": "1.0.0",
+  "description": "Symmetra VRAM key-value store with TTL",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@symmetra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra-examples/http-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "symmetra ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "workspace:*",
+    "@symmetra/kv": "workspace:*"
+  }
+}

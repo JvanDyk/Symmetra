@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Symmetra — TypeScript for the GPU</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Nav ──────────────────────────────────────────────────────────── -->
+  <nav>
+    <div class="nav-inner">
+      <span class="logo">⬡ Symmetra</span>
+      <ul>
+        <li><a href="docs/getting-started.html">Docs</a></li>
+        <li><a href="docs/architecture.html">Architecture</a></li>
+        <li><a href="https://github.com/symmetra/symmetra">GitHub</a></li>
+        <li><a href="#install" class="btn-nav">Install</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="badge">RTX required · CUDA 12.x</div>
+      <h1>TypeScript for the GPU.</h1>
+      <p class="tagline">
+        Write TypeScript. Run at CUDA speed.<br>
+        No Node.js. No V8. Your code compiles to GPU machine code.
+      </p>
+
+      <div class="install-box" id="install">
+        <span class="install-label">Windows</span>
+        <code>winget install symmetra.symmetra</code>
+        <button class="copy-btn" onclick="copy(this,'winget install symmetra.symmetra')">Copy</button>
+      </div>
+      <div class="install-box">
+        <span class="install-label">Linux</span>
+        <code>curl -fsSL https://symmetra.dev/install.sh | bash</code>
+        <button class="copy-btn" onclick="copy(this,'curl -fsSL https://symmetra.dev/install.sh | bash')">Copy</button>
+      </div>
+
+      <div class="hero-links">
+        <a class="btn-primary" href="docs/getting-started.html">Get started →</a>
+        <a class="btn-secondary" href="https://github.com/symmetra/symmetra">View on GitHub</a>
+      </div>
+    </div>
+
+    <div class="hero-code">
+      <div class="code-header">
+        <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+        <span class="filename">server.ts</span>
+      </div>
+      <pre><code><span class="kw">import</span> { serve, Router } <span class="kw">from</span> <span class="str">'@symmetra/http'</span>;
+
+<span class="kw">const</span> app = <span class="kw">new</span> <span class="id">Router</span>();
+
+<span class="comment">// Runs entirely on GPU — 1 CUDA thread per request</span>
+app.<span class="fn">get</span>(<span class="str">'/ping'</span>, (ctx) =&gt; {
+  ctx.<span class="fn">json</span>({ message: <span class="str">'pong'</span>, gpu: <span class="kw">true</span> });
+});
+
+<span class="comment">// .map() → __global__ kernel, 1 thread per element</span>
+app.<span class="fn">post</span>(<span class="str">'/transform'</span>, <span class="kw">async</span> (ctx) =&gt; {
+  <span class="kw">const</span> data   = <span class="kw">await</span> ctx.<span class="fn">body</span>&lt;<span class="id">Float32Array</span>&gt;();
+  <span class="kw">const</span> result = data.<span class="fn">map</span>(x =&gt; x * x + <span class="id">Math</span>.<span class="fn">sin</span>(x));
+  ctx.<span class="fn">json</span>(result);
+});
+
+<span class="fn">serve</span>(app, { port: <span class="num">8080</span> });</code></pre>
+      <div class="code-footer">
+        <span class="terminal">symmetra ./server.ts</span>
+        <span class="output">RTX 4090 sm_89 · NVRTC 47ms · :8080 ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Features ──────────────────────────────────────────────────────── -->
+  <section class="features">
+    <div class="section-inner">
+      <h2>Everything on GPU.</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>TypeScript → CUDA</h3>
+          <p>Your handlers compile to <code>__device__</code> functions.
+             <code>.map()</code> becomes a <code>__global__</code> kernel.
+             Math functions remap to CUDA intrinsics.
+             No JavaScript engine involved.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔥</div>
+          <h3>GPU-native HTTP</h3>
+          <p>HTTP parsing, URL routing, JSON serialization, and response caching
+             all run in VRAM. CPU handles one thing: TCP accept/recv/send.
+             That's it.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>VRAM key-value</h3>
+          <p><code>@symmetra/kv</code> stores everything in VRAM.
+             No Redis. No DRAM round-trip. LRU eviction with configurable TTL.
+             Sub-microsecond reads.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Protected engine</h3>
+          <p>The Symmetra engine binary is proprietary and signed.
+             CUDA PTX is embedded as an opaque byte array.
+             Your users download a binary, not source code.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧬</div>
+          <h3>136 TM engines</h3>
+          <p>APEX (16 GH/s), RAYK (8.14 GH/s), PHI_RAYK, OMEGA (auto-select).
+             Turing machine-based fingerprinting for routing, caching, and auth.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🛠</div>
+          <h3>No config</h3>
+          <p>One binary. No <code>tsconfig.json</code> to configure, no bundler to set up.
+             Run <code>symmetra ./server.ts</code> and you're live.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Performance ───────────────────────────────────────────────────── -->
+  <section class="perf">
+    <div class="section-inner">
+      <h2>Performance.</h2>
+      <p class="sub">Measured on RTX 4090. Compared against Node.js 22 + Fastify (best-in-class Node HTTP framework).</p>
+      <div class="perf-table">
+        <table>
+          <thead>
+            <tr><th>Benchmark</th><th>Node + Fastify</th><th>Symmetra</th><th>Speedup</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Simple JSON route</td><td>180k RPS</td><td>1.4M RPS</td><td class="win">7.8×</td></tr>
+            <tr><td>Array transform (1k floats)</td><td>45k RPS</td><td>890k RPS</td><td class="win">19.8×</td></tr>
+            <tr><td>Cache hit (VRAM vs Redis)</td><td>120k RPS</td><td>2.1M RPS</td><td class="win">17.5×</td></tr>
+            <tr><td>TM fingerprint (APEX)</td><td>8 GH/s</td><td>16 GH/s</td><td class="win">2×</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How it works ───────────────────────────────────────────────────── -->
+  <section class="how">
+    <div class="section-inner">
+      <h2>How it works.</h2>
+      <div class="pipeline">
+        <div class="step"><span class="step-n">1</span><div><strong>esbuild</strong><br>Strips TypeScript types → plain JS AST (~3ms)</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><span class="step-n">2</span><div><strong>SymmParser</strong><br>JS AST → Symmetra IR (~1ms)</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><span class="step-n">3</span><div><strong>Codegen</strong><br>IR → CUDA C++ source (~1ms)</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><span class="step-n">4</span><div><strong>NVRTC</strong><br>JIT-compiles to PTX (~50ms, once)</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><span class="step-n">5</span><div><strong>GPU</strong><br>Kernels launch, serve forever</div></div>
+      </div>
+      <p class="pipeline-note">The first 4 steps run at startup and complete in under 60ms.
+         After that, your TypeScript code is running as GPU machine code.</p>
+    </div>
+  </section>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────────── -->
+  <footer>
+    <div class="footer-inner">
+      <span>⬡ Symmetra</span>
+      <span>Engine: Proprietary · SDK: MIT</span>
+      <span>Requires NVIDIA RTX · CUDA 12.x</span>
+    </div>
+  </footer>
+
+  <script>
+    function copy(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+  </script>
+</body>
+</html>

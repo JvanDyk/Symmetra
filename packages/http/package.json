@@ -1,0 +1,18 @@
+{
+  "name": "@symmetra/http",
+  "version": "1.0.0",
+  "description": "Symmetra GPU-native HTTP server — replaces Express/Fastify",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@symmetra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}
