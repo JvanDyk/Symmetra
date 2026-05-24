@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-env-config",
+  "version": "1.0.0",
+  "description": "Symmetra env + config example — process.env, feature flags, health checks",
+  "scripts": {
+    "start": "sym ./server.ts",
+    "start:prod": "APP_ENV=production sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*"
+  }
+}

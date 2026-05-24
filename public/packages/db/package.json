@@ -1,0 +1,18 @@
+{
+  "name": "@symmetra/db",
+  "version": "1.0.0",
+  "description": "GPU-native database client for Symmetra — PostgreSQL, SQLite, Redis",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "@symmetra/core": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

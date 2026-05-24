@@ -3,7 +3,7 @@
 ## Requirements
 
 - NVIDIA GPU: RTX 2070 or newer (compute capability sm_75+)
-- CUDA Toolkit 12.x — [download](https://developer.nvidia.com/cuda-downloads)
+- CUDA Toolkit 12.x or later — [download](https://developer.nvidia.com/cuda-downloads)
 - Windows 10/11 (64-bit) or Ubuntu 22.04+
 - esbuild (bundled with Symmetra — no separate install needed)
 
@@ -12,24 +12,24 @@
 **Windows:**
 ```powershell
 # Option A: winget
-winget install symmetra.symmetra
+winget install symmetra.sym
 
 # Option B: direct download
 curl -L https://symmetra.dev/install.ps1 | powershell
 
 # Verify
-symmetra --version
-symmetra doctor
+sym --version
+sym doctor
 ```
 
 **Linux:**
 ```bash
 curl -fsSL https://symmetra.dev/install.sh | bash
-symmetra --version
-symmetra doctor
+sym --version
+sym doctor
 ```
 
-`symmetra doctor` checks your GPU, CUDA driver, and esbuild. If anything is missing, it tells you exactly what to install.
+`sym doctor` checks your GPU, CUDA driver, and esbuild. If anything is missing, it tells you exactly what to install.
 
 ---
 
@@ -52,7 +52,7 @@ serve(app, { port: 8080 });
 Run it:
 
 ```bash
-symmetra ./server.ts
+sym ./server.ts
 ```
 
 Output:
@@ -72,7 +72,7 @@ curl http://localhost:8080/ping
 
 ## What just happened
 
-1. `symmetra` called **esbuild** to strip the TypeScript types from your file (~3ms)
+1. `sym` called **esbuild** to strip the TypeScript types from your file (~3ms)
 2. The **Symmetra compiler** walked the resulting JS AST and generated CUDA C++ source
 3. **NVRTC** JIT-compiled the CUDA C++ to PTX for your specific GPU (~47ms, once)
 4. The GPU kernel was launched — your handler now runs entirely in VRAM
@@ -138,14 +138,13 @@ serve(app, { port: 8080 });
 
 ---
 
-## TM fingerprinting
+## GPU fingerprinting
 
-Symmetra ships with the APEX engine (~16 GH/s), RAYK (8.14 GH/s), PHI_RAYK, and OMEGA (auto-select).
-Use `gpu.fingerprint()` or `gpu.rayk()` for deterministic, high-speed hashing:
+`gpu.fingerprint()` runs a cellular-automaton hash entirely on the GPU — no DRAM round-trip:
 
 ```typescript
 app.get('/fp/:key', async (ctx) => {
-  const fp = await ctx.gpu.fingerprint(ctx.params.key, { engine: 'APEX' });
+  const fp = await ctx.gpu.fingerprint(ctx.params.key);
   ctx.json({ fp: fp.toString(16) });
 });
 ```
@@ -169,17 +168,16 @@ These patterns cause a compile-time error from the Symmetra engine:
 ## CLI reference
 
 ```bash
-symmetra ./server.ts          # Compile + run
-symmetra build ./server.ts    # Compile to symmetra.ptx (ahead-of-time)
-symmetra doctor               # Check GPU, CUDA, esbuild
-symmetra bench                # GPU benchmark
-symmetra version              # Version info
+sym ./server.ts          # Compile + run
+sym build ./server.ts    # Compile to sym.ptx (ahead-of-time)
+sym doctor               # Check GPU, CUDA, esbuild
+sym bench                # GPU benchmark
+sym version              # Version info
 ```
 
 Options:
 ```bash
 --port <n>       Override the port from serve()
 --streams <n>    CUDA stream pool size (default: 32)
---engine <name>  Default TM engine (APEX|RAYK|PHI_RAYK|OMEGA)
 --verbose        Show generated CUDA C++ and NVRTC output
 ```

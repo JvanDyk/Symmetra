@@ -1,0 +1,15 @@
+{
+  "name": "@symmetra/net",
+  "version": "1.0.0",
+  "description": "GPU-native networking for Symmetra — HTTP client, TCP, UDP, WebSocket, DNS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

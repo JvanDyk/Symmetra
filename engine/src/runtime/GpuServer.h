@@ -1,22 +1,49 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <memory>
 #include <atomic>
+#include <chrono>
+#include <unordered_map>
 #include <cuda.h>
 #include "NvrtcCompiler.h"
+#include "StreamPool.h"
+#include "ThreadPool.h"
+#include "GpuAllocator.h"
+#include "WarpScheduler.h"
+#include "BatchScheduler.h"
+#include "BatchContext.h"
 #include "parser/SymmParser.h"
 
 namespace symm {
 
 struct ServerOptions {
-    int         port    = 8080;
-    int         streams = 32;
-    std::string engine  = "OMEGA";
-    bool        verbose = false;
+    int  port      = 8080;
+    int  streams   = 32;   // CUDA stream pool size
+    // ioThreads must be >= streams for full GPU utilisation; each thread blocks on
+    // cudaStreamSynchronize() while holding a stream slot.  Default matches streams.
+    int  ioThreads = 32;
+    bool verbose   = false;
+
+    // useBatch: prefer the warp-aligned batch dispatch path (symm_dispatch_batch).
+    // Automatically falls back to single-thread dispatch if the compiled module
+    // does not contain symm_dispatch_batch (e.g. older modules).
+    bool useBatch  = true;
 };
 
-// The GpuServer owns the CUDA memory, route table, and TCP socket.
-// One instance per symmetra process. run() blocks until SIGINT.
+// GpuServer — multi-stream, multi-threaded HTTP server.
+//
+// Request lifecycle:
+//   CPU thread (ThreadPool) → accept → recv → StreamPool::acquire
+//   → GpuAllocator::requestAlloc (slab from stream slot)
+//   → cudaMemcpyAsync body → GPU kernel on stream
+//   → cudaMemcpyAsync response → send → GpuAllocator::requestFree
+//   → StreamPool::release (sync + return)
+//
+// All N ioThreads compete on the same listen socket (OS-level serialisation).
+// Each thread that wins accept() immediately processes the request on its own
+// CUDA stream — no head-of-line blocking between requests.
+//
 class GpuServer {
 public:
     GpuServer(const CompiledModule& mod,
@@ -24,51 +51,84 @@ public:
               const ServerOptions& opts);
     ~GpuServer();
 
-    // Start serving. Blocks until Ctrl-C / SIGINT.
-    void run();
+    void run();   // blocks until SIGINT
 
 private:
-    const CompiledModule& _mod;
+    const CompiledModule&        _mod;
     const std::vector<RouteReg>& _routes;
-    const ServerOptions& _opts;
+    const ServerOptions&         _opts;
 
-    // VRAM buffers for one batch of concurrent requests
-    static constexpr int MAX_BATCH = 64;   // requests per GPU dispatch
+    std::unique_ptr<StreamPool>  _streams;
+    std::unique_ptr<ThreadPool>  _io;
 
-    CUdeviceptr _d_ctx    = 0;   // SymmCtx[MAX_BATCH] in VRAM
-    CUdeviceptr _d_bodies = 0;   // raw body storage
-    CUdeviceptr _d_resps  = 0;   // response buffers
+    // Per-stream pinned host memory for async D2H response copy (single-thread path)
+    std::vector<void*> _h_resps;
+    static constexpr size_t RESP_SIZE = 64 * 1024;   // 64 KB per response buffer
+    static constexpr size_t BODY_SIZE = 64 * 1024;   // 64 KB max request body
 
-    // Host-side pinned memory for zero-copy I/O
-    void* _h_ctx   = nullptr;
-    void* _h_resps = nullptr;
+    // ── Batch dispatch infrastructure ─────────────────────────────────────────
+    // One BatchContext per stream slot — allocated once at startup, reused forever.
+    // _scheduler owns the thread that fires batches; valid only when dispatchBatch
+    // is available and useBatch is true.
+    std::vector<BatchContext>           _batchCtxs;
+    std::unique_ptr<BatchScheduler>     _scheduler;
 
-    // TCP socket
     int _listenFd = -1;
+    std::atomic<bool> _running{ false };
 
-    std::atomic<bool> _running{false};
-
-    // Internals
-    void allocVram();
-    void freeVram();
+    void initPinnedBuffers();
+    void freePinnedBuffers();
     bool initSocket();
-    void serveOne();
 
-    // Route lookup: returns index into _routes, -1 if not found
-    int matchRoute(const std::string& method, const std::string& path) const;
+    // Whether the batch path is active for this server instance.
+    bool batchModeActive() const {
+        return _scheduler && _mod.dispatchBatch;
+    }
 
-    // Parse minimal HTTP/1.1 from raw buffer
     struct ParsedRequest {
         std::string method;
         std::string path;
         std::string query;
-        const char* bodyStart;
-        int         bodyLen;
+        std::unordered_map<std::string, std::string> headers;
+        const char* bodyStart = nullptr;
+        int         bodyLen   = 0;
     };
-    bool parseHttp(const char* buf, int len, ParsedRequest& req) const;
 
-    // Build HTTP/1.1 response string
-    std::string buildResponse(int status, const char* body, int bodyLen) const;
+    // ── Accept loops ──────────────────────────────────────────────────────────
+    // Single-thread path (legacy / fallback):
+    void acceptLoop();
+    void handleConn(int connFd, StreamPool::Slot slot);
+
+    // Batch path: accepts requests and submits them to the BatchScheduler.
+    // The fd is transferred to the BatchRequest; GpuServer never closes it —
+    // sendBatchResponses() does that after the kernel completes.
+    void acceptLoopBatch();
+
+    // ── Batch GPU dispatch (called by BatchScheduler on its thread) ───────────
+    // Uploads the batch to VRAM, launches symm_dispatch_batch, downloads results,
+    // then calls sendBatchResponses().
+    void batchLaunch(int routeId,
+                     const std::vector<BatchRequest>& requests,
+                     BatchResult& result);
+
+    // Writes one HTTP response per request and closes each fd.
+    void sendBatchResponses(const std::vector<BatchRequest>& requests,
+                            const BatchResult& result);
+
+    // ── Shared helpers ────────────────────────────────────────────────────────
+    int matchRoute(const std::string& method, const std::string& path) const;
+    int  recvAll(int fd, char* buf, int cap) const;
+    bool parseHttp(const char* buf, int len, ParsedRequest& req) const;
+    bool wantsKeepAlive(const ParsedRequest& req) const;
+    std::string buildResponse(int status, const char* body, int bodyLen,
+                              bool keepAlive = false) const;
+
+    // Monotonic microsecond clock (shared by both paths)
+    static int64_t nowUs() {
+        using namespace std::chrono;
+        return duration_cast<microseconds>(
+            steady_clock::now().time_since_epoch()).count();
+    }
 };
 
 } // namespace symm

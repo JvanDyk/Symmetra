@@ -1,0 +1,7 @@
+{
+  "C_Cpp.default.configurationProvider": "",
+  "C_Cpp.intelliSenseEngineFallback": "disabled",
+  "cmake.buildDirectory": "${workspaceFolder}/engine/build",
+  "cmake.sourceDirectory": "${workspaceFolder}/engine",
+  "cmake.configureOnOpen": false
+}

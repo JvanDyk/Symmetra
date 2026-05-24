@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-http-client",
+  "version": "1.0.0",
+  "description": "Symmetra HTTP client example — fetch, parallel requests, timeout, webhooks",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*",
+    "@symmetra/net":  "*"
+  }
+}

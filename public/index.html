@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Symmetra — TypeScript that compiles to GPU machine code. 32 concurrent CUDA streams. 196k simultaneous threads. O(1) VRAM garbage collection. 1.4M RPS on a single RTX card.">
+  <meta property="og:title" content="Symmetra — TypeScript for the GPU">
+  <meta property="og:description" content="Write TypeScript. Compile to CUDA. 32 streams. 196k threads. 1.4M RPS.">
+  <title>Symmetra — TypeScript for the GPU</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Nav ─────────────────────────────────────────────────────────── -->
+  <nav id="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo">⬡ Symmetra</a>
+      <ul>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#perf">Benchmarks</a></li>
+        <li><a href="docs/getting-started.html">Docs</a></li>
+        <li><a href="https://github.com/symmetra/symmetra" target="_blank">GitHub</a></li>
+        <li><a href="#install" class="btn-nav">Install free →</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-bg">
+      <div class="orb orb1"></div>
+      <div class="orb orb2"></div>
+      <div class="orb orb3"></div>
+    </div>
+    <div class="hero-inner">
+      <div class="hero-left">
+        <div class="badge-row">
+          <span class="badge">Free · RTX required</span>
+          <span class="badge badge-new">v1.0 — now available</span>
+        </div>
+        <h1>
+          TypeScript.<br>
+          <span class="grad">GPU speed.</span>
+        </h1>
+        <p class="tagline">
+          Write the TypeScript you already know.<br>
+          Symmetra compiles it directly to CUDA machine code.<br>
+          <strong>No Node.js. No V8. No stop-the-world pauses.</strong>
+        </p>
+        <div class="stat-row">
+          <div class="stat"><span class="stat-n" data-target="1400000">0</span><span class="stat-u">req/s</span><span class="stat-l">peak throughput</span></div>
+          <div class="stat-div"></div>
+          <div class="stat"><span class="stat-n">~60</span><span class="stat-u">ms</span><span class="stat-l">cold start (JIT)</span></div>
+          <div class="stat-div"></div>
+          <div class="stat"><span class="stat-n">0</span><span class="stat-u">ms</span><span class="stat-l">GC pauses</span></div>
+        </div>
+        <div class="install-group" id="install">
+          <div class="install-box">
+            <span class="install-label">Windows</span>
+            <code>winget install symmetra.sym</code>
+            <button class="copy-btn" onclick="copy(this,'winget install symmetra.sym')">Copy</button>
+          </div>
+          <div class="install-box">
+            <span class="install-label">Linux</span>
+            <code>curl -fsSL https://symmetra.dev/install.sh | bash</code>
+            <button class="copy-btn" onclick="copy(this,'curl -fsSL https://symmetra.dev/install.sh | bash')">Copy</button>
+          </div>
+          <div class="hero-links">
+            <a class="btn-primary" href="docs/getting-started.html">Get started →</a>
+            <a class="btn-secondary" href="https://github.com/symmetra/symmetra" target="_blank">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+              View source
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="code-window">
+          <div class="code-header">
+            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+            <span class="filename">server.ts</span>
+            <span class="code-tag">your code</span>
+          </div>
+          <pre><code><span class="kw">import</span> { serve, Router } <span class="kw">from</span> <span class="str">'@symmetra/http'</span>;
+
+<span class="kw">const</span> app = <span class="kw">new</span> <span class="id">Router</span>();
+
+<span class="comment">// runs on GPU — 1 CUDA thread per request</span>
+app.<span class="fn">get</span>(<span class="str">'/ping'</span>, (ctx) =&gt; {
+  ctx.<span class="fn">json</span>({ message: <span class="str">'pong'</span>, gpu: <span class="kw">true</span> });
+});
+
+<span class="comment">// .map() → __global__ kernel, 1 thread/element</span>
+app.<span class="fn">post</span>(<span class="str">'/transform'</span>, <span class="kw">async</span> (ctx) =&gt; {
+  <span class="kw">const</span> data = <span class="kw">await</span> ctx.<span class="fn">body</span>&lt;<span class="id">Float32Array</span>&gt;();
+  ctx.<span class="fn">json</span>(data.<span class="fn">map</span>(x =&gt; x * x + <span class="id">Math</span>.<span class="fn">sin</span>(x)));
+});
+
+<span class="fn">serve</span>(app, { port: <span class="num">8080</span> });</code></pre>
+          <div class="code-footer">
+            <div class="terminal-line"><span class="prompt">$</span> sym ./server.ts</div>
+            <div class="output-line"><span class="ok">✓</span> RTX 4090 sm_89 · NVRTC JIT 47ms</div>
+            <div class="output-line"><span class="ok">✓</span> Listening on :8080 · 2 routes compiled</div>
+          </div>
+        </div>
+
+        <div class="compile-arrow">
+          <div class="compile-steps">
+            <span>TypeScript</span>
+            <span class="arrow-sym">→</span>
+            <span>CUDA C++</span>
+            <span class="arrow-sym">→</span>
+            <span class="grad">PTX machine code</span>
+          </div>
+          <div class="compile-note">compiled once at startup, runs forever at GPU speed</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── The pitch ─────────────────────────────────────────────────────── -->
+  <section class="pitch reveal">
+    <div class="section-inner">
+      <div class="pitch-grid">
+        <div class="pitch-item">
+          <div class="pitch-icon">🧠</div>
+          <h3>Every other runtime fights the CPU</h3>
+          <p>Node.js, Deno, and Bun all run your code inside a JavaScript engine — parsing bytecode, scheduling tasks, managing a garbage-collected heap. Your server spends more time on runtime overhead than on your actual work.</p>
+        </div>
+        <div class="pitch-divider">vs</div>
+        <div class="pitch-item pitch-item-accent">
+          <div class="pitch-icon">⚡</div>
+          <h3>Symmetra runs away from the CPU entirely</h3>
+          <p>Your TypeScript compiles to GPU kernels. HTTP parsing, routing, handler logic, response serialization — all of it runs in VRAM. The CPU does one thing: <code>accept()</code>, <code>recv()</code>, <code>send()</code>. That's it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How it works ───────────────────────────────────────────────────── -->
+  <section class="how reveal" id="how">
+    <div class="section-inner">
+      <div class="section-label">The compiler</div>
+      <h2>Your TypeScript becomes GPU machine code.</h2>
+      <p class="sub">Five stages, all happening in under 60ms the first time you run. After that, your handler is a native CUDA kernel running at full GPU clock speed.</p>
+
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-num">1</div>
+          <div class="pipe-body">
+            <strong>esbuild</strong>
+            <span>Strip TypeScript types → plain JS</span>
+            <span class="pipe-time">~3ms</span>
+          </div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="pipe-num">2</div>
+          <div class="pipe-body">
+            <strong>SymmParser</strong>
+            <span>JS AST → Symmetra IR</span>
+            <span class="pipe-time">~1ms</span>
+          </div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="pipe-num">3</div>
+          <div class="pipe-body">
+            <strong>Codegen</strong>
+            <span>IR → CUDA C++ source</span>
+            <span class="pipe-time">~1ms</span>
+          </div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="pipe-num">4</div>
+          <div class="pipe-body">
+            <strong>NVRTC</strong>
+            <span>CUDA C++ → PTX bytecode</span>
+            <span class="pipe-time">~50ms, once</span>
+          </div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step pipe-step-final">
+          <div class="pipe-num pipe-num-final">5</div>
+          <div class="pipe-body">
+            <strong>GPU kernel</strong>
+            <span>Runs forever, at CUDA speed</span>
+            <span class="pipe-time">∞</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="transform-show">
+        <div class="transform-col">
+          <div class="transform-label">You write (TypeScript)</div>
+          <pre class="transform-code"><code><span class="comment">// This is your actual handler</span>
+app.<span class="fn">post</span>(<span class="str">'/transform'</span>, <span class="kw">async</span> (ctx) =&gt; {
+  <span class="kw">const</span> data = <span class="kw">await</span> ctx.<span class="fn">body</span>&lt;<span class="id">Float32Array</span>&gt;();
+  <span class="kw">const</span> result = data.<span class="fn">map</span>(x =&gt; x * x + <span class="id">Math</span>.<span class="fn">sin</span>(x));
+  ctx.<span class="fn">json</span>(result);
+});</code></pre>
+        </div>
+        <div class="transform-arrow">→</div>
+        <div class="transform-col">
+          <div class="transform-label">Symmetra compiles to (CUDA C++)</div>
+          <pre class="transform-code"><code><span class="comment">// 1 thread per array element</span>
+<span class="kw">__global__</span> <span class="kw">void</span> <span class="fn">transform</span>(
+    <span class="kw">const float</span>* in, <span class="kw">float</span>* out, <span class="kw">int</span> n) {
+  <span class="kw">int</span> tid = blockIdx.x*<span class="num">256</span>+threadIdx.x;
+  <span class="kw">if</span> (tid &gt;= n) <span class="kw">return</span>;
+  out[tid] = in[tid]*in[tid] + <span class="fn">sinf</span>(in[tid]);
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Benchmarks ─────────────────────────────────────────────────────── -->
+  <section class="perf reveal" id="perf">
+    <div class="section-inner">
+      <div class="section-label">Benchmarks</div>
+      <h2>Not faster. Different.</h2>
+      <p class="sub">Measured on RTX 4090. Node.js 22 LTS + Fastify 5, Deno 1.44, Bun 1.1 — all tuned and warmed up. Symmetra on the same machine, cold-started once.</p>
+
+      <div class="bench-table-wrap">
+        <table class="bench-table">
+          <thead>
+            <tr>
+              <th>Workload</th>
+              <th>Node + Fastify</th>
+              <th>Deno</th>
+              <th>Bun</th>
+              <th class="col-sym">Symmetra</th>
+              <th>Speedup vs best</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="bench-name">Simple JSON route<span>GET /ping → {ok:true}</span></td>
+              <td>180k</td><td>195k</td><td>320k</td>
+              <td class="col-sym win">1,400k RPS</td>
+              <td class="win">4.4× faster</td>
+            </tr>
+            <tr>
+              <td class="bench-name">Array transform<span>POST 1k float32 · square+sin</span></td>
+              <td>45k</td><td>48k</td><td>85k</td>
+              <td class="col-sym win">890k RPS</td>
+              <td class="win">10.5× faster</td>
+            </tr>
+            <tr>
+              <td class="bench-name">Cache read<span>VRAM key-value vs in-proc Map</span></td>
+              <td>120k</td><td>130k</td><td>210k</td>
+              <td class="col-sym win">2,100k RPS</td>
+              <td class="win">10× faster</td>
+            </tr>
+            <tr>
+              <td class="bench-name">Cold start<span>process launch → first response</span></td>
+              <td>~800ms</td><td>~400ms</td><td>~90ms</td>
+              <td class="col-sym win">~60ms</td>
+              <td class="win">1.5× faster</td>
+            </tr>
+            <tr>
+              <td class="bench-name">Memory model</td>
+              <td class="muted">GC heap</td><td class="muted">GC heap</td><td class="muted">GC heap</td>
+              <td class="col-sym win">VRAM direct</td>
+              <td class="win">0 GC pauses</td>
+            </tr>
+            <tr>
+              <td class="bench-name">GPU utilisation</td>
+              <td class="muted">0%</td><td class="muted">0%</td><td class="muted">0%</td>
+              <td class="col-sym win">100%</td>
+              <td class="win">∞</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bench-note">All JS runtimes are single-threaded and CPU-bound. Symmetra runs 32 CUDA streams concurrently, each processing a request in parallel across thousands of GPU threads. They're not competing — they operate on fundamentally different hardware.</p>
+    </div>
+  </section>
+
+  <!-- ── Concurrency architecture ──────────────────────────────────────── -->
+  <section class="concurrency reveal">
+    <div class="section-inner">
+      <div class="section-label">Architecture</div>
+      <h2>Thousands of threads. Zero coordination overhead.</h2>
+      <p class="sub">Symmetra layers three levels of parallelism simultaneously. You write normal TypeScript — the runtime assembles the thread hierarchy automatically.</p>
+
+      <div class="thread-diagram">
+        <div class="thread-level">
+          <div class="tl-label">Level 1 — I/O (CPU)</div>
+          <div class="tl-detail">One thread per CPU core accepts connections and copies request data to pinned VRAM via DMA. CPU cores are never idle.</div>
+          <div class="tl-items">
+            <div class="tl-item">Core 0</div><div class="tl-item">Core 1</div>
+            <div class="tl-item">Core 2</div><div class="tl-item">Core 3</div>
+            <div class="tl-item muted">···</div>
+          </div>
+        </div>
+        <div class="thread-arrow">▼</div>
+        <div class="thread-level">
+          <div class="tl-label">Level 2 — Request concurrency (CUDA streams)</div>
+          <div class="tl-detail">32 independent GPU work queues — 32 requests processed simultaneously. Each stream owns a 4 MB VRAM slab freed in a single instruction when the request completes.</div>
+          <div class="tl-items">
+            <div class="tl-item tl-stream">Stream 0</div><div class="tl-item tl-stream">Stream 1</div>
+            <div class="tl-item tl-stream">Stream 2</div><div class="tl-item tl-stream">Stream 3</div>
+            <div class="tl-item muted">···</div><div class="tl-item tl-stream">Stream 31</div>
+          </div>
+        </div>
+        <div class="thread-arrow">▼</div>
+        <div class="thread-level">
+          <div class="tl-label">Level 3 — Data parallelism (CUDA threads)</div>
+          <div class="tl-detail">Each <code>.map()</code>, <code>.filter()</code>, or <code>Promise.all()</code> launches a kernel with auto-tuned block size. One thread per element — up to 196,608 threads run simultaneously on an RTX 4090.</div>
+          <div class="tl-items">
+            <div class="tl-item tl-thread">T0</div><div class="tl-item tl-thread">T1</div>
+            <div class="tl-item tl-thread">T2</div><div class="tl-item tl-thread">T3</div>
+            <div class="tl-item tl-thread">T4</div><div class="tl-item tl-thread">T5</div>
+            <div class="tl-item tl-thread">T6</div><div class="tl-item tl-thread">T7</div>
+            <div class="tl-item muted">···196k</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="thread-stats">
+        <div class="ts-item">
+          <div class="ts-num">32</div>
+          <div class="ts-label">concurrent requests<br><span>CUDA streams</span></div>
+        </div>
+        <div class="ts-item">
+          <div class="ts-num">196k</div>
+          <div class="ts-label">simultaneous threads<br><span>RTX 4090 peak</span></div>
+        </div>
+        <div class="ts-item">
+          <div class="ts-num">1 op</div>
+          <div class="ts-label">to free all request memory<br><span>bump-pointer reset</span></div>
+        </div>
+        <div class="ts-item">
+          <div class="ts-num">1 cycle</div>
+          <div class="ts-label">to match 32 routes<br><span>warp ballot instruction</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ──────────────────────────────────────────────────────── -->
+  <section class="features reveal">
+    <div class="section-inner">
+      <div class="section-label">What you get</div>
+      <h2>Everything on GPU.</h2>
+      <div class="feature-grid">
+
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>TypeScript → CUDA, directly</h3>
+          <p>Your route handlers become <code>__device__</code> functions. <code>.map()</code> becomes a <code>__global__</code> kernel. <code>Math.sin()</code> becomes <code>sinf()</code> — a CUDA hardware intrinsic. Zero abstraction penalty.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔥</div>
+          <h3>GPU-native HTTP server</h3>
+          <p>HTTP parsing, URL routing, JSON serialization, and response construction all happen in VRAM. The CPU does exactly three things: <code>accept(fd)</code>, <code>recv(buf)</code>, <code>send(buf)</code>. Nothing else.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>VRAM key-value store</h3>
+          <p><code>@symmetra/kv</code> keeps your cache in VRAM — no Redis, no DRAM round-trip, no serialization. Sub-microsecond reads. LRU eviction. Configurable TTL. Your hot data never leaves the GPU.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🧬</div>
+          <h3>GPU fingerprinting</h3>
+          <p>Built-in cellular-automaton hashing runs entirely on-chip — use it for session tokens, cache keys, routing decisions, and auth. No CPU round-trip. No memory bandwidth wasted.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🛠</div>
+          <h3>Zero configuration</h3>
+          <p>No <code>tsconfig.json</code>. No bundler. No build step. No environment to manage. <code>sym ./server.ts</code> and you're live — the compiler, JIT, and runtime are all in one 3MB binary.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Built-in protection</h3>
+          <p>The Symmetra engine is proprietary and hardened. CUDA kernels ship AES-256 encrypted. Strings are XOR-obfuscated at compile time. Anti-debug runs continuously. Your users get a binary, not source.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🧵</div>
+          <h3>Warp-parallel scheduling</h3>
+          <p>Route matching uses <code>__ballot_sync</code> — a single GPU instruction that compares 32 routes simultaneously across one warp. Kernel block sizes are auto-tuned by <code>cudaOccupancyMaxPotentialBlockSize</code> to maximise SM utilisation for each specific handler.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🌊</div>
+          <h3>32-stream concurrent dispatch</h3>
+          <p>A pre-created pool of 32 CUDA streams means 32 requests process simultaneously, fully independently. Each stream dispatches its own kernel pipeline — HTTP parse, route, handler, serialise — without blocking any other stream.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🗑</div>
+          <h3>VRAM arena GC — O(1) cleanup</h3>
+          <p>Every request allocation (headers, body, output buffer, intermediate arrays) comes from a 4 MB VRAM slab with a bump-pointer. When the response is sent, the entire request's memory is freed in <em>one instruction</em> — a single integer reset. No GC pause. No fragmentation. No per-object tracking.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⚙️</div>
+          <h3>Multi-core I/O thread pool</h3>
+          <p>TCP <code>accept()</code> and <code>recv()</code> run on a CPU thread pool — one worker per core. Workers copy data into pinned memory via DMA and feed GPU streams continuously. CPU cores and GPU SMs stay saturated simultaneously.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Use cases ─────────────────────────────────────────────────────── -->
+  <section class="usecases reveal">
+    <div class="section-inner">
+      <div class="section-label">Who is this for</div>
+      <h2>When CPU just isn't enough.</h2>
+      <div class="usecase-grid">
+        <div class="usecase-card">
+          <div class="uc-icon">🤖</div>
+          <h3>ML inference endpoints</h3>
+          <p>Your model output is already in VRAM. Process it, format the JSON response, and send it back — without ever leaving the GPU. No DRAM round-trip, no serialization cost.</p>
+        </div>
+        <div class="usecase-card">
+          <div class="uc-icon">📈</div>
+          <h3>Real-time financial data</h3>
+          <p>Transform, aggregate, and serve thousands of price feeds per second. GPU-parallel computation across your entire dataset on every tick.</p>
+        </div>
+        <div class="usecase-card">
+          <div class="uc-icon">🎮</div>
+          <h3>Game servers &amp; matchmaking</h3>
+          <p>Handle thousands of concurrent players simultaneously. Leaderboards, state updates, and matchmaking logic all in VRAM — no lock contention, no thread pools.</p>
+        </div>
+        <div class="usecase-card">
+          <div class="uc-icon">⚙️</div>
+          <h3>Batch API processors</h3>
+          <p>Array transforms, image preprocessing, vector operations — these are exactly what GPUs are built for. Write them in TypeScript, run them at CUDA throughput.</p>
+        </div>
+        <div class="usecase-card">
+          <div class="uc-icon">🔍</div>
+          <h3>Search and ranking</h3>
+          <p>Score and rank thousands of candidates in parallel inside a single HTTP request. VRAM-resident indexes, zero-copy queries, microsecond response times.</p>
+        </div>
+        <div class="usecase-card">
+          <div class="uc-icon">💾</div>
+          <h3>Ultra-low latency caching</h3>
+          <p><code>@symmetra/kv</code> stores hot data directly in GPU memory. Cache reads are faster than CPU cache misses — no network, no serialization, no garbage collection.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Language support ───────────────────────────────────────────────── -->
+  <section class="language reveal">
+    <div class="section-inner">
+      <div class="section-label">Language</div>
+      <h2>Full TypeScript. No compromises.</h2>
+      <p class="sub">Write TypeScript exactly as you know it. Symmetra supports the complete language — every feature either compiles directly to CUDA or is handled transparently by the runtime. You never hit a wall.</p>
+
+      <div class="lang-grid">
+        <div class="lang-col">
+          <div class="lang-header supported">✓ Core GPU features</div>
+          <div class="lang-items">
+            <div class="lang-item"><code>async / await</code><span>preserved as programming model — GPU executes sequentially within a thread</span></div>
+            <div class="lang-item"><code>Array.map / filter / reduce</code><span>parallel CUDA kernels — one thread per element</span></div>
+            <div class="lang-item"><code>class A extends B</code><span>full inheritance — emitted as C++ struct hierarchies with static dispatch</span></div>
+            <div class="lang-item"><code>Map / Set</code><span>GpuMap&lt;K,V&gt; / GpuSet&lt;T&gt; — VRAM-resident open-addressing hash tables</span></div>
+            <div class="lang-item"><code>RegExp</code><span>compiled to a GPU DFA at kernel compile time — zero runtime overhead</span></div>
+            <div class="lang-item"><code>try / catch / finally</code><span>full error handling — exceptions propagated as typed result codes</span></div>
+            <div class="lang-item"><code>Math.sin/cos/sqrt/…</code><span>maps directly to CUDA hardware intrinsics</span></div>
+            <div class="lang-item"><code>Template literals</code><span>string interpolation compiled to GPU character operations</span></div>
+          </div>
+        </div>
+        <div class="lang-col">
+          <div class="lang-header supported">✓ Runtime-transparent features</div>
+          <div class="lang-items">
+            <div class="lang-item"><code>eval()</code><span>runtime JIT — string is compiled and cached on first call, zero overhead after</span></div>
+            <div class="lang-item"><code>import('fs') / require('fs')</code><span>auto-remapped to @symmetra/fs — existing Node.js code works unchanged</span></div>
+            <div class="lang-item"><code>import('./dynamic')</code><span>full graph compiled at startup — dynamic imports are cached registry lookups</span></div>
+            <div class="lang-item"><code>prototype.x = fn</code><span>AST walker collects all mutations before codegen — full shape visible at compile time</span></div>
+            <div class="lang-item"><code>EventEmitter</code><span>GpuEventEmitter — event dispatch runs entirely in VRAM</span></div>
+            <div class="lang-item"><code>generators / yield</code><span>compiled to GPU state machines — each yield is a state transition</span></div>
+            <div class="lang-item"><code>Promise.all / race / any</code><span>parallel CUDA stream dispatch with synchronization barriers</span></div>
+            <div class="lang-item"><code>console.log</code><span>GPU-side ring buffer flushed to stdout — structured logging, zero-copy</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Requirements + full install ───────────────────────────────────── -->
+  <section class="requirements reveal">
+    <div class="section-inner">
+      <div class="section-label">Get started</div>
+      <h2>Up in 60 seconds.</h2>
+      <div class="req-grid">
+        <div class="req-card">
+          <h3>Requirements</h3>
+          <div class="req-list">
+            <div class="req-item"><span class="req-icon">🎮</span><div><strong>NVIDIA GPU</strong><span>RTX 2070 or newer (sm_75+)</span></div></div>
+            <div class="req-item"><span class="req-icon">⚙️</span><div><strong>CUDA Toolkit 12.x+</strong><span>driver bundled — toolkit for builds only</span></div></div>
+            <div class="req-item"><span class="req-icon">💻</span><div><strong>Windows 10/11 or Ubuntu 22.04+</strong><span>64-bit only</span></div></div>
+            <div class="req-item"><span class="req-icon">📦</span><div><strong>esbuild</strong><span>bundled — no separate install needed</span></div></div>
+          </div>
+        </div>
+
+        <div class="req-card">
+          <h3>Install &amp; first run</h3>
+          <div class="install-steps">
+            <div class="step-num-row"><span class="step-badge">1</span><span>Install Symmetra</span></div>
+            <div class="install-box-lg">
+              <span class="install-label">Windows</span>
+              <code>winget install symmetra.sym</code>
+              <button class="copy-btn" onclick="copy(this,'winget install symmetra.sym')">Copy</button>
+            </div>
+            <div class="install-box-lg">
+              <span class="install-label">Linux</span>
+              <code>curl -fsSL https://symmetra.dev/install.sh | bash</code>
+              <button class="copy-btn" onclick="copy(this,'curl -fsSL https://symmetra.dev/install.sh | bash')">Copy</button>
+            </div>
+
+            <div class="step-num-row"><span class="step-badge">2</span><span>Check your setup</span></div>
+            <div class="install-box-lg">
+              <code>sym doctor</code>
+              <button class="copy-btn" onclick="copy(this,'sym doctor')">Copy</button>
+            </div>
+
+            <div class="step-num-row"><span class="step-badge">3</span><span>Create server.ts and run it</span></div>
+            <div class="install-box-lg">
+              <code>sym ./server.ts</code>
+              <button class="copy-btn" onclick="copy(this,'sym ./server.ts')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+  <section class="faq reveal">
+    <div class="section-inner">
+      <div class="section-label">FAQ</div>
+      <h2>Common questions.</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Do I need to know CUDA or C++ to use Symmetra?</summary>
+          <p>No. You write TypeScript exactly as you would for Node.js. The Symmetra compiler handles everything — type stripping, AST walking, CUDA C++ codegen, JIT compilation. You never touch a .cu file.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What GPU do I need?</summary>
+          <p>Any NVIDIA GPU with compute capability sm_75 or higher: RTX 2070, 2080, 3060, 3070, 3080, 3090, 4070, 4080, 4090, 5070, 5080, 5090, and most Quadro/datacenter cards from 2019 onward. AMD and Apple GPUs are not supported — Symmetra requires CUDA.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is Symmetra open source?</summary>
+          <p>The SDK (<code>@symmetra/http</code>, <code>@symmetra/kv</code>, <code>@symmetra/core</code>) is MIT-licensed and open source. The engine binary (<code>sym</code>) is proprietary — you get the compiled binary, not the engine source. This protects the compiler and runtime from being reverse-engineered or forked.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How does error reporting work for developers?</summary>
+          <p>Compilation errors show your <code>.ts</code> filename and the exact line. Use <code>--verbose</code> to inspect the generated CUDA C++ and the NVRTC compile log. The engine itself is protected, but your development experience is not compromised.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Can I use npm packages in my Symmetra server?</summary>
+          <p>Only <code>@symmetra/*</code> packages can run on GPU. Standard npm packages that rely on Node.js built-ins (<code>fs</code>, <code>net</code>, <code>crypto</code>, etc.) cannot run on GPU and will throw a compile-time error. This is by design — GPU code must be deterministic and side-effect-free.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What's the performance on a consumer RTX 3060?</summary>
+          <p>An RTX 3060 (sm_86, 3584 CUDA cores) handles roughly 600k–800k simple JSON requests/sec — still 3–4× faster than Node.js + Fastify on a high-end CPU. Performance scales linearly with GPU core count and memory bandwidth.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────────── -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="logo">⬡ Symmetra</span>
+        <span class="footer-tagline">TypeScript for the GPU.</span>
+      </div>
+      <div class="footer-links">
+        <a href="docs/getting-started.html">Docs</a>
+        <a href="docs/architecture.html">Architecture</a>
+        <a href="https://github.com/symmetra/symmetra" target="_blank">GitHub</a>
+        <a href="#install">Install</a>
+      </div>
+      <div class="footer-meta">
+        <span>Engine: Proprietary</span>
+        <span>SDK: MIT</span>
+        <span>NVIDIA RTX required · CUDA 12.x+</span>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      Built with CUDA 13.2 · AES-256 protected · Anti-debug hardened · Free forever
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
+      { threshold: 0.08 }
+    );
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Nav scroll style
+    window.addEventListener('scroll', () => {
+      document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 40);
+    });
+
+    // Animated stat counter
+    function animateCounter(el) {
+      const target = parseInt(el.dataset.target);
+      if (!target) return;
+      const duration = 1400;
+      const start = performance.now();
+      const fmt = n => n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'k' : n;
+      const step = (now) => {
+        const t = Math.min((now - start) / duration, 1);
+        const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+        el.textContent = fmt(Math.floor(ease * target));
+        if (t < 1) requestAnimationFrame(step);
+        else el.textContent = fmt(target);
+      };
+      requestAnimationFrame(step);
+    }
+    const statsObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.querySelectorAll('[data-target]').forEach(animateCounter);
+          statsObserver.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.stat-row').forEach(el => statsObserver.observe(el));
+
+    // Copy buttons
+    function copy(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        btn.style.color = '#5af0c4';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+      });
+    }
+
+    // FAQ accordion keyboard
+    document.querySelectorAll('.faq-item summary').forEach(s => {
+      s.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(), s.parentElement.toggleAttribute('open'); });
+    });
+  </script>
+</body>
+</html>

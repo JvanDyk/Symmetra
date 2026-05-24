@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #ifdef _WIN32
+  #include <windows.h>
   #define POPEN  _popen
   #define PCLOSE _pclose
   #define NULL_DEV "NUL"
@@ -60,6 +61,18 @@ std::string EsbuildBridge::transform(const std::string& tsFilePath) {
     // Build the command:
     // esbuild <file> --bundle=false --platform=neutral --target=es2022 --format=esm
     // esbuild writes transformed JS to stdout.
+    // On Windows, _popen uses "cmd.exe /c <cmd>". When <cmd> starts with a quote
+    // character, cmd.exe strips the outermost quote pair, breaking inner quoting.
+    // Wrapping the entire command in an extra pair of outer quotes avoids this.
+#ifdef _WIN32
+    std::string cmd = "\"\"" + esbuild + "\" "
+        + "\"" + tsFilePath + "\" "
+        + "--bundle=false "
+        + "--platform=neutral "
+        + "--target=es2022 "
+        + "--format=esm "
+        + "2>" + std::string(NULL_DEV) + "\"";
+#else
     std::string cmd = "\"" + esbuild + "\" "
         + "\"" + tsFilePath + "\" "
         + "--bundle=false "
@@ -67,6 +80,7 @@ std::string EsbuildBridge::transform(const std::string& tsFilePath) {
         + "--target=es2022 "
         + "--format=esm "
         + "2>" + std::string(NULL_DEV);
+#endif
 
     FILE* pipe = POPEN(cmd.c_str(), "r");
     if (!pipe) {

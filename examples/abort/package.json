@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-abort",
+  "version": "1.0.0",
+  "description": "Symmetra AbortController example — cancellable fetch, timers, listeners",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*",
+    "@symmetra/net":  "*"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@symmetra/net",
+  "version": "1.0.0",
+  "description": "Low-level networking (TCP, TLS, HTTP client, WebSocket, DNS) for Symmetra",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@symmetra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

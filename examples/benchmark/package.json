@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-benchmark",
+  "version": "1.0.0",
+  "description": "Symmetra benchmark example — raw throughput vs Node.js baseline",
+  "scripts": {
+    "start": "sym ./server.ts",
+    "bench": "bombardier -c 500 -n 100000 http://localhost:8080/ping"
+  },
+  "dependencies": {
+    "@symmetra/http": "*"
+  }
+}

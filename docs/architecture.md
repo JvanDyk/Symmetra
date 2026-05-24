@@ -10,7 +10,7 @@ Symmetra is a TypeScript-to-CUDA compiler and GPU runtime. It is not a Node.js v
 │  import { serve, Router } from '@symmetra/http'                       │
 │  app.get('/path', async (ctx) => { ... })                             │
 └──────────────────────────────┬───────────────────────────────────────┘
-                               │  symmetra ./server.ts
+                               │  sym ./server.ts
 ┌──────────────────────────────▼───────────────────────────────────────┐
 │  1. esbuild (subprocess, ~3ms)                                        │
 │     TypeScript → plain ES2022 JavaScript (types stripped)            │
@@ -73,24 +73,15 @@ Pinned (page-locked) memory is used for all host↔device transfers. This enable
 
 ---
 
-## TM Engine selection
+## GPU fingerprinting
 
-The Symmetra runtime includes all engines from the CUDA_PLATFORM library. Engine selection is automatic (OMEGA) or explicit:
-
-| Engine | GH/s | Best for |
-|--------|------|----------|
-| APEX | ~16 | Cache keys, session tokens, high-frequency fingerprinting |
-| RAYK | 8.14 | Network packet fingerprinting, general hashing |
-| PHI_RAYK | ~6 | Storage/DB cache — phi-weighted avoids clustering |
-| RAYK_ADAPTIVE | ~5 | URL routing — Sierpiński pattern matches path structure |
-| OMEGA | auto | Let the runtime pick based on data characteristics |
-| RULE60 | ~3 | Deterministic baseline — minimal overhead |
+`gpu.fingerprint()` runs a cellular-automaton hash entirely on-chip. The algorithm operates on a 128-bit state, applies 16 evolution steps per call, and produces a 64-bit digest. No memory round-trips — input and output stay in registers.
 
 ---
 
 ## Binary protection
 
-The Symmetra engine binary (`symmetra.exe` / `symmetra`) is distributed in compiled form only:
+The Symmetra engine binary (`sym.exe` / `sym`) is distributed in compiled form only:
 
 - C++ source is not distributed
 - CUDA PTX is embedded as an opaque byte array in the binary

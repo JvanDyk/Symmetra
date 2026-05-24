@@ -1,0 +1,113 @@
+name: Build and publish release
+
+# Trigger: push a version tag to the PRIVATE repo, e.g.:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# This workflow builds sym.exe (Windows) and sym (Linux), then creates a
+# release on the SEPARATE PUBLIC repo and uploads both binaries as assets.
+# The public repo URL is set via the PUBLIC_REPO secret (see RELEASE.md).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # ── Windows build ────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA Toolkit 12.6
+        uses: Jimver/cuda-toolkit@v0.2.16
+        with:
+          cuda: '12.6.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "nvrtc", "nvrtc_dev"]'
+
+      - name: Configure and build
+        working-directory: engine
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sym-windows-x64
+          path: engine\build\Release\sym.exe
+
+  # ── Linux build ──────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA Toolkit 12.6
+        uses: Jimver/cuda-toolkit@v0.2.16
+        with:
+          cuda: '12.6.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "nvrtc", "nvrtc_dev"]'
+
+      - name: Configure and build
+        working-directory: engine
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sym-linux-x64
+          path: engine/build/sym
+
+  # ── Publish to PUBLIC repo ────────────────────────────────────────────────────
+  publish:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sym-windows-x64
+          path: dist/
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sym-linux-x64
+          path: dist/
+
+      - name: Rename binaries
+        run: |
+          mv dist/sym.exe  dist/sym-windows-x64.exe
+          mv dist/sym      dist/sym-linux-x64
+          chmod +x         dist/sym-linux-x64
+
+      - name: Create release on public repo
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ secrets.PUBLIC_REPO }}
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          name: "Symmetra ${{ github.ref_name }}"
+          body: |
+            ## Symmetra ${{ github.ref_name }}
+
+            **Install on Windows:**
+            ```powershell
+            iwr https://symmetra.dev/install.ps1 | iex
+            ```
+
+            **Install on Linux:**
+            ```bash
+            curl -fsSL https://symmetra.dev/install.sh | bash
+            ```
+
+            See [getting started](https://symmetra.dev/docs/getting-started) for prerequisites.
+          files: |
+            dist/sym-windows-x64.exe
+            dist/sym-linux-x64

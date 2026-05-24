@@ -1,0 +1,13 @@
+{
+  "name": "@symmetra/example-crypto-auth",
+  "version": "1.0.0",
+  "description": "Symmetra crypto + JWT auth example",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http":   "*",
+    "@symmetra/kv":     "*",
+    "@symmetra/crypto": "*"
+  }
+}

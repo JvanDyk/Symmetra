@@ -1,0 +1,22 @@
+test_codegen.cpp
+Codegen.cpp
+SymmParser.cpp
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): error C2440: '<function-style-cast>': cannot convert from 'initializer list' to 'symm::ConstDecl'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: Invalid aggregate initialization
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: 'initializing': cannot convert from 'std::basic_string<char,std::char_traits<char>,std::allocator<char>>' to 'symm::NodePtr'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: 'std::shared_ptr<symm::Node>::shared_ptr': no overloaded function could convert all the argument types
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1601): note: could be 'std::shared_ptr<symm::Node>::shared_ptr(std::nullptr_t) noexcept'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: 'std::shared_ptr<symm::Node>::shared_ptr(std::nullptr_t) noexcept': cannot convert argument 1 from 'std::basic_string<char,std::char_traits<char>,std::allocator<char>>' to 'std::nullptr_t'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1696): note: or       'std::shared_ptr<symm::Node>::shared_ptr(std::unique_ptr<_Ux,_Dx> &&)'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1672): note: or       'std::shared_ptr<symm::Node>::shared_ptr(std::shared_ptr<_Ty2> &&) noexcept'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1662): note: or       'std::shared_ptr<symm::Node>::shared_ptr(const std::shared_ptr<_Ty2> &) noexcept'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1652): note: or       'std::shared_ptr<symm::Node>::shared_ptr(std::shared_ptr<_Ty2> &&,symm::Node *) noexcept'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1646): note: or       'std::shared_ptr<symm::Node>::shared_ptr(const std::shared_ptr<_Ty2> &,symm::Node *) noexcept'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1641): note: or       'std::shared_ptr<symm::Node>::shared_ptr(std::nullptr_t,_Dx,_Alloc)'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1635): note: or       'std::shared_ptr<symm::Node>::shared_ptr(std::nullptr_t,_Dx)'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1629): note: or       'std::shared_ptr<symm::Node>::shared_ptr(_Ux *,_Dx,_Alloc)'
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include\memory(1621): note: or       'std::shared_ptr<symm::Node>::shared_ptr(_Ux *,_Dx)'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: while trying to match the argument list '(std::basic_string<char,std::char_traits<char>,std::allocator<char>>)'
+D:\GITHUB\SYMMETRA\engine\src\parser\SymmParser.cpp(359): note: too many initializers
+Generating Code...

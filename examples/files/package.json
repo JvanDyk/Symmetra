@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-files",
+  "version": "1.0.0",
+  "description": "Symmetra filesystem example — read, write, append, stat, upload",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*",
+    "@symmetra/fs":   "*"
+  }
+}

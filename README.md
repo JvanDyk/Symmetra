@@ -3,7 +3,7 @@
 **TypeScript for the GPU.** Write TypeScript, run at CUDA speed.
 
 ```bash
-symmetra ./server.ts
+sym ./server.ts
 ```
 
 Symmetra is a new runtime — not Node.js, not Deno. TypeScript is the *syntax*; CUDA is the *execution model*. Your code compiles directly to GPU kernels. The CPU touches nothing except raw TCP bytes.
@@ -37,14 +37,14 @@ No V8. No JavaScript engine. Your TypeScript compiles to GPU machine code.
 
 ```bash
 # Windows (RTX required)
-winget install symmetra.symmetra
+winget install symmetra.sym
 
 # Or direct download
 curl -L https://symmetra.dev/install.ps1 | powershell
 
 # Verify
-symmetra --version
-symmetra doctor   # checks CUDA device, driver, esbuild
+sym --version
+sym doctor   # checks CUDA device, driver, esbuild
 ```
 
 ---
@@ -65,7 +65,7 @@ serve(app, { port: 8080 });
 ```
 
 ```bash
-symmetra ./server.ts
+sym ./server.ts
 # Symmetra 1.0.0  ·  RTX 4090 sm_89  ·  NVRTC JIT 50ms
 # Listening on :8080  ·  2 routes compiled
 ```
@@ -78,13 +78,13 @@ Everything except accepting TCP connections:
 
 | Operation | Runs on |
 |-----------|---------|
-| HTTP parsing | GPU (HYBRID_SPATIAL kernel) |
-| URL routing | GPU (RAYK_ADAPTIVE kernel) |
+| HTTP parsing | GPU kernel |
+| URL routing | GPU (FNV-1a hash table) |
 | Request handlers | GPU (your compiled code) |
 | `Float32Array.map(fn)` | GPU (parallel kernel, 1 thread/element) |
 | Response JSON serialization | GPU |
 | VRAM cache (`@symmetra/kv`) | GPU |
-| TM fingerprinting | GPU (APEX ~16 GH/s) |
+| GPU fingerprinting | GPU |
 | TCP accept/recv/send | CPU (thin substrate only) |
 
 ---
@@ -106,7 +106,7 @@ app.post('/transform', async (ctx) => {
   // .map() → __global__ kernel, 1 thread per element
   const result = data.map(x => x * x + Math.sin(x));
 
-  // GPU fingerprint via APEX engine (16 GH/s)
+  // GPU fingerprint
   const fp = await gpu.fingerprint(ctx.params.key);
 
   ctx.json({ result, fingerprint: fp });
@@ -138,7 +138,7 @@ import('./dynamic')       // no dynamic import
 |---------|---------|
 | `@symmetra/http` | GPU-native HTTP server (replaces Express/Fastify) |
 | `@symmetra/kv` | VRAM key-value store with TTL |
-| `@symmetra/core` | GPU context, buffer API, engine selection |
+| `@symmetra/core` | GPU context, buffer API |
 
 ---
 
@@ -151,14 +151,13 @@ Measured on RTX 4090, compared against Node.js 22 + Fastify:
 | Simple JSON route | 180k RPS | 1.4M RPS | 7.8× |
 | Array transform (1k floats) | 45k RPS | 890k RPS | 19.8× |
 | Cache hit (VRAM vs Redis) | 120k RPS | 2.1M RPS | 17.5× |
-| TM fingerprint | 8 GH/s | 16 GH/s (APEX) | 2× |
 
 ---
 
 ## Requirements
 
 - NVIDIA GPU: RTX 2070 or newer (sm_75+)
-- CUDA Toolkit 12.x
+- CUDA Toolkit 12.x or later
 - Windows 10/11 or Linux (Ubuntu 22.04+)
 - esbuild (bundled with Symmetra)
 
@@ -166,14 +165,67 @@ No Node.js required at runtime.
 
 ---
 
+## Building from source
+
+### Prerequisites
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| CUDA Toolkit | 12.x+ | [developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads) |
+| Visual Studio Build Tools | 2022 (MSVC 19.44+) | "Desktop development with C++" workload |
+| CMake | 3.20+ | Must be on PATH |
+| esbuild | any | `npm install -g esbuild` |
+
+> Linux builds are supported — swap the generator for `Ninja` or `Unix Makefiles` and drop the `-A x64` flag.
+
+### Build (Windows)
+
+```powershell
+# Configure
+cmake -B engine/build -S engine -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+
+# Compile
+cmake --build engine/build --config Release
+```
+
+Output: `engine/build/Release/sym.exe`
+
+### Smoke test
+
+```powershell
+.\engine\build\Release\sym.exe version
+# Symmetra 1.0.0  ·  NVIDIA GeForce RTX 5070 sm_120  ·  CUDA driver 13.2
+
+.\engine\build\Release\sym.exe doctor
+# ✓ GPU 0: ...
+# ✓ NVRTC linked
+# ✓ esbuild found in PATH
+```
+
+### Clean rebuild
+
+```powershell
+Remove-Item -Recurse -Force engine/build
+# then run cmake configure + build again
+```
+
+### Optional: LLVM obfuscation (requires Clang + Hikari)
+
+```powershell
+cmake -B engine/build -S engine -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_CXX_COMPILER=clang++ -DSYMM_OBFUSCATE=ON
+```
+
+---
+
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for the full 4-layer pipeline design, CUDA kernel internals, and the codegen specification.
+See [public/docs/architecture.md](public/docs/architecture.md) for the full 4-layer pipeline design, CUDA kernel internals, and the codegen specification.
 
 ---
 
 ## License
 
-Symmetra Engine: **Proprietary** — binary distribution only. The engine binary is signed and protected. Reverse engineering is prohibited.
+Symmetra Engine: **Proprietary** — binary distribution only. The engine binary is protected. Reverse engineering is prohibited.
 
 `@symmetra/http`, `@symmetra/core`, `@symmetra/kv`: **MIT**

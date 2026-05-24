@@ -1,0 +1,11 @@
+{
+  "name": "@symmetra/example-classes",
+  "version": "1.0.0",
+  "description": "Symmetra classes example — inheritance, generics, private fields, mixins, async iterator",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*"
+  }
+}

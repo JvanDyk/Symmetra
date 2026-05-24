@@ -1,0 +1,18 @@
+{
+  "name": "@symmetra/crypto",
+  "version": "1.0.0",
+  "description": "GPU-accelerated cryptography for Symmetra (hashing, AES, KDF, JWT)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@symmetra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "license": "MIT"
+}

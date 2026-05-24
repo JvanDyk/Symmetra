@@ -1,0 +1,13 @@
+{
+  "name": "@symmetra/example-workers",
+  "version": "1.0.0",
+  "description": "Symmetra GpuWorker example — message passing, worker pool, background jobs",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http":  "*",
+    "@symmetra/kv":    "*",
+    "@symmetra/core":  "*"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/example-streams",
+  "version": "1.0.0",
+  "description": "Symmetra streams example — GpuReadable, GpuWritable, pipeline, backpressure",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http":  "*",
+    "@symmetra/core":  "*"
+  }
+}

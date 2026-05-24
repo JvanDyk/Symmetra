@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <cstdlib>
+#include <filesystem>
 #include <cuda_runtime.h>
 #include <nvrtc.h>
 
@@ -17,6 +18,9 @@
 #include "compiler/Codegen.h"
 #include "runtime/NvrtcCompiler.h"
 #include "runtime/GpuServer.h"
+#include "protect/AntiDebug.h"
+#include "protect/Obfuscate.h"
+#include "protect/KernelStore.h"
 
 static void print_version() {
     int driver = 0;
@@ -47,7 +51,6 @@ static void print_usage() {
         "Options:\n"
         "  --port <n>         Override serve() port (default: from file)\n"
         "  --streams <n>      CUDA stream pool size (default: 32)\n"
-        "  --engine <name>    Default TM engine (APEX, RAYK, PHI_RAYK, OMEGA)\n"
         "  --verbose          Show codegen and NVRTC output\n"
     );
 }
@@ -68,10 +71,7 @@ static void cmd_doctor() {
                     prop.totalGlobalMem / 1e6);
     }
 
-    // Check NVRTC
-    int nvrtcMaj = 0, nvrtcMin = 0;
-    nvrtcGetVersion(&nvrtcMaj, &nvrtcMin);
-    std::printf("✓ NVRTC %d.%d\n", nvrtcMaj, nvrtcMin);
+    std::puts("✓ NVRTC linked");
 
     // Check esbuild
     int ret = std::system("esbuild --version > " SYMM_NULL " 2>&1");
@@ -104,12 +104,13 @@ static void cmd_bench() {
                 prop.name, prop.multiProcessorCount,
                 prop.major, prop.minor);
     std::printf("Global memory: %.1f GB\n", prop.totalGlobalMem / 1e9);
-    std::printf("Peak bandwidth: %.1f GB/s\n",
-                (prop.memoryClockRate * 1e3 * prop.memoryBusWidth / 8) / 1e9);
     std::puts("\nRun `symmetra ./examples/benchmark/server.ts` for full HTTP benchmark.");
 }
 
 int main(int argc, char* argv[]) {
+    if (symm::protect::detectDebugger()) std::_Exit(0); // silent — looks like normal exit
+    symm::protect::startWatchdog();
+
     if (argc < 2) {
         print_usage();
         return 1;
@@ -145,14 +146,12 @@ int main(int argc, char* argv[]) {
     symm::ServerOptions opts{};
     opts.port    = 8080;
     opts.streams = 32;
-    opts.engine  = "OMEGA";
     opts.verbose = false;
 
     for (int i = 2; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--port"    && i+1 < argc) { opts.port    = std::atoi(argv[++i]); }
         if (arg == "--streams" && i+1 < argc) { opts.streams = std::atoi(argv[++i]); }
-        if (arg == "--engine"  && i+1 < argc) { opts.engine  = argv[++i]; }
         if (arg == "--verbose")               { opts.verbose = true; }
     }
 
@@ -176,6 +175,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Apply port from serve() call in the script (overrides CLI default).
+    if (mod.servePort != 8080) opts.port = mod.servePort;
+
     // 3. Codegen: AST → CUDA C++ source
     symm::Codegen codegen(opts);
     std::string cudaSrc = codegen.emit(mod);
@@ -187,14 +189,131 @@ int main(int argc, char* argv[]) {
 
     // 4. NVRTC: JIT-compile CUDA C++ → PTX
     cudaSetDevice(0);
-    symm::NvrtcCompiler nvrtc;
-    symm::CompiledModule compiled = nvrtc.compile(cudaSrc, opts.verbose);
+
+    // Load all pre-compiled encrypted kernels (genesis, http, io).
+    // Decrypted PTX is zeroed immediately after cuModuleLoadData — never persists.
+    try {
+        symm::protect::loadKernels();
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "sym: %s\n", e.what());
+        return 1;
+    }
+
+    symm::CompiledModule compiled;
+    std::string srcName = std::filesystem::path(tsFile).filename().string();
+    try {
+        symm::NvrtcCompiler nvrtc;
+        // First attempt: compile everything.
+        bool ok = false;
+        try {
+            compiled = nvrtc.compile(cudaSrc, srcName, opts.verbose);
+            ok = true;
+        } catch (const std::exception& firstErr) {
+            // Parse error log for line numbers, then stub failing handlers and retry.
+            // This lets routes that work on GPU compile even if others don't.
+            std::string errLog = firstErr.what();
+
+            // Count newlines in the shared prelude+classes section.
+            std::string sharedSrc = codegen.emitShared(mod);
+            int sharedLines = (int)std::count(sharedSrc.begin(), sharedSrc.end(), '\n');
+
+            // Build per-handler code and track line ranges.
+            int nRoutes = (int)mod.routes.size();
+            std::vector<std::string> handlerCodes(nRoutes);
+            std::vector<int> handlerStartLine(nRoutes), handlerEndLine(nRoutes);
+            int lineAt = sharedLines + 1;
+            for (int i = 0; i < nRoutes; i++) {
+                handlerCodes[i] = codegen.emitHandlerCode(mod.routes[i], i);
+                handlerStartLine[i] = lineAt;
+                lineAt += (int)std::count(handlerCodes[i].begin(), handlerCodes[i].end(), '\n');
+                handlerEndLine[i] = lineAt;
+            }
+
+            // Find which handlers are mentioned in error lines.
+            std::vector<bool> failedHandler(nRoutes, false);
+            // Parse both "filename(N): error:" and "at line N" patterns.
+            auto markLine = [&](int lineNum) {
+                for (int i = 0; i < nRoutes; i++) {
+                    if (lineNum >= handlerStartLine[i] && lineNum <= handlerEndLine[i]) {
+                        failedHandler[i] = true;
+                    }
+                }
+            };
+            std::istringstream ss(errLog);
+            std::string errLine;
+            while (std::getline(ss, errLine)) {
+                // "filename(N): error:" pattern
+                {
+                    auto paren = errLine.find('(');
+                    auto rparen = (paren != std::string::npos) ? errLine.find(')', paren) : std::string::npos;
+                    if (paren != std::string::npos && rparen != std::string::npos) {
+                        std::string numStr = errLine.substr(paren + 1, rparen - paren - 1);
+                        try { markLine(std::stoi(numStr)); } catch (...) {}
+                    }
+                }
+                // "at line N" pattern (template instantiation site)
+                {
+                    auto pos = errLine.find("at line ");
+                    if (pos != std::string::npos) {
+                        try { markLine(std::stoi(errLine.substr(pos + 8))); } catch (...) {}
+                    }
+                }
+            }
+
+            // Build stub for each failing handler.
+            bool anyFailed = false;
+            for (int i = 0; i < nRoutes; i++) {
+                if (failedHandler[i]) {
+                    anyFailed = true;
+                    handlerCodes[i] =
+                        "// Handler: " + std::string(mod.routes[i].method)
+                        + " " + mod.routes[i].path + " [GPU stub — not supported]\n"
+                        "__device__ void symm_handler_" + std::to_string(i) + "(SymmCtx* ctx) {\n"
+                        "    symm_json_str(ctx, \"{\\\"error\\\":\\\"route not supported on GPU\\\"}\");\n"
+                        "    ctx->resp_status = 501;\n}\n\n";
+                }
+            }
+
+            if (!anyFailed) {
+                std::fprintf(stderr, "%s\n", firstErr.what());
+                return 1;
+            }
+
+            // Retry with stubs.
+            std::string cudaSrc2 = sharedSrc;
+            for (auto& h : handlerCodes) cudaSrc2 += h;
+            cudaSrc2 += codegen.emitSuffix(mod.routes);
+            try {
+                compiled = nvrtc.compile(cudaSrc2, srcName, opts.verbose);
+                ok = true;
+                // Report which routes were stubbed.
+                for (int i = 0; i < nRoutes; i++) {
+                    if (failedHandler[i]) {
+                        std::fprintf(stderr, "sym: route %s %s not supported on GPU (stub)\n",
+                                     mod.routes[i].method.c_str(), mod.routes[i].path.c_str());
+                    }
+                }
+            } catch (const std::exception& e2) {
+                std::fprintf(stderr, "%s\n", e2.what());
+                return 1;
+            }
+        }
+        (void)ok;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "%s\n", e.what());
+        return 1;
+    }
 
     print_version();
 
     // 5. GpuServer: load PTX, bind routes, start serving
-    symm::GpuServer server(compiled, mod.routes, opts);
-    server.run();   // blocks until Ctrl-C
+    try {
+        symm::GpuServer server(compiled, mod.routes, opts);
+        server.run();   // blocks until Ctrl-C
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "symmetra: runtime error: %s\n", e.what());
+        return 1;
+    }
 
     return 0;
 }

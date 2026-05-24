@@ -1,0 +1,16 @@
+{
+  "name": "@symmetra/example-fullstack",
+  "version": "1.0.0",
+  "description": "Symmetra fullstack example — JWT auth, VRAM sessions, PostgreSQL, file uploads",
+  "scripts": {
+    "start": "sym ./server.ts",
+    "start:prod": "APP_ENV=production sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http":   "*",
+    "@symmetra/kv":     "*",
+    "@symmetra/crypto": "*",
+    "@symmetra/db":     "*",
+    "@symmetra/fs":     "*"
+  }
+}

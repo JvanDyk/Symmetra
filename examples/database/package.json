@@ -1,0 +1,13 @@
+{
+  "name": "@symmetra/example-database",
+  "version": "1.0.0",
+  "description": "Symmetra database example — PostgreSQL, SQLite, Redis",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*",
+    "@symmetra/kv":   "*",
+    "@symmetra/db":   "*"
+  }
+}

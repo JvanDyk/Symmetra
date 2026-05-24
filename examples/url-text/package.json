@@ -1,0 +1,11 @@
+{
+  "name": "@symmetra/example-url-text",
+  "version": "1.0.0",
+  "description": "Symmetra URL + TextEncoder example — URL parsing, search params, UTF-8 roundtrip",
+  "scripts": {
+    "start": "sym ./server.ts"
+  },
+  "dependencies": {
+    "@symmetra/http": "*"
+  }
+}

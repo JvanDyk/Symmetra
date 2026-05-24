@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Symmetra — JS/TS Feature Coverage Matrix</title>
+<style>
+:root {
+  --bg:     #0a0c12; --bg2: #111420; --bg3: #181c2e;
+  --border: #252a40; --text: #c8cfe8; --dim: #4a5270;
+  --done:   #3dd68c; --partial: #f5c842; --missing: #f06a6a; --na: #4a5270; --cpu: #3ecfcf;
+  --accent: #5b8af4; --orange: #f0a84e; --purple: #b07ef8;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+
+/* ── sticky header ── */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,12,18,.95); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: .7rem 1.5rem; display: flex; gap: .8rem; flex-wrap: wrap; align-items: center;
+}
+h1 { font-size: 1.15rem; font-weight: 700; white-space: nowrap; }
+h1 span { color: var(--accent); }
+
+#search {
+  flex: 1; min-width: 180px; max-width: 320px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: .4rem .75rem; font-size: .82rem; outline: none;
+}
+#search:focus { border-color: var(--accent); }
+
+.filters { display: flex; gap: .4rem; flex-wrap: wrap; }
+.fbtn {
+  font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  padding: .3rem .7rem; border-radius: 100px; border: 1px solid; cursor: pointer;
+  transition: opacity .15s;
+}
+.fbtn:not(.active) { opacity: .45; }
+.fbtn.f-all     { color: var(--text);    border-color: var(--border);  background: var(--bg3); }
+.fbtn.f-done    { color: var(--done);    border-color: rgba(61,214,140,.35); background: rgba(61,214,140,.08); }
+.fbtn.f-partial { color: var(--partial); border-color: rgba(245,200,66,.35); background: rgba(245,200,66,.08); }
+.fbtn.f-missing { color: var(--missing); border-color: rgba(240,106,106,.35); background: rgba(240,106,106,.08); }
+.fbtn.f-na      { color: var(--na);      border-color: rgba(74,82,112,.5);  background: var(--bg3); }
+.fbtn.f-cpu     { color: var(--cpu);     border-color: rgba(62,207,207,.35); background: rgba(62,207,207,.08); }
+
+#stats { font-size: .75rem; color: var(--dim); white-space: nowrap; }
+
+/* ── main layout ── */
+.wrap { max-width: 1400px; margin: 0 auto; padding: 1rem 1.5rem; }
+
+/* ── category ── */
+.cat { margin-bottom: 2.5rem; }
+.cat-hdr {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem 0; margin-bottom: .4rem; cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.cat-hdr h2 { font-size: 1rem; font-weight: 700; }
+.cat-icon { font-size: 1.1rem; }
+.cat-count { font-size: .72rem; color: var(--dim); margin-left: auto; }
+.cat-toggle { font-size: .8rem; color: var(--dim); transition: transform .15s; }
+.cat-body { overflow: hidden; }
+
+/* ── table ── */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--dim); text-align: left; padding: .4rem .6rem;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+tr.feat { border-bottom: 1px solid rgba(37,42,64,.5); }
+tr.feat:hover { background: rgba(91,138,244,.04); }
+tr.feat.hidden { display: none; }
+td { padding: .4rem .6rem; vertical-align: top; }
+td.name { font-size: .82rem; font-weight: 500; min-width: 200px; }
+td.name code { font-family: 'JetBrains Mono','Fira Code',monospace; font-size: .78em; color: #7dd3f5; background: var(--bg3); padding: 1px 4px; border-radius: 3px; }
+td.notes { font-size: .76rem; color: var(--dim); max-width: 500px; }
+td.effort { font-size: .72rem; white-space: nowrap; }
+td.phase  { font-size: .72rem; white-space: nowrap; color: var(--orange); }
+
+.badge {
+  display: inline-block; font-size: .65rem; font-weight: 700; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 100px; white-space: nowrap;
+}
+.s-done    { background: rgba(61,214,140,.12); color: var(--done);    border: 1px solid rgba(61,214,140,.3); }
+.s-partial { background: rgba(245,200,66,.12); color: var(--partial); border: 1px solid rgba(245,200,66,.3); }
+.s-missing { background: rgba(240,106,106,.12);color: var(--missing); border: 1px solid rgba(240,106,106,.3); }
+.s-na      { background: var(--bg3);           color: var(--na);      border: 1px solid var(--border); }
+.s-cpu     { background: rgba(62,207,207,.12); color: var(--cpu);     border: 1px solid rgba(62,207,207,.3); }
+
+.effort-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
+.e-xs  { background: var(--done); }
+.e-s   { background: #8bcf4a; }
+.e-m   { background: var(--partial); }
+.e-l   { background: var(--orange); }
+.e-xl  { background: var(--missing); }
+
+/* ── progress bar ── */
+.progress-wrap { display: flex; gap: 1rem; margin: 1.2rem 0 2rem; align-items: center; flex-wrap: wrap; }
+.progress-bar { flex: 1; min-width: 200px; height: 10px; border-radius: 5px; overflow: hidden; display: flex; }
+.pb-done    { background: var(--done); }
+.pb-partial { background: var(--partial); }
+.pb-missing { background: var(--missing); }
+.pb-na      { background: var(--border); }
+.progress-legend { display: flex; gap: .8rem; flex-wrap: wrap; }
+.pl-item { display: flex; align-items: center; gap: .3rem; font-size: .75rem; }
+.pl-dot  { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ── cat summary mini-bar ── */
+.mini-bar { height: 4px; border-radius: 2px; overflow: hidden; display: flex; margin-bottom: .5rem; }
+</style>
+</head>
+<body>
+
+<!-- sticky top bar -->
+<div class="topbar">
+  <h1>Symmetra <span>JS/TS Coverage</span></h1>
+  <input id="search" type="text" placeholder="Search feature…" oninput="applyFilters()">
+  <div class="filters">
+    <button class="fbtn f-all active"     onclick="setFilter('all')">All</button>
+    <button class="fbtn f-done"           onclick="setFilter('done')">✅ Done</button>
+    <button class="fbtn f-partial"        onclick="setFilter('partial')">⚠️ Partial</button>
+    <button class="fbtn f-missing"        onclick="setFilter('missing')">🔲 Missing</button>
+    <button class="fbtn f-cpu"            onclick="setFilter('cpu')">🔄 CPU-side</button>
+    <button class="fbtn f-na"             onclick="setFilter('na')">⛔ N/A</button>
+  </div>
+  <div id="stats">–</div>
+</div>
+
+<div class="wrap">
+
+<!-- progress overview -->
+<div style="padding:.8rem 0 0">
+  <div class="progress-wrap">
+    <div class="progress-bar" id="masterBar"></div>
+    <div class="progress-legend">
+      <div class="pl-item"><div class="pl-dot" style="background:var(--done)"></div><span id="pct-done">–</span> Done</div>
+      <div class="pl-item"><div class="pl-dot" style="background:var(--partial)"></div><span id="pct-partial">–</span> Partial</div>
+      <div class="pl-item"><div class="pl-dot" style="background:var(--missing)"></div><span id="pct-missing">–</span> Missing</div>
+      <div class="pl-item"><div class="pl-dot" style="background:var(--cpu)"></div><span id="pct-cpu">–</span> CPU-side</div>
+      <div class="pl-item"><div class="pl-dot" style="background:var(--border)"></div><span id="pct-na">–</span> N/A</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     DATA — each category is an object with rows.
+     status: done | partial | missing | na | cpu
+     effort: xs(< 1h) | s(half-day) | m(1-2d) | l(3-5d) | xl(1-2w) | na
+     phase: A B C D E F G  (implementation phase)
+  ══════════════════════════════════════════════════════════════════════════ -->
+<div id="cats"></div>
+
+</div><!-- /wrap -->
+
+<script>
+const DATA = [
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Core Syntax & Values", icon: "📝", rows: [
+  { name: "Variable declarations",      code: "let, const, var",        st: "done",    eff: "na",  phase: "",  notes: "All three hoisting semantics emitted as CUDA local vars." },
+  { name: "Null / undefined",           code: "null, undefined",         st: "done",    eff: "na",  phase: "",  notes: "undefined → nullptr macro; null → nullptr." },
+  { name: "Boolean literals",           code: "true, false",             st: "done",    eff: "na",  phase: "",  notes: "Direct C++ bool." },
+  { name: "Integer / float literals",   code: "42, 3.14, 0xFF, 0b101",  st: "done",    eff: "na",  phase: "",  notes: "All numeric bases handled by parser." },
+  { name: "Numeric separators",         code: "1_000_000",               st: "missing", eff: "xs",  phase: "C", notes: "Lexer needs to strip underscores from numeric tokens." },
+  { name: "BigInt literals",            code: "100n, 0xFFn",             st: "missing", eff: "s",   phase: "A", notes: "Parser sees 100 then bare 'n' identifier. Strip suffix → cast (long long). Already have typedef bigint = long long." },
+  { name: "String literals",            code: "'a', \"b\"",               st: "done",    eff: "na",  phase: "",  notes: "Both delimiters parsed; stored as const char* in VRAM." },
+  { name: "Template literals (plain)",  code: "`Hello ${name}`",         st: "done",    eff: "na",  phase: "",  notes: "Codegen emits symm_write() calls into a char buffer." },
+  { name: "Template literals (tagged)", code: "sql`SELECT…`",            st: "missing", eff: "m",   phase: "D", notes: "Parser must call the tag function with (strings[], ...values) args." },
+  { name: "RegExp literals",            code: "/abc/gi",                  st: "done",    eff: "na",  phase: "",  notes: "Constructs a RegExp{} struct; NFA engine runs on GPU." },
+  { name: "Array literals",             code: "[1, 2, 3]",               st: "done",    eff: "na",  phase: "",  notes: "Stack-allocated GpuArray<T> or typed array." },
+  { name: "Object literals",            code: "{ a: 1, b: 2 }",         st: "done",    eff: "na",  phase: "",  notes: "Emitted as an anonymous struct. Keys become field names." },
+  { name: "Property shorthand",         code: "{ x, y }",               st: "done",    eff: "na",  phase: "",  notes: "Parser expands { x } → { x: x }." },
+  { name: "Computed property names",    code: "{ [key]: val }",          st: "missing", eff: "m",   phase: "B", notes: "Needs runtime string→field dispatch. Emittable as switch on known keys." },
+  { name: "Spread in object literal",   code: "{ ...a, x: 1 }",         st: "partial", eff: "m",   phase: "C", notes: "Known-field spread works; dynamic spread needs field-by-field copy." },
+  { name: "Spread in array literal",    code: "[...a, 4, 5]",           st: "done",    eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Operators", icon: "➕", rows: [
+  { name: "Arithmetic",                 code: "+ - * / % **",            st: "done",    eff: "na",  phase: "",  notes: "** → powf() CUDA intrinsic." },
+  { name: "Increment / Decrement",      code: "++ --",                   st: "done",    eff: "na",  phase: "",  notes: "Pre and post forms." },
+  { name: "Comparison",                 code: "=== !== == != < > <= >=", st: "done",    eff: "na",  phase: "",  notes: "=== on strings uses symm_str_eq(); == same." },
+  { name: "Logical",                    code: "&& || !",                  st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Nullish coalescing",         code: "??",                       st: "done",    eff: "na",  phase: "",  notes: "Emitted as (a != nullptr ? a : b)." },
+  { name: "Optional chaining",         code: "?.  ?.()  ?.[i]",         st: "done",    eff: "na",  phase: "",  notes: "Emitted as null-check guard before access." },
+  { name: "Bitwise",                    code: "& | ^ ~ << >> >>>",       st: "done",    eff: "na",  phase: "",  notes: ">>> → unsigned right shift." },
+  { name: "Assignment",                 code: "= += -= *= /= %= **=",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Bitwise assignment",         code: "&= |= ^= <<= >>= >>>=",   st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Logical assignment",         code: "&&= ||= ??=",             st: "missing", eff: "xs",  phase: "B", notes: "Parser doesn't recognize these compound tokens. Add 3 token types + codegen." },
+  { name: "Ternary",                    code: "a ? b : c",               st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Comma operator",             code: "(a, b)",                  st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "typeof",                     code: "typeof x",                st: "done",    eff: "na",  phase: "",  notes: "Compile-time inference from literal kind. Returns correct string." },
+  { name: "void",                       code: "void expr",               st: "done",    eff: "na",  phase: "",  notes: "Emits expr; return nullptr." },
+  { name: "delete",                     code: "delete obj.x",            st: "na",      eff: "na",  phase: "",  notes: "GPU stack structs have fixed layout; property deletion not meaningful." },
+  { name: "in (property check)",        code: "\"x\" in obj",             st: "missing", eff: "s",   phase: "C", notes: "Need symm_obj_has_key() that checks struct field existence at compile time via template specialization." },
+  { name: "instanceof",                 code: "x instanceof Foo",         st: "missing", eff: "m",   phase: "C", notes: "Emit a __type_tag field in generated structs; compare tags." },
+  { name: "new",                        code: "new Foo()",                st: "done",    eff: "na",  phase: "",  notes: "Stack-allocates struct + calls constructor." },
+  { name: "Exponentiation assign",      code: "x **= 2",                 st: "done",    eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Control Flow", icon: "🔀", rows: [
+  { name: "if / else if / else",        code: "if (c) {} else {}",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "switch / case / default",    code: "switch(x){case 1:}",      st: "done",    eff: "na",  phase: "",  notes: "String cases emit symm_str_eq() chain." },
+  { name: "for",                        code: "for(let i=0;i<n;i++)",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "while",                      code: "while(c){}",              st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "do…while",                   code: "do{}while(c)",            st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "for…of (arrays)",            code: "for(const x of arr)",     st: "done",    eff: "na",  phase: "",  notes: "Emits indexed loop with type-deduced element." },
+  { name: "for…of (generators)",        code: "for(const x of gen())",   st: "done",    eff: "na",  phase: "",  notes: "Uses GpuGenState<V> state machine." },
+  { name: "for…of (custom iterator)",   code: "[Symbol.iterator]",        st: "partial", eff: "m",   phase: "D", notes: "Works for generators. Custom class iterators need Symbol.iterator dispatch codegen." },
+  { name: "for…in",                     code: "for(const k in obj)",     st: "done",    eff: "na",  phase: "",  notes: "Loops over _e[i].k entries of GpuObject." },
+  { name: "for await…of",              code: "for await(const x of it)",st: "done",    eff: "na",  phase: "",  notes: "Emits GpuAsyncIterState step-switch state machine." },
+  { name: "break",                      code: "break",                   st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "continue",                   code: "continue",                st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Labelled break/continue",    code: "outer: for… break outer", st: "missing", eff: "s",   phase: "B", notes: "Parser needs label statement node; codegen emits goto label_end." },
+  { name: "return",                     code: "return val",              st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "throw",                      code: "throw new Error('msg')",  st: "missing", eff: "m",   phase: "A", notes: "Emit: ctx->error_code = 500; symm_strcpy(ctx->error_msg, msg, 256); return; — then batch dispatch reads error_msg and returns 500." },
+  { name: "try / catch / finally",      code: "try{}catch(e){}finally{}",st: "missing", eff: "l",   phase: "A", notes: "GPU has no exception stack. Codegen wraps try-body in a do{}while(0) block; sets a bool _threw; catch checks it; finally always runs. No dynamic dispatch across catch boundaries." },
+  { name: "Async/await (Tier-1)",       code: "const x = await gpuOp()",st: "done",    eff: "na",  phase: "",  notes: "await stripped; GPU-native ops run synchronously." },
+  { name: "Async/await (Tier-3 I/O)",   code: "await fetch(url)",        st: "partial", eff: "xl",  phase: "E", notes: "Split-kernel CPS: architecture designed, io_stage in SymmCtx. Proxy thread + continuation kernel not yet wired for @symmetra/net." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Functions & Closures", icon: "🔧", rows: [
+  { name: "Function declarations",      code: "function foo(){}",        st: "done",    eff: "na",  phase: "",  notes: "Emitted as __device__ functions." },
+  { name: "Function expressions",       code: "const f = function(){}",  st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Arrow functions",            code: "const f = (x) => x*2",   st: "done",    eff: "na",  phase: "",  notes: "Lexical this captured via lambda if inside class." },
+  { name: "Default parameters",         code: "function f(x=0){}",       st: "done",    eff: "na",  phase: "",  notes: "Emitted as C++ default argument values." },
+  { name: "Rest parameters",            code: "function f(...args){}",   st: "done",    eff: "na",  phase: "",  notes: "Emitted as fixed-size GpuArray<T,N> on stack." },
+  { name: "Spread in call",             code: "f(...arr)",               st: "partial", eff: "s",   phase: "C", notes: "Fixed-size known arrays work; variadic spread needs sizeof expansion." },
+  { name: "arguments object",           code: "function f(){ arguments }",st:"na",      eff: "na",  phase: "",  notes: "Legacy feature; GPU functions use rest params instead." },
+  { name: "Named function expressions", code: "const f = function g(){}",st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Generator functions",        code: "function* gen(){}",       st: "done",    eff: "na",  phase: "",  notes: "Emitted as GpuGenState<V> switch-case state machine." },
+  { name: "Async functions",            code: "async function f(){}",    st: "done",    eff: "na",  phase: "",  notes: "async keyword stripped; becomes __device__ function." },
+  { name: "Async generator functions",  code: "async function* gen(){}",  st: "partial", eff: "l",   phase: "D", notes: "Basic structure: GpuAsyncIterState. Full await-inside-generator CPS not implemented." },
+  { name: "IIFE",                       code: "(function(){})()",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Closures (lexical scope)",   code: "outer var captured",      st: "done",    eff: "na",  phase: "",  notes: "Captured vars become struct fields on GPU closure object." },
+  { name: "Hoisting (var)",             code: "var x at top of scope",   st: "partial", eff: "s",   phase: "C", notes: "Codegen declares all vars at top of function; hoisting semantics preserved for simple cases." },
+  { name: "Tail call optimization",     code: "return f()",              st: "na",      eff: "na",  phase: "",  notes: "NVRTC does not guarantee TCO; GPU stack is small. Avoid deep recursion." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Classes & OOP", icon: "🏛️", rows: [
+  { name: "Class declarations",         code: "class Foo {}",            st: "done",    eff: "na",  phase: "",  notes: "Emitted as __device__ struct with methods." },
+  { name: "Class expressions",          code: "const C = class {}",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Constructor",                code: "constructor(x){}",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Instance methods",           code: "foo() { return 1; }",     st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Static methods",             code: "static bar() {}",         st: "done",    eff: "na",  phase: "",  notes: "Emitted as free __device__ function with class prefix." },
+  { name: "extends / super()",          code: "class B extends A {}",    st: "done",    eff: "na",  phase: "",  notes: "struct inheritance; super() calls parent constructor." },
+  { name: "Getter methods",             code: "get foo() { return … }",  st: "missing", eff: "m",   phase: "B", notes: "Codegen needs to detect get/set method kind and emit accessor wrapper struct fields." },
+  { name: "Setter methods",             code: "set foo(v) { … }",        st: "missing", eff: "m",   phase: "B", notes: "Same as getter — pair emitted as __device__ getter/setter on the struct." },
+  { name: "Private fields (#field)",    code: "#x = 0",                  st: "missing", eff: "s",   phase: "B", notes: "Parser: treat #name as identifier _priv_name. No true encapsulation needed on GPU." },
+  { name: "Private methods (#method)",  code: "#doThing(){}",            st: "missing", eff: "s",   phase: "B", notes: "Same naming mangle as private fields." },
+  { name: "Static private fields",      code: "static #x = 0",          st: "missing", eff: "s",   phase: "B", notes: "" },
+  { name: "Static fields",              code: "static x = 42",           st: "missing", eff: "s",   phase: "B", notes: "Emit as namespace-scoped __device__ variable with class prefix." },
+  { name: "Static initializer blocks", code: "static { this.x=1; }",    st: "missing", eff: "m",   phase: "B", notes: "Emit as init function called once from dispatch prelude." },
+  { name: "Symbol.iterator on class",  code: "[Symbol.iterator](){}",   st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __iterator__; codegen emits GpuGenState factory." },
+  { name: "Symbol.asyncIterator",      code: "[Symbol.asyncIterator]()",st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __asyncIterator__; emits GpuAsyncIterState." },
+  { name: "Symbol.toPrimitive",        code: "[Symbol.toPrimitive]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __toPrimitive__; codegen doesn't yet call it in type-coercion contexts." },
+  { name: "Symbol.hasInstance",        code: "[Symbol.hasInstance]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __hasInstance__; instanceof codegen not wired yet." },
+  { name: "Abstract classes (TS)",     code: "abstract class Foo {}",   st: "na",      eff: "na",  phase: "",  notes: "Type-only; erased by esbuild before parsing." },
+  { name: "Override keyword (TS)",     code: "override foo(){}",         st: "na",      eff: "na",  phase: "",  notes: "Type-only; erased." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Destructuring & Spread", icon: "📦", rows: [
+  { name: "Array destructuring",        code: "const [a,b] = arr",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Object destructuring",       code: "const {x,y} = obj",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Nested destructuring",       code: "const {a:{b}} = obj",     st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Default values in destruct", code: "const {x=0} = obj",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Rest in destructuring",      code: "const {a,...rest} = obj",  st: "partial", eff: "m",   phase: "C", notes: "Fixed structs work; arbitrary key rest not supported." },
+  { name: "Destructuring in params",    code: "function f({a,b}){}",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Destructuring in for…of",   code: "for(const {k,v} of…)",     st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Rename in destructuring",    code: "const {x: myX} = obj",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Spread in function call",    code: "f(...arr)",               st: "partial", eff: "s",   phase: "C", notes: "" },
+  { name: "Spread in array literal",    code: "[...a, ...b]",            st: "done",    eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Modules (ES Modules)", icon: "📚", rows: [
+  { name: "Named import",               code: "import { foo } from 'm'", st: "partial", eff: "m",   phase: "D", notes: "Symmetra compiles everything into a single CUDA translation unit. Multi-file support needs a bundler pre-pass." },
+  { name: "Default import",             code: "import foo from 'm'",     st: "partial", eff: "m",   phase: "D", notes: "Same; bundled." },
+  { name: "Namespace import",           code: "import * as m from 'm'",  st: "partial", eff: "m",   phase: "D", notes: "" },
+  { name: "Side-effect import",         code: "import 'm'",              st: "na",      eff: "na",  phase: "",  notes: "No side-effectful modules on GPU." },
+  { name: "Named export",               code: "export { foo }",          st: "partial", eff: "m",   phase: "D", notes: "" },
+  { name: "Default export",             code: "export default foo",      st: "partial", eff: "m",   phase: "D", notes: "" },
+  { name: "Re-export",                  code: "export { x } from 'm'",   st: "partial", eff: "m",   phase: "D", notes: "" },
+  { name: "Dynamic import()",           code: "await import('m')",       st: "na",      eff: "na",  phase: "",  notes: "GPU kernel can't load new code at runtime." },
+  { name: "import.meta",                code: "import.meta.url",         st: "na",      eff: "na",  phase: "",  notes: "No module metadata inside CUDA kernels." },
+  { name: "@symmetra/* built-ins",      code: "@symmetra/core",          st: "done",    eff: "na",  phase: "",  notes: "Core types are injected by Codegen prelude, not actually imported at runtime." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Iterators, Generators & Async Iteration", icon: "♻️", rows: [
+  { name: "Iterable protocol",          code: "[Symbol.iterator]()",     st: "partial", eff: "m",   phase: "D", notes: "Arrays and generators work. Custom class iterables need wiring." },
+  { name: "Iterator protocol",          code: "{ next(){ return {value,done} } }",st:"done",eff:"na",phase:"",notes: "GpuGenState models this." },
+  { name: "Generator function*",        code: "function* gen(){ yield x }", st:"done",eff:"na",phase:"",notes:"Switch-case state machine in emitClass." },
+  { name: "yield expression",           code: "const x = yield expr",   st: "done",    eff: "na",  phase: "",  notes: "Value passed back via GpuGenState.sent." },
+  { name: "yield* delegation",          code: "yield* other()",          st: "missing", eff: "m",   phase: "D", notes: "Need to inline inner generator states into outer switch." },
+  { name: "Async generator",            code: "async function* f(){}",   st: "partial", eff: "l",   phase: "D", notes: "GpuAsyncIterState exists; await-inside-generator CPS not fully wired." },
+  { name: "for…of with break",          code: "for(const x of g){ break }",st:"done",eff:"na",phase:"",notes:"" },
+  { name: "Generator return(value)",    code: "gen.return('early')",     st: "missing", eff: "s",   phase: "D", notes: "Add return() method to GpuGenState that sets done=true." },
+  { name: "Generator throw(err)",       code: "gen.throw(new Error())",  st: "missing", eff: "s",   phase: "D", notes: "Sets error flag in GpuGenState; caught in next() call." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Promises & Async", icon: "⏳", rows: [
+  { name: "Promise constructor",        code: "new Promise((res,rej)=>{})",st:"done",  eff: "na",  phase: "",  notes: "Stub: resolve/reject called synchronously (GPU has no event loop)." },
+  { name: "Promise.resolve/reject",     code: "Promise.resolve(v)",      st: "done",    eff: "na",  phase: "",  notes: "Identity operation on GPU." },
+  { name: "Promise.all",                code: "Promise.all([a,b,c])",    st: "done",    eff: "na",  phase: "",  notes: "All values already resolved; returns array." },
+  { name: "Promise.race",               code: "Promise.race([a,b])",     st: "done",    eff: "na",  phase: "",  notes: "_PromiseVal struct; first non-null wins." },
+  { name: "Promise.any",                code: "Promise.any([a,b])",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Promise.allSettled",         code: "Promise.allSettled([])",  st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: ".then/.catch/.finally",      code: "p.then(f).catch(g)",      st: "partial", eff: "m",   phase: "D", notes: "For Tier-1 (GPU-native), chains work as sync calls. For Tier-3 chaining across I/O boundaries needs full CPS." },
+  { name: "Top-level await",            code: "await fetchData()",       st: "partial", eff: "na",  phase: "",  notes: "Tier-1 await stripped. Tier-3 split-kernel needed for real I/O." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Error Handling", icon: "⚠️", rows: [
+  { name: "Error (base class)",         code: "new Error('msg')",        st: "done",    eff: "na",  phase: "",  notes: "struct Error{const char* message}; in prelude." },
+  { name: "TypeError",                  code: "new TypeError('msg')",    st: "missing", eff: "xs",  phase: "B", notes: "Just add struct TypeError : Error {};" },
+  { name: "RangeError",                 code: "new RangeError('msg')",   st: "missing", eff: "xs",  phase: "B", notes: "" },
+  { name: "SyntaxError",                code: "new SyntaxError('msg')",  st: "missing", eff: "xs",  phase: "B", notes: "" },
+  { name: "ReferenceError",             code: "new ReferenceError()",    st: "missing", eff: "xs",  phase: "B", notes: "" },
+  { name: "URIError",                   code: "new URIError('msg')",     st: "missing", eff: "xs",  phase: "B", notes: "" },
+  { name: "EvalError",                  code: "new EvalError('msg')",    st: "na",      eff: "na",  phase: "",  notes: "eval not supported." },
+  { name: "AggregateError",             code: "new AggregateError([])",  st: "partial", eff: "xs",  phase: "B", notes: "Stub exists; errors array not iterable yet." },
+  { name: "Error.cause (ES2022)",       code: "new Error('',{cause:e})", st: "missing", eff: "xs",  phase: "B", notes: "Add cause field to Error struct." },
+  { name: "try/catch/finally",          code: "try{}catch(e){}",         st: "missing", eff: "l",   phase: "A", notes: "See control flow section. Critical — most npm packages rely on this." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Symbols", icon: "🔣", rows: [
+  { name: "Symbol()",                   code: "const s = Symbol('desc')",st: "partial", eff: "s",   phase: "D", notes: "Well-known symbols (iterator, asyncIterator, toPrimitive) mapped to string constants. Symbol() runtime ID generation not implemented." },
+  { name: "Symbol.for/keyFor",          code: "Symbol.for('key')",       st: "missing", eff: "s",   phase: "D", notes: "Needs a VRAM global symbol registry (small array of (hash → id) pairs)." },
+  { name: "Symbol.iterator",            code: "[Symbol.iterator]",       st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __iterator__." },
+  { name: "Symbol.asyncIterator",       code: "[Symbol.asyncIterator]",  st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __asyncIterator__." },
+  { name: "Symbol.toPrimitive",         code: "[Symbol.toPrimitive]",    st: "partial", eff: "s",   phase: "D", notes: "Parsed; codegen not wired in coercion contexts yet." },
+  { name: "Symbol.hasInstance",         code: "[Symbol.hasInstance]",    st: "partial", eff: "s",   phase: "D", notes: "Parsed; instanceof codegen not wired yet." },
+  { name: "Symbol.species",             code: "[Symbol.species]",        st: "na",      eff: "na",  phase: "",  notes: "Array subclassing not supported." },
+  { name: "Symbol.toStringTag",         code: "[Symbol.toStringTag]",    st: "missing", eff: "xs",  phase: "D", notes: "Add __toStringTag__ constant to struct; include in toString()." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Proxy & Reflect", icon: "🪞", rows: [
+  { name: "Proxy (get trap)",           code: "new Proxy(t,{get(t,p){}}", st:"na",      eff: "na",  phase: "",  notes: "Dynamic traps require runtime dispatch the GPU SIMT model cannot support without major divergence." },
+  { name: "Proxy (all traps)",          code: "set,has,deleteProperty…",  st:"na",      eff: "na",  phase: "",  notes: "" },
+  { name: "Reflect (all methods)",      code: "Reflect.get/set/…",        st:"na",      eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "String (built-in API)", icon: "🔤", rows: [
+  { name: "String.fromCharCode",        code: "String.fromCharCode(65)",  st: "missing", eff: "xs",  phase: "C", notes: "Add __device__ const char* symm_str_from_charcode(int) returning single-char _SBuf." },
+  { name: "String.fromCodePoint",       code: "String.fromCodePoint(128)",st: "missing", eff: "s",   phase: "C", notes: "UTF-8 encode single codepoint into _SBuf." },
+  { name: "String.raw",                 code: "String.raw`\\n`",          st: "missing", eff: "m",   phase: "D", notes: "Tagged template; strings array has raw property. Need tagged template codegen first." },
+  { name: "str.at(index)",              code: "str.at(-1)",               st: "missing", eff: "xs",  phase: "C", notes: "Negative index wraps with strlen. Add symm_str_at()." },
+  { name: "str.charAt",                 code: "str.charAt(i)",            st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.charCodeAt",             code: "str.charCodeAt(i)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.codePointAt",            code: "str.codePointAt(i)",       st: "missing", eff: "s",   phase: "C", notes: "Decode UTF-8 sequence at position i." },
+  { name: "str.concat",                 code: "str.concat(s1,s2)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.endsWith",               code: "str.endsWith('x')",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.includes",               code: "str.includes('x')",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.indexOf / lastIndexOf",  code: "str.indexOf('x')",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.match",                  code: "str.match(/abc/)",          st: "missing", eff: "s",   phase: "C", notes: "Alias of RegExp.exec on GPU. Add symm_str_match() wrapper." },
+  { name: "str.matchAll",               code: "str.matchAll(/abc/g)",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.normalize",              code: "str.normalize('NFC')",      st: "na",      eff: "na",  phase: "",  notes: "Requires Unicode table (~250 KB) — too large for GPU stack." },
+  { name: "str.padEnd / padStart",      code: "str.padStart(10,'0')",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.repeat",                 code: "str.repeat(3)",             st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.replace",                code: "str.replace('a','b')",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.replaceAll",             code: "str.replaceAll('a','b')",   st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.search",                 code: "str.search(/abc/)",         st: "missing", eff: "xs",  phase: "C", notes: "Returns index of first RegExp match. Call NFA engine; return start pos or -1." },
+  { name: "str.slice",                  code: "str.slice(1,-1)",           st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.split",                  code: "str.split(',')",            st: "done",    eff: "na",  phase: "",  notes: "Returns fixed-size array. Max 64 parts." },
+  { name: "str.startsWith",             code: "str.startsWith('x')",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.substring",              code: "str.substring(1,5)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.toLowerCase/Upper",      code: "str.toUpperCase()",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.trim/Start/End",         code: "str.trim()",                st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "str.length",                 code: "str.length",                st: "done",    eff: "na",  phase: "",  notes: "Calls symm_strlen()." },
+  { name: "str[i] (index access)",      code: "str[0]",                    st: "done",    eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Number & Math", icon: "🔢", rows: [
+  { name: "Number.isNaN/isFinite/isInteger/isSafeInteger", code:"Number.isNaN(x)",st:"done",eff:"na",phase:"",notes:"" },
+  { name: "Number.parseInt/parseFloat", code: "Number.parseInt('42')",   st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Number.EPSILON/MAX_SAFE_INTEGER/…", code:"Number.EPSILON",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Number.POSITIVE/NEGATIVE_INFINITY",code:"Infinity",           st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Number.MAX_VALUE/MIN_VALUE",  code:"Number.MAX_VALUE",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "n.toFixed(digits)",           code: "(3.14).toFixed(2)",      st: "missing", eff: "s",   phase: "C", notes: "GPU sprintf equivalent: write integer part + '.' + n digits using symm_write_float variation." },
+  { name: "n.toPrecision(digits)",       code: "(12345).toPrecision(4)", st: "missing", eff: "s",   phase: "C", notes: "Significant-digit formatting." },
+  { name: "n.toExponential(digits)",     code: "(1e6).toExponential(2)", st: "missing", eff: "s",   phase: "C", notes: "Scientific notation string formatting." },
+  { name: "n.toString(radix)",           code: "(255).toString(16)",     st: "missing", eff: "s",   phase: "C", notes: "Hex/octal/binary radix conversion." },
+  { name: "global isNaN/isFinite",       code: "isNaN(x)",               st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "global parseInt/parseFloat",  code: "parseInt('FF', 16)",     st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Math — all standard methods", code: "sin cos log pow sqrt …", st: "done",    eff: "na",  phase: "",  notes: "CUDA single-precision intrinsics. All 30+ methods mapped." },
+  { name: "Math.sign/clz32/imul/fround", code: "Math.sign(x)",          st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Math.random()",               code: "Math.random()",          st: "missing", eff: "m",   phase: "C", notes: "Use curand_uniform() with per-warp CURAND state seeded at kernel launch. State stored in BatchContext VRAM." },
+  { name: "Math.PI, E, LN2, …",         code: "Math.PI",                st: "done",    eff: "na",  phase: "",  notes: "Defined as float literals in MATH_REMAP." },
+  { name: "BigInt arithmetic",           code: "100n + 200n",            st: "partial", eff: "m",   phase: "A", notes: "typedef long long bigint works for arithmetic; n suffix not yet parsed." },
+  { name: "BigInt comparison",           code: "100n === 100n",          st: "partial", eff: "xs",  phase: "A", notes: "" },
+  { name: "BigInt conversion",           code: "BigInt(42)",             st: "missing", eff: "xs",  phase: "A", notes: "Add __device__ long long BigInt(long long v){return v;}" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Array (built-in API)", icon: "📋", rows: [
+  { name: "Array.isArray",              code: "Array.isArray(v)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Array.from",                 code: "Array.from(iterable)",    st: "done",    eff: "na",  phase: "",  notes: "Works for typed arrays and generators." },
+  { name: "Array.of",                   code: "Array.of(1,2,3)",         st: "partial", eff: "xs",  phase: "C", notes: "Add emitCall dispatch for Array.of → variadic initializer." },
+  { name: "arr.at(index)",              code: "arr.at(-1)",              st: "missing", eff: "xs",  phase: "C", notes: "Negative index: arr[arr.length + index]." },
+  { name: "arr.concat",                 code: "arr.concat(b)",           st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.copyWithin",             code: "arr.copyWithin(0,2)",     st: "missing", eff: "s",   phase: "C", notes: "memmove-style copy within array buffer." },
+  { name: "arr.entries/keys/values",    code: "arr.entries()",           st: "missing", eff: "s",   phase: "C", notes: "Return generator yielding [i, v] or i or v." },
+  { name: "arr.every/some",             code: "arr.every(x=>x>0)",       st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.fill",                   code: "arr.fill(0,2,5)",         st: "missing", eff: "xs",  phase: "C", notes: "Loop: for(int i=start;i<end;i++) arr[i]=val;" },
+  { name: "arr.filter",                 code: "arr.filter(x=>x>0)",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.find/findIndex",         code: "arr.find(x=>x.id===1)",   st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.findLast/findLastIndex", code: "arr.findLast(x=>x>0)",    st: "missing", eff: "xs",  phase: "C", notes: "Reverse scan." },
+  { name: "arr.flat",                   code: "arr.flat(2)",             st: "missing", eff: "m",   phase: "C", notes: "Nested GpuArray flattening; depth param complicates templates." },
+  { name: "arr.flatMap",                code: "arr.flatMap(f)",          st: "missing", eff: "m",   phase: "C", notes: "" },
+  { name: "arr.forEach",                code: "arr.forEach(f)",          st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.includes",               code: "arr.includes(v)",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.indexOf/lastIndexOf",    code: "arr.indexOf(v)",          st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.join",                   code: "arr.join(',')",           st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.map",                    code: "arr.map(x=>x*2)",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.pop/push/shift/unshift", code: "arr.push(v)",             st: "done",    eff: "na",  phase: "",  notes: "Max capacity bounded by stack allocation size." },
+  { name: "arr.reduce/reduceRight",     code: "arr.reduce((a,b)=>a+b)",  st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.reverse",                code: "arr.reverse()",           st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.slice",                  code: "arr.slice(1,3)",          st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.sort",                   code: "arr.sort((a,b)=>a-b)",    st: "done",    eff: "na",  phase: "",  notes: "Insertion sort (n < 256 on GPU stack)." },
+  { name: "arr.splice",                 code: "arr.splice(1,1)",         st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "arr.toReversed/toSorted/toSpliced/with", code:"arr.toSorted()",st:"missing",eff:"s",phase:"C",notes:"ES2023 non-mutating copies. Emit copy then mutate." },
+  { name: "arr.length",                 code: "arr.length",              st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Typed arrays (Float32Array etc.)", code:"new Float32Array(n)",st:"done",     eff:"na",   phase:"",   notes:"Maps to CUDA device float array." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Object (static API)", icon: "🗄️", rows: [
+  { name: "Object.assign",              code: "Object.assign(a,b)",      st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Object.create",              code: "Object.create(proto)",    st: "partial", eff: "m",   phase: "D", notes: "Prototype chain emulated via struct inheritance." },
+  { name: "Object.defineProperty",      code: "Object.defineProperty()", st: "na",      eff: "na",  phase: "",  notes: "Property descriptors not meaningful for stack-allocated GPU structs." },
+  { name: "Object.entries",             code: "Object.entries(obj)",     st: "done",    eff: "na",  phase: "",  notes: "Returns array of [key,val] from GpuObject _e array." },
+  { name: "Object.freeze/seal",         code: "Object.freeze(obj)",      st: "done",    eff: "na",  phase: "",  notes: "No-op on GPU (struct layout already fixed at compile time)." },
+  { name: "Object.fromEntries",         code: "Object.fromEntries(arr)", st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Object.getOwnPropertyNames", code: "Object.getOwnPropertyNames()",st:"partial",eff:"m",phase:"D", notes:"Returns _e[i].k array." },
+  { name: "Object.hasOwn",              code: "Object.hasOwn(o,'x')",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Object.is",                  code: "Object.is(NaN,NaN)",      st: "missing", eff: "xs",  phase: "C", notes: "NaN-aware equality. Handle -0 === +0 false." },
+  { name: "Object.keys/values",         code: "Object.keys(obj)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Object.setPrototypeOf",       code: "Object.setPrototypeOf()",st: "na",      eff: "na",  phase: "",  notes: "Runtime prototype mutation not possible for GPU structs." },
+  { name: "structuredClone",            code: "structuredClone(obj)",    st: "missing", eff: "m",   phase: "C", notes: "Deep copy of GpuObject by value. Emit field-by-field copy recursively." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Map & Set", icon: "🗺️", rows: [
+  { name: "Map — set/get/has/size",     code: "map.set('k',v)",          st: "partial", eff: "m",   phase: "A", notes: "Current stub uses pointer comparison for keys — 'foo' != 'foo' if different literals. Fix: replace _e[i].k==k with symm_str_eq(_e[i].k, k). Also need a numeric-key variant." },
+  { name: "Map — delete/clear",         code: "map.delete('k')",         st: "partial", eff: "s",   phase: "A", notes: "delete needs to shift entries; clear resets _n=0." },
+  { name: "Map — forEach",              code: "map.forEach((v,k)=>…)",   st: "missing", eff: "xs",  phase: "C", notes: "Loop over _e[0.._n-1]." },
+  { name: "Map — keys/values/entries",  code: "map.keys()",              st: "missing", eff: "s",   phase: "C", notes: "Return generator yielding k / v / [k,v]." },
+  { name: "Map — for…of",              code: "for(const [k,v] of map)", st: "missing", eff: "s",   phase: "C", notes: "Need Map to implement Symbol.iterator." },
+  { name: "Map — numeric key variant", code: "map.set(42, v)",          st: "missing", eff: "m",   phase: "A", notes: "Current Map only supports const char* keys. Add Map<int,V> template." },
+  { name: "Set — add/has/size",         code: "set.add('x')",            st: "partial", eff: "s",   phase: "A", notes: "Same pointer-equality bug as Map. Fix with symm_str_eq." },
+  { name: "Set — delete/clear",         code: "set.delete('x')",         st: "partial", eff: "xs",  phase: "A", notes: "" },
+  { name: "Set — forEach / iteration",  code: "set.forEach(v=>…)",       st: "missing", eff: "s",   phase: "C", notes: "" },
+  { name: "WeakMap / WeakSet",          code: "new WeakMap()",           st: "na",       eff: "na",  phase: "",  notes: "GC semantics not applicable on GPU." },
+  { name: "WeakRef / FinalizationRegistry", code:"new WeakRef(obj)",     st: "na",       eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "JSON", icon: "📄", rows: [
+  { name: "JSON.stringify (simple)",    code: "JSON.stringify({a:1})",   st: "done",    eff: "na",  phase: "",  notes: "symm_json_obj_str / symm_json_val / symm_write helpers in prelude." },
+  { name: "JSON.stringify (nested)",    code: "JSON.stringify({a:{b:1}})",st:"partial", eff: "m",   phase: "B", notes: "Nested struct serialisation requires recursive emitJsonValue codegen path." },
+  { name: "JSON.stringify (array)",     code: "JSON.stringify([1,2,3])", st: "done",    eff: "na",  phase: "",  notes: "symm_json_f32arr." },
+  { name: "JSON.stringify (replacer)",  code: "JSON.stringify(o,replacer)",st:"na",     eff: "na",  phase: "",  notes: "Dynamic replacer function not feasible." },
+  { name: "JSON.stringify (indent)",    code: "JSON.stringify(o,null,2)",st:"missing",  eff: "s",   phase: "C", notes: "Add indent parameter to serializer." },
+  { name: "JSON.parse",                 code: "JSON.parse(str)",         st: "missing", eff: "l",   phase: "A", notes: "GPU recursive-descent JSON parser needed. Outputs to a GpuObject. CRITICAL: needed for request body parsing in most APIs." },
+  { name: "JSON.parse (reviver)",       code: "JSON.parse(s, reviver)",  st: "na",      eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "RegExp", icon: "🔍", rows: [
+  { name: "Literal characters / escape",code: "/abc\\n/",                st: "done",    eff: "na",  phase: "",  notes: "NFA engine handles all common escapes." },
+  { name: ". * + ? quantifiers",        code: "/ab+c*/",                 st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "^ $ anchors",                code: "/^start/",                st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Character classes [abc]",    code: "/[a-z0-9]/",              st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Negated classes [^abc]",     code: "/[^\\d]/",                st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Shorthand \\d \\w \\s",      code: "/\\w+@\\w+/",             st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Groups () and alternation |",code: "/(a|b)+/",                st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Non-capturing groups (?:…)", code: "/(?:abc)/",               st: "missing", eff: "s",   phase: "C", notes: "NFA needs to tag groups; non-capturing just skips tagging." },
+  { name: "Named capture groups",       code: "/(?<year>\\d{4})/",       st: "missing", eff: "l",   phase: "D", notes: "Need a name→index map injected by Codegen at JIT time. Store in RegExp struct." },
+  { name: "Backreferences \\1",         code: "/(a)\\1/",                st: "missing", eff: "l",   phase: "D", notes: "NFA must track group captures and compare. Expensive on GPU." },
+  { name: "Lookahead (?=…) (?!…)",      code: "/foo(?=bar)/",            st: "missing", eff: "l",   phase: "D", notes: "Zero-width assertion; NFA needs speculative branch without consuming." },
+  { name: "Lookbehind (?<=…)",          code: "/(?<=foo)bar/",           st: "missing", eff: "xl",  phase: "D", notes: "Reverse NFA traversal. Complex." },
+  { name: "{n,m} quantifiers",          code: "/a{2,4}/",                st: "missing", eff: "m",   phase: "C", notes: "NFA expansion of counted repetition." },
+  { name: "Flags: g (global)",          code: "/abc/g",                  st: "done",    eff: "na",  phase: "",  notes: "matchAll uses global flag." },
+  { name: "Flags: i (case-insensitive)",code: "/abc/i",                  st: "partial", eff: "s",   phase: "C", notes: "NFA needs to compare tolower(c1)==tolower(c2) in character match." },
+  { name: "Flags: m (multiline)",       code: "/^/m",                    st: "missing", eff: "m",   phase: "D", notes: "^ and $ must match \\n boundaries." },
+  { name: "Flags: s (dotAll)",          code: "/./s",                    st: "missing", eff: "xs",  phase: "C", notes: ". matches \\n when dotAll set." },
+  { name: "Flags: u (unicode)",         code: "/\\u{1F600}/u",           st: "na",      eff: "na",  phase: "",  notes: "Full Unicode DFA too large for GPU. UTF-8 literal matching works." },
+  { name: "RegExp.test()",              code: "re.test(str)",            st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "RegExp.exec()",              code: "re.exec(str)",            st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "RegExp.matchAll()",          code: "str.matchAll(re)",        st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Dynamic RegExp (new RegExp)",code: "new RegExp(pattern,flags)",st:"partial", eff: "m",   phase: "D", notes: "Supports literal pattern strings. NVRTC re-compilation for truly dynamic patterns not yet wired." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Date", icon: "📅", rows: [
+  { name: "Date.now()",                 code: "Date.now()",              st: "partial", eff: "m",   phase: "E", notes: "Stub returns 0. Need: CPU timer thread writes monotonic µs to a pinned VRAM location every 1 ms; kernel reads it." },
+  { name: "new Date(ms) — construct",   code: "new Date(1700000000000)", st: "partial", eff: "m",   phase: "F", notes: "Struct exists; field calculations not implemented." },
+  { name: "date.getFullYear/Month/Day", code: "d.getFullYear()",        st: "missing", eff: "m",   phase: "F", notes: "Calendar arithmetic from ms timestamp. Standard algorithm." },
+  { name: "date.getHours/Minutes/…",   code: "d.getHours()",           st: "missing", eff: "s",   phase: "F", notes: "" },
+  { name: "date.toISOString()",         code: "d.toISOString()",        st: "missing", eff: "m",   phase: "F", notes: "Format: YYYY-MM-DDTHH:mm:ss.sssZ into _SBuf." },
+  { name: "date.getTime()",             code: "d.getTime()",            st: "missing", eff: "xs",  phase: "F", notes: "Return stored ms value." },
+  { name: "Date.parse(str)",            code: "Date.parse('2024-01-01')",st:"missing", eff: "m",   phase: "F", notes: "ISO 8601 parser." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "Web & Node Platform APIs", icon: "🌐", rows: [
+  { name: "console.log/warn/error",    code: "console.log('x', val)",   st: "missing", eff: "m",   phase: "B", notes: "Write to a per-slot VRAM debug ring buffer (4 KB). CPU reads it after kernel and prints. No blocking GPU output." },
+  { name: "console.time/timeEnd",      code: "console.time('label')",   st: "missing", eff: "m",   phase: "F", notes: "CUDA clock64() gives nanosecond GPU counter." },
+  { name: "console.assert",            code: "console.assert(cond,msg)",st: "missing", eff: "xs",  phase: "F", notes: "If !cond, write to debug buffer." },
+  { name: "setTimeout / clearTimeout", code: "setTimeout(f, 100)",      st: "done",    eff: "na",  phase: "",  notes: "CPU-side TimerQueue fires callback; response via BatchScheduler." },
+  { name: "setInterval / clearInterval",code:"setInterval(f, 1000)",    st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "queueMicrotask",            code: "queueMicrotask(f)",       st: "na",      eff: "na",  phase: "",  notes: "No microtask queue on GPU. Tier-1 async is synchronous." },
+  { name: "URL",                        code: "new URL('https://…')",    st: "done",    eff: "na",  phase: "",  notes: "GPU-side struct with scheme/hostname/pathname parsing." },
+  { name: "URLSearchParams",           code: "new URLSearchParams('a=1')",st:"done",   eff: "na",  phase: "",  notes: "" },
+  { name: "TextEncoder",               code: "new TextEncoder().encode(s)",st:"done",  eff: "na",  phase: "",  notes: "UTF-8 byte array." },
+  { name: "TextDecoder",               code: "new TextDecoder().decode(b)",st:"done",  eff: "na",  phase: "",  notes: "" },
+  { name: "Blob / File",               code: "new Blob([data])",        st: "missing", eff: "l",   phase: "F", notes: "Binary container. Store as ByteArray slice + MIME type field." },
+  { name: "FormData",                  code: "new FormData()",          st: "missing", eff: "xl",  phase: "F", notes: "Multipart boundary parser. GPU-side parsing of multipart/form-data bodies." },
+  { name: "fetch()",                    code: "await fetch(url, opts)",  st: "missing", eff: "xl",  phase: "E", notes: "Tier-3 split-kernel CPS. Kernel queues HTTP request to VRAM I/O queue; CPU proxy thread executes cURL/libuv; continuation kernel resumes." },
+  { name: "Request / Response / Headers",code:"new Request(url)",       st: "missing", eff: "l",   phase: "E", notes: "Headers: GpuObject of key→value. Request/Response: wraps Headers + body ByteArray." },
+  { name: "AbortController / AbortSignal",code:"new AbortController()", st: "done",    eff: "na",  phase: "",  notes: "VRAM bool flag + listener array." },
+  { name: "ReadableStream / WritableStream",code:"new ReadableStream()",st:"missing",  eff: "xl",  phase: "E", notes: "VramPipe-backed stream. Needs pull-based producer protocol across kernel boundaries." },
+  { name: "TransformStream",           code: "new TransformStream()",   st: "missing", eff: "xl",  phase: "E", notes: "" },
+  { name: "WebSocket",                 code: "new WebSocket(url)",      st: "missing", eff: "xl",  phase: "E", notes: "Persistent CUDA stream per connection. WS frame parser kernel. CPU-side TLS + upgrade handshake." },
+  { name: "crypto.getRandomValues",    code: "crypto.getRandomValues(arr)",st:"missing",eff:"m",phase:"C",notes:"curand_uniform() into Uint8Array. Seed per-block." },
+  { name: "crypto.subtle.digest (SHA)",code:"crypto.subtle.digest('SHA-256',d)",st:"partial",eff:"m",phase:"D",notes:"GPU SHA-256 exists in protect/ kernel; not yet exposed to user code." },
+  { name: "crypto.subtle.encrypt/decrypt",code:"subtle.encrypt(aes,key,data)",st:"partial",eff:"l",phase:"D",notes:"AES-GCM implementation exists in protect/. Expose via @symmetra/crypto." },
+  { name: "crypto.subtle.sign/verify", code:"subtle.sign(algo,key,data)",st:"missing",eff:"l",phase:"D",notes:"HMAC-SHA256 needed. GPU implementation straightforward." },
+  { name: "crypto.subtle.importKey",   code:"subtle.importKey(…)",      st: "missing", eff: "m",   phase: "D", notes: "" },
+  { name: "Performance.now()",         code: "performance.now()",       st: "missing", eff: "s",   phase: "F", notes: "Use clock64() / SM clock rate → float ms." },
+  { name: "EventTarget / addEventListener", code:"el.addEventListener('x',f)", st:"na", eff:"na",phase:"",notes:"DOM event model not applicable. AbortSignal has a minimal listener array." },
+  { name: "Worker (GpuWorker)",        code: "new Worker('./w.ts')",     st: "partial", eff: "xl",  phase: "F", notes: "GpuWorker infrastructure exists; message-passing demo not yet written." },
+  { name: "structuredClone",           code: "structuredClone(obj)",     st: "missing", eff: "m",   phase: "C", notes: "See Object section." },
+  { name: "localStorage / sessionStorage",code:"localStorage.getItem(k)",st:"na",      eff: "na",  phase: "",  notes: "" },
+  { name: "IndexedDB",                 code: "indexedDB.open('db')",     st: "na",      eff: "na",  phase: "",  notes: "" },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "TypeScript Language Features", icon: "🟦", rows: [
+  { name: "Type annotations (all forms)",code:"x: string, fn(): void",  st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild before SymmParser sees the file." },
+  { name: "Generics (erased)",          code: "function f<T>(x: T)",    st: "done",    eff: "na",  phase: "",  notes: "Type params erased; C++ templates handle GPU generic code." },
+  { name: "Interfaces",                 code: "interface Foo { x: number }",st:"done",eff:"na",phase:"",notes:"Erased." },
+  { name: "Type aliases",               code: "type Point = {x,y}",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Union types",                code: "string | number",         st: "done",    eff: "na",  phase: "",  notes: "Erased; GPU uses const char* for string, float for number." },
+  { name: "Intersection types",         code: "A & B",                  st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Tuple types",                code: "[string, number]",        st: "done",    eff: "na",  phase: "",  notes: "Erased; becomes fixed-size GpuArray or struct." },
+  { name: "Conditional types",          code: "T extends U ? A : B",    st: "done",    eff: "na",  phase: "",  notes: "Erased (compile-time only)." },
+  { name: "Mapped types",               code: "{ [K in T]: V }",        st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Template literal types",     code: "`${string}Id`",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "infer keyword",              code: "infer R",                 st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "satisfies keyword",          code: "expr satisfies Type",     st: "done",    eff: "na",  phase: "",  notes: "Erased (TS 4.9+)." },
+  { name: "as const",                   code: "const x = [1,2] as const",st:"done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Non-null assertion (!)",      code: "x!.foo",                 st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Type assertions (as)",        code: "x as string",            st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Const enums",                code: "const enum Dir { Up=0 }", st: "done",    eff: "na",  phase: "",  notes: "Inlined as integer literals by esbuild." },
+  { name: "Regular enums (numeric)",    code: "enum Color { Red, Green }",st:"missing", eff: "m",   phase: "B", notes: "Codegen must emit const int Color_Red=0, Color_Green=1; and a lookup struct." },
+  { name: "String enums",               code: "enum Dir { Up='UP' }",   st: "missing", eff: "m",   phase: "B", notes: "Emit const char* Color_Red='Red'; etc." },
+  { name: "Heterogeneous enums",        code: "enum Mix { A=0, B='b' }", st: "missing", eff: "m",   phase: "B", notes: "" },
+  { name: "Namespaces",                 code: "namespace Foo { export … }",st:"missing",eff:"m",phase:"F",notes:"Flatten to file-scope with Foo_ prefix." },
+  { name: "Declaration merging",        code: "interface Foo {} interface Foo {}",st:"na",eff:"na",phase:"",notes:"Type-level only." },
+  { name: "Module augmentation",        code: "declare module 'm' {}",   st: "na",      eff: "na",  phase: "",  notes: "Type-level only." },
+  { name: "Ambient declarations",       code: "declare const x: number", st: "na",      eff: "na",  phase: "",  notes: "Type-level only." },
+  { name: "Access modifiers",           code: "public/private/protected",st: "na",      eff: "na",  phase: "",  notes: "Erased. GPU structs don't enforce access at runtime." },
+  { name: "readonly modifier",          code: "readonly x: number",      st: "na",      eff: "na",  phase: "",  notes: "Erased. Const correctness handled by C++ const." },
+  { name: "Definite assign assertion",  code: "x!: string",              st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Index signatures",           code: "{ [key: string]: number }",st:"partial", eff: "m",   phase: "D", notes: "Partially supported via GpuObject. String key runtime lookup is O(n)." },
+  { name: "Type guards",                code: "function isStr(x): x is string",st:"done",eff:"na",phase:"",notes:"Erased (runtime: just the check expression)." },
+  { name: "Assertion functions",        code: "function assert(x): asserts x",st:"done",eff:"na",phase:"",notes:"Erased." },
+  { name: "using / await using",        code: "using file = open(…)",    st: "missing", eff: "m",   phase: "F", notes: "Emits a scoped RAII wrapper that calls Symbol.dispose on scope exit." },
+  { name: "Decorators (experimental)",  code: "@injectable class Foo {}",st: "missing", eff: "xl",  phase: "F", notes: "Class/method decorators compiled to wrapper functions. Stage 3 TC39 vs TS experimental differ." },
+]},
+
+// ─────────────────────────────────────────────────────────────────────────────
+{ cat: "TypeScript Utility Types", icon: "🛠️", rows: [
+  { name: "Partial<T>",                 code: "Partial<User>",           st: "done",    eff: "na",  phase: "",  notes: "Type-only. Erased." },
+  { name: "Required<T>",                code: "Required<Opts>",          st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Readonly<T>",                code: "Readonly<Obj>",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Record<K,V>",                code: "Record<string,number>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Pick<T,K>",                  code: "Pick<User,'id'|'name'>",  st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Omit<T,K>",                  code: "Omit<User,'password'>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Exclude/Extract",            code: "Exclude<A,B>",            st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "NonNullable<T>",             code: "NonNullable<T|null>",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Parameters/ReturnType",      code: "ReturnType<typeof fn>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "InstanceType<T>",            code: "InstanceType<typeof Cls>",st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Awaited<T>",                 code: "Awaited<Promise<T>>",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "NoInfer<T>",                 code: "NoInfer<T>",              st: "done",    eff: "na",  phase: "",  notes: "Erased (TS 5.4+)." },
+  { name: "Uppercase/Lowercase/Capitalize/Uncapitalize", code:"Uppercase<S>",st:"done",eff:"na",phase:"",notes:"Erased." },
+  { name: "ThisType<T>",                code: "ThisType<Ctx>",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+]},
+
+]; // end DATA
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+let currentFilter = 'all';
+
+function statusLabel(st) {
+  const m = { done:'✅ Done', partial:'⚠️ Partial', missing:'🔲 Missing', na:'⛔ N/A', cpu:'🔄 CPU-side' };
+  return m[st] || st;
+}
+function statusClass(st) {
+  return { done:'s-done', partial:'s-partial', missing:'s-missing', na:'s-na', cpu:'s-cpu' }[st] || '';
+}
+function effortHtml(e) {
+  if (e === 'na') return '<span style="color:var(--dim)">—</span>';
+  const cols = { xs:'var(--done)', s:'#8bcf4a', m:'var(--partial)', l:'var(--orange)', xl:'var(--missing)' };
+  const labels = { xs:'< 1 h', s:'½ day', m:'1–2 d', l:'3–5 d', xl:'1–2 w' };
+  return `<span class="effort-dot" style="background:${cols[e]}"></span>${labels[e] || e}`;
+}
+
+function render() {
+  const container = document.getElementById('cats');
+  container.innerHTML = '';
+
+  let totalDone=0, totalPartial=0, totalMissing=0, totalNa=0, totalCpu=0, totalAll=0;
+
+  DATA.forEach((cat, ci) => {
+    totalAll += cat.rows.length;
+    cat.rows.forEach(r => {
+      if (r.st==='done') totalDone++;
+      else if (r.st==='partial') totalPartial++;
+      else if (r.st==='missing') totalMissing++;
+      else if (r.st==='na') totalNa++;
+      else if (r.st==='cpu') totalCpu++;
+    });
+
+    const pDone    = cat.rows.filter(r=>r.st==='done').length;
+    const pPartial = cat.rows.filter(r=>r.st==='partial').length;
+    const pMissing = cat.rows.filter(r=>r.st==='missing').length;
+    const pNa      = cat.rows.filter(r=>r.st==='na').length;
+    const pCpu     = cat.rows.filter(r=>r.st==='cpu').length;
+    const total    = cat.rows.length;
+
+    const rows = cat.rows.map((r, ri) => `
+      <tr class="feat" data-st="${r.st}" data-name="${(r.name+(r.code||'')).toLowerCase()}" data-cat="${ci}">
+        <td class="name">${r.name}${r.code ? `<br><code>${r.code.replace(/</g,'&lt;')}</code>`:''}` +
+        `</td>
+        <td><span class="badge ${statusClass(r.st)}">${statusLabel(r.st)}</span></td>
+        <td class="effort">${effortHtml(r.eff)}</td>
+        <td class="phase">${r.phase ? 'Phase '+r.phase : ''}</td>
+        <td class="notes">${r.notes}</td>
+      </tr>`
+    ).join('');
+
+    const div = document.createElement('div');
+    div.className = 'cat';
+    div.setAttribute('data-ci', ci);
+    div.innerHTML = `
+      <div class="mini-bar">
+        <div class="pb-done"    style="flex:${pDone}"></div>
+        <div class="pb-partial" style="flex:${pPartial}"></div>
+        <div class="pb-missing" style="flex:${pMissing}"></div>
+        <div class="pb-na"      style="flex:${pNa+pCpu}"></div>
+      </div>
+      <div class="cat-hdr" onclick="toggleCat(${ci})">
+        <span class="cat-icon">${cat.icon}</span>
+        <h2>${cat.cat}</h2>
+        <span class="cat-count">${pDone}/${total} done &nbsp;·&nbsp; ${pMissing} missing</span>
+        <span class="cat-toggle" id="tog-${ci}">▾</span>
+      </div>
+      <div class="cat-body" id="body-${ci}">
+        <table>
+          <thead><tr>
+            <th style="width:30%">Feature / Example</th>
+            <th style="width:120px">Status</th>
+            <th style="width:90px">Effort</th>
+            <th style="width:80px">Phase</th>
+            <th>GPU Implementation Notes</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    container.appendChild(div);
+  });
+
+  // master progress bar
+  const total = totalAll;
+  document.getElementById('masterBar').innerHTML =
+    `<div class="pb-done"    style="flex:${totalDone}"></div>` +
+    `<div class="pb-partial" style="flex:${totalPartial}"></div>` +
+    `<div class="pb-missing" style="flex:${totalMissing}"></div>` +
+    `<div class="pb-na"      style="flex:${totalNa+totalCpu}"></div>`;
+  document.getElementById('pct-done').textContent    = totalDone + ' (' + pct(totalDone,total) + '%)';
+  document.getElementById('pct-partial').textContent = totalPartial + ' (' + pct(totalPartial,total) + '%)';
+  document.getElementById('pct-missing').textContent = totalMissing + ' (' + pct(totalMissing,total) + '%)';
+  document.getElementById('pct-cpu').textContent     = totalCpu + ' (' + pct(totalCpu,total) + '%)';
+  document.getElementById('pct-na').textContent      = totalNa + ' (' + pct(totalNa,total) + '%)';
+
+  applyFilters();
+}
+
+function pct(n, total) { return total ? Math.round(n*100/total) : 0; }
+
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let vis = 0, tot = 0;
+  document.querySelectorAll('tr.feat').forEach(row => {
+    const stMatch = currentFilter === 'all' || row.dataset.st === currentFilter;
+    const qMatch  = !q || row.dataset.name.includes(q) || row.querySelector('.notes')?.textContent.toLowerCase().includes(q);
+    const show = stMatch && qMatch;
+    row.classList.toggle('hidden', !show);
+    tot++;
+    if (show) vis++;
+  });
+  document.getElementById('stats').textContent = `${vis} / ${tot} features`;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.f-'+f)?.classList.add('active');
+  applyFilters();
+}
+
+function toggleCat(ci) {
+  const body = document.getElementById('body-'+ci);
+  const tog  = document.getElementById('tog-'+ci);
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  tog.textContent = open ? '▸' : '▾';
+}
+
+render();
+</script>
+</body>
+</html>

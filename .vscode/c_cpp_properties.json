@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+        "e:/GITHUB/SYMMETRA/engine/src",
+        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2/include",
+        "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.2/include/cccl",
+        "${default}"
+      ],
+      "defines": [
+        "NDEBUG",
+        "UNICODE",
+        "_UNICODE",
+        "SYMM_OBFKEY=0xA7C3E591B2D04F68ULL"
+      ],
+      "compilerPath": "E:/VS/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-msvc-x64"
+    }
+  ],
+  "version": 4
+}

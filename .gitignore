@@ -1,15 +1,37 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# THIS REPOSITORY CONTAINS PROPRIETARY ENGINE SOURCE CODE.
+# DO NOT push this repo to a public GitHub repository.
+# The only folder safe to publish publicly is: public/
+# See PRIVATE.md for the two-repo setup instructions.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Build artifacts
 build/
 dist/
-*.node
+generated/
 *.exe
 *.dll
 *.so
 *.pdb
 *.obj
 *.o
+*.node
+
+# Node / pnpm
 node_modules/
 .pnpm-store/
 *.tsbuildinfo
+
+# OS
 .DS_Store
 Thumbs.db
-symmetra-tmp-*.js
+
+# Symmetra temp files
+sym-tmp-*.js
+
+# Internal documents
+CHAMPION_HISTORY.md
+
+# ── If you accidentally git init in the root and want to publish:
+# Do NOT use git add .
+# Instead: cd public && git init && git add . && git push to the PUBLIC repo
