@@ -37,8 +37,9 @@ enum class NodeKind {
     TryCatchStmt,     // try { } catch (e) { } finally { }
     ThrowStmt,        // throw expr
     SwitchStmt,       // switch (expr) { case: ... }
-    BreakStmt,        // break
-    ContinueStmt,     // continue
+    BreakStmt,        // break [label]
+    ContinueStmt,     // continue [label]
+    LabeledStmt,      // label: stmt
     AssignExpr,       // x = expr, x += expr, etc.
     ClassDecl,        // class Foo extends Bar { constructor; methods }
     MapCall,          // data.map(fn) — special-cased for GPU codegen
@@ -179,8 +180,9 @@ struct SwitchStmt {
     std::vector<SwitchCase> cases;
 };
 
-struct BreakStmt    {};
-struct ContinueStmt {};
+struct BreakStmt    { std::string label; };  // break [label]
+struct ContinueStmt { std::string label; };  // continue [label]
+struct LabeledStmt  { std::string label; NodePtr body; };
 
 struct AssignExpr {
     std::string op;    // "=", "+=", "-=", "*=", "/=", "%=", "??=", "&&=", "||="
@@ -246,6 +248,7 @@ using NodeData = std::variant<
     Literal, Ident, NewExpr, ArrayExpr, ObjectExpr, TemplateLit,
     IfStmt, ForStmt, ForOfStmt, ForInStmt, WhileStmt, DoWhileStmt,
     TryCatchStmt, ThrowStmt, SwitchStmt, BreakStmt, ContinueStmt,
+    LabeledStmt,
     AssignExpr, ClassDecl,
     MapCall, FilterCall, ReduceCall, RouteReg, ServeCall,
     GpuCall, ExprStmt

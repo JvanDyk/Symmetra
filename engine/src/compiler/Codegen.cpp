@@ -186,17 +186,47 @@ __device__ int symm_write(char* buf, double v)       { return symm_write_float(b
 template<typename T> __device__ int symm_write(char* buf, T v) { return symm_write_str(buf, (const char*)v); }
 // JSON value emitters: strings get quoted, numbers bare, bools bare
 __device__ int symm_json_val(char* buf, const char* s) {
+    // Emit a JSON-escaped string literal: "value"
     int n = 0; buf[n++] = '"';
-    while (s && *s) buf[n++] = *s++;
+    while (s && *s) {
+        char c = *s++;
+        if      (c == '"')  { buf[n++] = '\\'; buf[n++] = '"';  }
+        else if (c == '\\') { buf[n++] = '\\'; buf[n++] = '\\'; }
+        else if (c == '\n') { buf[n++] = '\\'; buf[n++] = 'n';  }
+        else if (c == '\r') { buf[n++] = '\\'; buf[n++] = 'r';  }
+        else if (c == '\t') { buf[n++] = '\\'; buf[n++] = 't';  }
+        else                { buf[n++] = c; }
+    }
     buf[n++] = '"'; buf[n] = '\0'; return n;
 }
 __device__ int symm_json_val(char* buf, float v)      { return symm_write_float(buf, v); }
+__device__ int symm_json_val(char* buf, double v)     { return symm_write_float(buf, (float)v); }
 __device__ int symm_json_val(char* buf, int v)        { return symm_write_int(buf, v); }
 __device__ int symm_json_val(char* buf, long long v)  { return symm_write_int(buf, v); }
+__device__ int symm_json_val(char* buf, unsigned v)   { return symm_write_int(buf, (int)v); }
 __device__ int symm_json_val(char* buf, bool v)       { return symm_write_bool(buf, v); }
 template<typename T> __device__ int symm_json_val(char* buf, T v) { return symm_write_float(buf, (float)v); }
 // nullptr → "null"
 __device__ int symm_json_val(char* buf, decltype(nullptr)) { return symm_write_str(buf, "null"); }
+// symm_json_merge: merge a JSON object string into a destination buffer.
+// Used for object spread: {...src}  — strips outer braces and appends fields.
+// Returns bytes written (without null terminator).
+__device__ int symm_json_merge(char* dst, int maxlen, const char* src) {
+    if (!src || !*src || maxlen <= 0) return 0;
+    // Locate the first '{' and last '}' in src
+    int s = 0, e = symm_strlen(src) - 1;
+    while (src[s] && src[s] != '{') s++;
+    while (e > s && src[e] != '}') e--;
+    if (s >= e) return 0;
+    s++; // skip '{'
+    // Copy src[s..e-1] into dst, up to maxlen-1 chars
+    int n = 0;
+    while (s < e && n < maxlen - 1) dst[n++] = src[s++];
+    dst[n] = '\0';
+    return n;
+}
+// Overload for _SBuf
+__device__ int symm_json_merge(char* dst, int maxlen, _SBuf s) { return symm_json_merge(dst, maxlen, s._b); }
 // float3 array as JSON "[x,y,z]"
 __device__ int symm_json_val(char* buf, float3 v) {
     int n = 0; buf[n++] = '[';
@@ -833,6 +863,49 @@ struct Buffer : ByteArray {
     __device__ const char* toString(const char* = "utf8") const { return _data; }
 };
 
+// ── WeakMap / WeakRef / WeakSet — no-op stubs for TypeScript compatibility ───
+template<typename K, typename V = float>
+struct WeakMap {
+    __device__ void set(K, V) {}
+    __device__ V    get(K)    { return V{}; }
+    __device__ bool has(K)    { return false; }
+    __device__ void del(K)    {}
+};
+template<typename T>
+struct WeakRef {
+    T* _ptr = nullptr;
+    __device__ WeakRef() = default;
+    __device__ explicit WeakRef(T* p) : _ptr(p) {}
+    __device__ T* deref() const { return _ptr; }
+};
+template<typename T>
+struct WeakSet {
+    __device__ void add(T) {}
+    __device__ bool has(T) { return false; }
+    __device__ void del(T) {}
+};
+
+// ── URLSearchParams — simple query string parser ───────────────────────────
+struct URLSearchParams {
+    const char* _qs;  // the raw query string
+    __device__ URLSearchParams() : _qs(nullptr) {}
+    __device__ URLSearchParams(const char* qs) : _qs(qs) {}
+    // get(key) — finds &key=value in _qs, returns pointer to value start (or nullptr)
+    __device__ const char* get(const char* key) const {
+        if (!_qs || !key) return nullptr;
+        int klen = symm_strlen(key);
+        for (int i = 0; _qs[i]; i++) {
+            if (i == 0 || _qs[i-1] == '&') {
+                bool match = true;
+                for (int j = 0; j < klen && match; j++) match = (_qs[i+j] == key[j]);
+                if (match && _qs[i+klen] == '=') return _qs + i + klen + 1;
+            }
+        }
+        return nullptr;
+    }
+    __device__ bool has(const char* key) const { return get(key) != nullptr; }
+};
+
 // ── BigInt — maps to long long on GPU ────────────────────────────────────────
 typedef long long bigint;
 
@@ -1185,6 +1258,13 @@ struct GpuAsyncIterState {
     __device__ int   end()   { return 0; }
 };
 
+// ── Error subclasses ──────────────────────────────────────────────────────────
+struct TypeError      : Error { __device__ TypeError(const char* m = "type error") : Error(m) {} };
+struct RangeError     : Error { __device__ RangeError(const char* m = "range error") : Error(m) {} };
+struct SyntaxError    : Error { __device__ SyntaxError(const char* m = "syntax error") : Error(m) {} };
+struct ReferenceError : Error { __device__ ReferenceError(const char* m = "reference error") : Error(m) {} };
+struct URIError       : Error { __device__ URIError(const char* m = "URI error") : Error(m) {} };
+struct EvalError      : Error { __device__ EvalError(const char* m = "eval error") : Error(m) {} };
 // ── AggregateError (for Promise.any) ─────────────────────────────────────────
 struct AggregateError : Error {
     __device__ AggregateError(const char* m = "All promises rejected") : Error(m) {}
@@ -1863,12 +1943,31 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                     std::string buf = freshTemp();
                     _out += ind + "{ char " + buf + "[65536]; int " + buf + "_n = 0;\n";
                     _out += indent(depth+1) + buf + "[" + buf + "_n++] = '{';\n";
+                    bool firstProp = true;
                     for (int pi = 0; pi < (int)oe->props.size(); pi++) {
-                        if (pi) _out += indent(depth+1) + buf + "[" + buf + "_n++] = ',';\n";
-                        std::string kesc = oe->props[pi].first;
-                        _out += indent(depth+1) + buf + "_n += symm_write_str("
-                             + buf + " + " + buf + "_n, \"\\\"" + kesc + "\\\":\");\n";
+                        const std::string& key = oe->props[pi].first;
                         auto& val = oe->props[pi].second;
+
+                        // __spread__: {...obj} — emit "...obj" as a JSON merge comment
+                        // On GPU we can't dynamically enumerate object keys, so we use
+                        // symm_json_merge which copies the source JSON string into the buffer.
+                        if (key == "__spread__") {
+                            if (!firstProp)
+                                _out += indent(depth+1) + buf + "_n > 1 && " + buf + "[" + buf + "_n-1] != '{' ? " + buf + "[" + buf + "_n++] = ',' : (void)0;\n";
+                            _out += indent(depth+1) + "{ auto _sp = " + emitExpr(val) + "; "
+                                 + buf + "_n += symm_json_merge(" + buf + " + " + buf + "_n, 65536 - " + buf + "_n - 1, "
+                                 + "_sp); }\n";
+                            firstProp = false;
+                            continue;
+                        }
+                        // __computed__: skip
+                        if (key == "__computed__") continue;
+
+                        if (!firstProp) _out += indent(depth+1) + buf + "[" + buf + "_n++] = ',';\n";
+                        firstProp = false;
+
+                        _out += indent(depth+1) + buf + "_n += symm_write_str("
+                             + buf + " + " + buf + "_n, \"\\\"" + key + "\\\":\");\n";
                         if (val && val->kind == NodeKind::Literal) {
                             auto& lit = std::get<Literal>(val->data);
                             if (lit.kind == Literal::Str) {
@@ -2166,12 +2265,31 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
             }
             break;
         }
-        case NodeKind::BreakStmt:
-            _out += ind + "break;\n";
+        case NodeKind::BreakStmt: {
+            auto& bs = std::get<BreakStmt>(node->data);
+            if (!bs.label.empty())
+                _out += ind + "goto _lbl_" + bs.label + "_end;\n";
+            else
+                _out += ind + "break;\n";
             break;
-        case NodeKind::ContinueStmt:
-            _out += ind + "continue;\n";
+        }
+        case NodeKind::ContinueStmt: {
+            auto& cs = std::get<ContinueStmt>(node->data);
+            if (!cs.label.empty())
+                _out += ind + "goto _lbl_" + cs.label + "_cont;\n";
+            else
+                _out += ind + "continue;\n";
             break;
+        }
+        case NodeKind::LabeledStmt: {
+            auto& ls = std::get<LabeledStmt>(node->data);
+            // Emit inner statement (for/while/do) with surrounding goto labels
+            // The goto targets are: _lbl_<name>_cont for continue, _lbl_<name>_end for break
+            _out += ind + "/* label: " + ls.label + " */\n";
+            emitStmt(ls.body, depth);
+            _out += ind + "_lbl_" + ls.label + "_end: ;\n";
+            break;
+        }
         case NodeKind::FuncDecl: {
             auto& fn = std::get<FuncDecl>(node->data);
             if (fn.name.empty()) break;  // anonymous — emitted inline as lambda

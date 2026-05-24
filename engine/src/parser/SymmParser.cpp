@@ -443,18 +443,24 @@ NodePtr SymmParser::parseStmt() {
         return n;
     }
     if (tok.value == "break") {
-        consume(); match(";");
+        consume();
+        std::string lbl;
+        if (cur().kind == Token::Ident) lbl = consume().value;
+        match(";");
         auto n = std::make_shared<Node>();
         n->kind = NodeKind::BreakStmt;
-        n->data = BreakStmt{};
+        n->data = BreakStmt{lbl};
         n->line = tok.line;
         return n;
     }
     if (tok.value == "continue") {
-        consume(); match(";");
+        consume();
+        std::string lbl;
+        if (cur().kind == Token::Ident) lbl = consume().value;
+        match(";");
         auto n = std::make_shared<Node>();
         n->kind = NodeKind::ContinueStmt;
-        n->data = ContinueStmt{};
+        n->data = ContinueStmt{lbl};
         n->line = tok.line;
         return n;
     }
@@ -466,6 +472,18 @@ NodePtr SymmParser::parseStmt() {
     }
     if (tok.value == "{")        return parseBlock();
     if (tok.value == ";")        { consume(); return nullptr; }
+
+    // Labeled statement: ident: stmt  (e.g., outer: for (...))
+    if (tok.kind == Token::Ident && peek(1).value == ":") {
+        std::string label = consume().value;  // ident
+        consume();  // ':'
+        auto body = parseStmt();
+        auto ln = std::make_shared<Node>();
+        ln->kind = NodeKind::LabeledStmt;
+        ln->data = LabeledStmt{label, body};
+        ln->line = tok.line;
+        return ln;
+    }
 
     // Expression statement (may include assignment)
     auto expr = parseExpr();

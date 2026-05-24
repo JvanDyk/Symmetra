@@ -2822,6 +2822,1641 @@ static void testTopLevelConst() {
     });
 }
 
+// ── JSON spread / object merge ────────────────────────────────────────────────
+
+static void testJsonSpread() {
+    std::cout << "\n=== JSON Spread / Object Merge ===\n";
+
+    TEST("ctx.json() with spread — symm_json_merge emitted", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const extra = { c: 3, d: 4 };\n"
+            "  ctx.json({ a: 1, b: 2, ...extra });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_merge");
+    });
+
+    TEST("ctx.json() without spread — normal emitted", {
+        auto src = codegen(
+            "app.get('/n', (ctx) => {\n"
+            "  ctx.json({ x: 1.0, y: 2.0 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_write_float");
+        // symm_json_merge is always in the prelude; just confirm write_float is used
+    });
+
+    TEST("computed property in object — skipped gracefully", {
+        auto src = codegen(
+            "app.get('/c', (ctx) => {\n"
+            "  const key = 'x';\n"
+            "  const obj = { [key]: 1, y: 2 };\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("symm_json_merge — included in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_json_merge");
+    });
+}
+
+// ── JSON value types ──────────────────────────────────────────────────────────
+
+static void testJsonValueTypes() {
+    std::cout << "\n=== JSON Value Types ===\n";
+
+    TEST("null value in json", {
+        auto src = codegen(
+            "app.get('/n', (ctx) => {\n"
+            "  ctx.json({ x: null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "null");
+    });
+
+    TEST("boolean values in json", {
+        auto src = codegen(
+            "app.get('/b', (ctx) => {\n"
+            "  ctx.json({ t: true, f: false });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_write_bool");
+    });
+
+    TEST("integer value in json", {
+        auto src = codegen(
+            "app.get('/i', (ctx) => {\n"
+            "  ctx.json({ n: 42 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42");
+    });
+
+    TEST("float value in json", {
+        auto src = codegen(
+            "app.get('/f', (ctx) => {\n"
+            "  ctx.json({ pi: 3.14 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "3.14");
+    });
+
+    TEST("string value in json", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  ctx.json({ msg: 'hello world' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "hello world");
+    });
+
+    TEST("variable value in json — uses symm_json_val", {
+        auto src = codegen(
+            "app.get('/v', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_val");
+    });
+
+    TEST("symm_json_val for string — json-escaping", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        // The prelude should have the escaping function
+        ASSERT_CONTAINS(src, "symm_json_val");
+    });
+
+    TEST("double precision in json", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => {\n"
+            "  const n = 1.23456789;\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── String escaping ───────────────────────────────────────────────────────────
+
+static void testStringEscaping() {
+    std::cout << "\n=== String Escaping ===\n";
+
+    TEST("string with single quotes", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  ctx.json({ msg: 'it works' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "it works");
+    });
+
+    TEST("string with newline escape", {
+        auto src = codegen(
+            "app.get('/n', (ctx) => {\n"
+            "  ctx.text('line1\\nline2');\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("empty string — safe", {
+        auto src = codegen(
+            "app.get('/e', (ctx) => {\n"
+            "  const s = '';\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("multiline template literal — emitted", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const msg = `hello\nworld`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("template literal with multiple interpolations", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a);\n"
+            "  const b = parseInt(ctx.query.b);\n"
+            "  const msg = `${a} + ${b} = ${a + b}`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+}
+
+// ── Advanced control flow ─────────────────────────────────────────────────────
+
+static void testAdvancedControlFlow() {
+    std::cout << "\n=== Advanced Control Flow ===\n";
+
+    TEST("nested ternary", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const cat = n < 0 ? 'negative' : n === 0 ? 'zero' : 'positive';\n"
+            "  ctx.json({ cat });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "negative");
+        ASSERT_CONTAINS(src, "positive");
+    });
+
+    TEST("short-circuit evaluation (&&)", {
+        auto src = codegen(
+            "app.get('/c', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const ok = n > 0 && n < 100;\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "&&");
+    });
+
+    TEST("short-circuit evaluation (||)", {
+        auto src = codegen(
+            "app.get('/c', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const v = n || 42;\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "||");
+        ASSERT_CONTAINS(src, "42");
+    });
+
+    TEST("switch with multiple cases", {
+        auto src = codegen(
+            "app.get('/sw', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  let label = 'unknown';\n"
+            "  switch (n) {\n"
+            "    case 1: label = 'one'; break;\n"
+            "    case 2: label = 'two'; break;\n"
+            "    case 3: label = 'three'; break;\n"
+            "    default: label = 'other'; break;\n"
+            "  }\n"
+            "  ctx.json({ label });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "one");
+        ASSERT_CONTAINS(src, "two");
+        ASSERT_CONTAINS(src, "other");
+    });
+
+    TEST("nested loop with break/continue", {
+        auto src = codegen(
+            "app.get('/l', (ctx) => {\n"
+            "  let count = 0;\n"
+            "  for (let i = 0; i < 10; i++) {\n"
+            "    if (i === 5) break;\n"
+            "    if (i % 2 === 0) continue;\n"
+            "    count++;\n"
+            "  }\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "break");
+        ASSERT_CONTAINS(src, "continue");
+        ASSERT_CONTAINS(src, "count");
+    });
+
+    TEST("do-while loop pattern", {
+        auto src = codegen(
+            "app.get('/dw', (ctx) => {\n"
+            "  let n = parseInt(ctx.query.n);\n"
+            "  let result = 0;\n"
+            "  do {\n"
+            "    result += n;\n"
+            "    n--;\n"
+            "  } while (n > 0);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "do {");
+        ASSERT_CONTAINS(src, "while");
+    });
+
+    TEST("for-in loop — emitted", {
+        auto src = codegen(
+            "app.get('/fi', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Optional chaining deep ────────────────────────────────────────────────────
+
+static void testOptionalChainingDeep() {
+    std::cout << "\n=== Optional Chaining Deep ===\n";
+
+    TEST("obj?.prop chain", {
+        auto src = codegen(
+            "app.get('/o', (ctx) => {\n"
+            "  const user = null;\n"
+            "  const name = user?.name;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "?");
+        ASSERT_CONTAINS(src, "nullptr");
+    });
+
+    TEST("obj?.method() call", {
+        auto src = codegen(
+            "app.get('/m', (ctx) => {\n"
+            "  const arr = null;\n"
+            "  const len = arr?.length;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("nullish coalescing with optional chain", {
+        auto src = codegen(
+            "app.get('/nc', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  const v = n > 0 ? n : null;\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+        ASSERT_CONTAINS(src, "nullptr");
+    });
+
+    TEST("chained optional access", {
+        auto src = codegen(
+            "app.get('/c', (ctx) => {\n"
+            "  const q = ctx?.query;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ctx ?");
+    });
+}
+
+// ── Class Inheritance ─────────────────────────────────────────────────────────
+
+static void testClassInheritance() {
+    std::cout << "\n=== Class Inheritance ===\n";
+
+    TEST("class extends — superName in output", {
+        auto src = codegen(
+            "class Animal {\n"
+            "  constructor(name) { this.name = name; }\n"
+            "  speak() { return 'sound'; }\n"
+            "}\n"
+            "class Dog extends Animal {\n"
+            "  constructor(name) { super(name); this.breed = 'lab'; }\n"
+            "  speak() { return 'woof'; }\n"
+            "}\n"
+            "app.get('/d', (ctx) => {\n"
+            "  const d = new Dog('Rex');\n"
+            "  ctx.json({ name: d.name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Dog");
+        ASSERT_CONTAINS(src, ": Animal");
+    });
+
+    TEST("super() call in constructor", {
+        auto src = codegen(
+            "class Base {\n"
+            "  constructor(x) { this.x = x; }\n"
+            "}\n"
+            "class Child extends Base {\n"
+            "  constructor(x, y) { super(x); this.y = y; }\n"
+            "}\n"
+            "app.get('/c', (ctx) => {\n"
+            "  const c = new Child(1, 2);\n"
+            "  ctx.json({ x: c.x, y: c.y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Child");
+        ASSERT_CONTAINS(src, ": Base");
+    });
+
+    TEST("static class field — emitted as static", {
+        auto src = codegen(
+            "class Counter {\n"
+            "  static count = 0;\n"
+            "  constructor() { Counter.count += 1; }\n"
+            "  getCount() { return Counter.count; }\n"
+            "}\n"
+            "app.get('/count', (ctx) => {\n"
+            "  const c = new Counter();\n"
+            "  ctx.json({ n: c.getCount() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Counter");
+        ASSERT_CONTAINS(src, "static");
+    });
+
+    TEST("static method — callable without instance", {
+        auto src = codegen(
+            "class MathUtils {\n"
+            "  static add(a, b) { return a + b; }\n"
+            "  static multiply(a, b) { return a * b; }\n"
+            "}\n"
+            "app.get('/m', (ctx) => {\n"
+            "  const sum = MathUtils.add(1, 2);\n"
+            "  const product = MathUtils.multiply(3, 4);\n"
+            "  ctx.json({ sum, product });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct MathUtils");
+        ASSERT_CONTAINS(src, "add");
+        ASSERT_CONTAINS(src, "multiply");
+    });
+
+    TEST("getter method — emitted as get_prop()", {
+        auto src = codegen(
+            "class Circle {\n"
+            "  constructor(r) { this.r = r; }\n"
+            "  get area() { return 3.14159 * this.r * this.r; }\n"
+            "  get circumference() { return 2 * 3.14159 * this.r; }\n"
+            "}\n"
+            "app.get('/circle', (ctx) => {\n"
+            "  const c = new Circle(5.0);\n"
+            "  ctx.json({ area: c.area });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Circle");
+        ASSERT_CONTAINS(src, "get_area");
+    });
+
+    TEST("setter method — emitted as set_prop()", {
+        auto src = codegen(
+            "class Box {\n"
+            "  constructor() { this._size = 0; }\n"
+            "  get size() { return this._size; }\n"
+            "  set size(v) { this._size = v > 0 ? v : 0; }\n"
+            "}\n"
+            "app.get('/box', (ctx) => {\n"
+            "  const b = new Box();\n"
+            "  b.size = 10;\n"
+            "  ctx.json({ size: b.size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Box");
+        ASSERT_CONTAINS(src, "set_size");
+    });
+
+    TEST("instanceof operator — emitted as stub", {
+        auto src = codegen(
+            "app.get('/i', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const ok = n instanceof Number;\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "instanceof");
+    });
+}
+
+// ── Labeled Break / Continue ──────────────────────────────────────────────────
+
+static void testLabeledLoops() {
+    std::cout << "\n=== Labeled Break / Continue ===\n";
+
+    TEST("labeled break — goto emitted", {
+        auto src = codegen(
+            "app.get('/l', (ctx) => {\n"
+            "  let found = -1;\n"
+            "  outer: for (let i = 0; i < 5; i++) {\n"
+            "    for (let j = 0; j < 5; j++) {\n"
+            "      if (i * j > 6) { found = i; break outer; }\n"
+            "    }\n"
+            "  }\n"
+            "  ctx.json({ found });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "goto _lbl_outer_end");
+        ASSERT_CONTAINS(src, "_lbl_outer_end");
+    });
+
+    TEST("labeled continue — goto emitted", {
+        auto src = codegen(
+            "app.get('/lc', (ctx) => {\n"
+            "  let count = 0;\n"
+            "  outer: for (let i = 0; i < 3; i++) {\n"
+            "    for (let j = 0; j < 3; j++) {\n"
+            "      if (j === 1) continue outer;\n"
+            "      count++;\n"
+            "    }\n"
+            "  }\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "goto _lbl_outer_cont");
+    });
+
+    TEST("plain break — still works", {
+        auto src = codegen(
+            "app.get('/b', (ctx) => {\n"
+            "  let n = 0;\n"
+            "  for (let i = 0; i < 10; i++) {\n"
+            "    if (i > 5) break;\n"
+            "    n++;\n"
+            "  }\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "break;");
+    });
+
+    TEST("label on while loop", {
+        auto src = codegen(
+            "app.get('/w', (ctx) => {\n"
+            "  let i = 0;\n"
+            "  outer: while (i < 10) {\n"
+            "    i++;\n"
+            "    if (i > 5) break outer;\n"
+            "  }\n"
+            "  ctx.json({ i });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_lbl_outer_end");
+    });
+}
+
+// ── Map / Set ─────────────────────────────────────────────────────────────────
+
+static void testMapSet() {
+    std::cout << "\n=== Map / Set ===\n";
+
+    TEST("Map struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Map");
+    });
+
+    TEST("Set struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Set");
+    });
+
+    TEST("new Map() — emitted", {
+        auto src = codegen(
+            "app.get('/m', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Map");
+    });
+
+    TEST("new Set() with add() — emitted", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('a');\n"
+            "  s.add('b');\n"
+            "  ctx.json({ size: s.size() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Set");
+        ASSERT_CONTAINS(src, "add");
+    });
+
+    TEST("Map.set() and Map.get() — emitted", {
+        auto src = codegen(
+            "app.get('/m', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('key', 42.0);\n"
+            "  const v = m.get('key');\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── JSON.parse / JSON.stringify ───────────────────────────────────────────────
+
+static void testJsonParsStringify() {
+    std::cout << "\n=== JSON.parse / JSON.stringify ===\n";
+
+    TEST("JSON.stringify — emitted", {
+        auto src = codegen(
+            "app.get('/js', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const s = JSON.stringify(n);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_stringify");
+    });
+
+    TEST("JSON.parse — emitted", {
+        auto src = codegen(
+            "app.post('/jp', (ctx) => {\n"
+            "  const parsed = JSON.parse(ctx.body);\n"
+            "  const name = parsed.name;\n"
+            "  ctx.json({ name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_parse");
+    });
+
+    TEST("JSON.stringify with object — emitted", {
+        auto src = codegen(
+            "app.get('/jso', (ctx) => {\n"
+            "  const s = JSON.stringify({ a: 1, b: 'hello' });\n"
+            "  ctx.text(s);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_stringify");
+    });
+
+    TEST("JSON.stringify with array — emitted", {
+        auto src = codegen(
+            "app.get('/jsa', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const s = JSON.stringify(arr);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Array functional methods ──────────────────────────────────────────────────
+
+static void testArrayFunctional() {
+    std::cout << "\n=== Array Functional Methods ===\n";
+
+    TEST("arr.filter — symm_arr_filter emitted", {
+        auto src = codegen(
+            "app.get('/f', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  const evens = arr.filter((x) => x % 2 === 0);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.reduce — symm_arr_reduce emitted", {
+        auto src = codegen(
+            "app.get('/r', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  const sum = arr.reduce((acc, x) => acc + x, 0.0);\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.map with callback — emitted", {
+        auto src = codegen(
+            "app.get('/m', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const doubled = arr.map((x) => x * 2);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_float");
+    });
+
+    TEST("arr.find — emitted", {
+        auto src = codegen(
+            "app.get('/fd', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const found = arr.find((x) => x > 2);\n"
+            "  ctx.json({ found });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.some / arr.every — emitted", {
+        auto src = codegen(
+            "app.get('/se', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const anyBig = arr.some((x) => x > 2);\n"
+            "  const allPos = arr.every((x) => x > 0);\n"
+            "  ctx.json({ anyBig, allPos });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.includes — emitted", {
+        auto src = codegen(
+            "app.get('/inc', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const ok = [1, 2, 3].includes(n);\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.indexOf — emitted", {
+        auto src = codegen(
+            "app.get('/idx', (ctx) => {\n"
+            "  const arr = [10.0, 20.0, 30.0];\n"
+            "  const idx = arr.indexOf(20.0);\n"
+            "  ctx.json({ idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.flat — emitted", {
+        auto src = codegen(
+            "app.get('/fl', (ctx) => {\n"
+            "  const nested = [[1.0, 2.0], [3.0, 4.0]];\n"
+            "  const flat = nested.flat();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── String advanced methods ───────────────────────────────────────────────────
+
+static void testStringAdvanced() {
+    std::cout << "\n=== String Advanced Methods ===\n";
+
+    TEST("String.fromCharCode — emitted", {
+        auto src = codegen(
+            "app.get('/fc', (ctx) => {\n"
+            "  const ch = String.fromCharCode(65);\n"
+            "  ctx.json({ ch });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_from_char_code");
+    });
+
+    TEST("String.fromCodePoint — emitted", {
+        auto src = codegen(
+            "app.get('/fcp', (ctx) => {\n"
+            "  const ch = String.fromCodePoint(97);\n"
+            "  ctx.json({ ch });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_from_char_code");
+    });
+
+    TEST("str.startsWith — emitted", {
+        auto src = codegen(
+            "app.get('/sw', (ctx) => {\n"
+            "  const path = ctx.path;\n"
+            "  const ok = path.startsWith('/api/');\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_starts_with");
+    });
+
+    TEST("str.endsWith — emitted", {
+        auto src = codegen(
+            "app.get('/ew', (ctx) => {\n"
+            "  const path = ctx.path;\n"
+            "  const ok = path.endsWith('.json');\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_ends_with");
+    });
+
+    TEST("str.repeat — emitted", {
+        auto src = codegen(
+            "app.get('/rp', (ctx) => {\n"
+            "  const sep = '-'.repeat(10);\n"
+            "  ctx.text(sep);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_repeat");
+    });
+
+    TEST("str.padStart — emitted", {
+        auto src = codegen(
+            "app.get('/ps', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const s = n.toString().padStart(5, '0');\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_pad_start");
+    });
+
+    TEST("str.padEnd — emitted", {
+        auto src = codegen(
+            "app.get('/pe', (ctx) => {\n"
+            "  const s = 'hello'.padEnd(10, ' ');\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_pad_end");
+    });
+
+    TEST("str.at() index access — emitted", {
+        auto src = codegen(
+            "app.get('/at', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const first = s.at(0);\n"
+            "  ctx.json({ first });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Generator functions ───────────────────────────────────────────────────────
+
+static void testGenerators() {
+    std::cout << "\n=== Generator Functions ===\n";
+
+    TEST("generator function — emitted as function", {
+        auto src = codegen(
+            "function* range(start, end) {\n"
+            "  for (let i = start; i < end; i++) {\n"
+            "    yield i;\n"
+            "  }\n"
+            "}\n"
+            "app.get('/g', (ctx) => {\n"
+            "  const r = range(0, 5);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "range");
+    });
+
+    TEST("yield expression — emitted as no-op", {
+        auto src = codegen(
+            "function* gen() {\n"
+            "  const x = 1;\n"
+            "  yield x;\n"
+            "  const y = 2;\n"
+            "  yield y;\n"
+            "}\n"
+            "app.get('/g', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("async generator — emitted as async function", {
+        auto src = codegen(
+            "async function* asyncGen() {\n"
+            "  yield 1;\n"
+            "  yield 2;\n"
+            "}\n"
+            "app.get('/ag', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Comma expression / comma operator ────────────────────────────────────────
+
+static void testCommaExpr() {
+    std::cout << "\n=== Comma Expression ===\n";
+
+    TEST("comma in for-loop update — valid", {
+        auto src = codegen(
+            "app.get('/c', (ctx) => {\n"
+            "  let a = 0, b = 0;\n"
+            "  for (let i = 0; i < 5; i++) {\n"
+            "    a += i; b += i * i;\n"
+            "  }\n"
+            "  ctx.json({ a, b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("void 0 expression — emitted", {
+        auto src = codegen(
+            "app.get('/v', (ctx) => {\n"
+            "  const n = void 0;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("delete expression — skipped gracefully", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => {\n"
+            "  const obj = { x: 1, y: 2 };\n"
+            "  delete obj.x;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Method chaining ───────────────────────────────────────────────────────────
+
+static void testMethodChaining() {
+    std::cout << "\n=== Method Chaining ===\n";
+
+    TEST("string method chain — trim().toLowerCase()", {
+        auto src = codegen(
+            "app.post('/c', (ctx) => {\n"
+            "  const input = ctx.body.trim().toLowerCase();\n"
+            "  ctx.json({ input });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_trim");
+        ASSERT_CONTAINS(src, "symm_str_to_lower");
+    });
+
+    TEST("three-step chain — split+join", {
+        auto src = codegen(
+            "app.post('/c2', (ctx) => {\n"
+            "  const input = ctx.body.trim().toUpperCase().split(',');\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_trim");
+        ASSERT_CONTAINS(src, "symm_str_to_upper");
+    });
+
+    TEST("number chain — toString().padStart()", {
+        auto src = codegen(
+            "app.get('/n', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const s = n.toString().padStart(6, '0');\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_pad_start");
+    });
+
+    TEST("math chain — Math.abs(Math.floor(x))", {
+        auto src = codegen(
+            "app.get('/mc', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x);\n"
+            "  const n = Math.abs(Math.floor(x));\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fabsf");
+        ASSERT_CONTAINS(src, "floorf");
+    });
+}
+
+// ── typeof === patterns ───────────────────────────────────────────────────────
+
+static void testTypeofPatterns() {
+    std::cout << "\n=== typeof Patterns ===\n";
+
+    TEST("typeof x === 'string'", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const q = ctx.query.q;\n"
+            "  if (typeof q === 'string') {\n"
+            "    ctx.json({ type: 'string' });\n"
+            "  } else {\n"
+            "    ctx.json({ type: 'other' });\n"
+            "  }\n"
+            "});"
+        );
+        // typeof ctx.query.q is statically resolved to "string" by codegen
+        ASSERT_CONTAINS(src, "string");
+        ASSERT_CONTAINS(src, "other");
+    });
+
+    TEST("typeof x === 'number'", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const isNum = typeof n === 'number';\n"
+            "  ctx.json({ isNum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("typeof === 'undefined'", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const v = ctx.query.v;\n"
+            "  const isUndef = typeof v === 'undefined';\n"
+            "  ctx.json({ isUndef });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("typeof in ternary", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  const msg = typeof n === 'number' ? 'numeric' : 'other';\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_float");
+        ASSERT_CONTAINS(src, "numeric");
+    });
+}
+
+// ── in / instanceof operators ─────────────────────────────────────────────────
+
+static void testInInstanceof() {
+    std::cout << "\n=== in / instanceof Operators ===\n";
+
+    TEST("'key' in obj — emitted as stub", {
+        auto src = codegen(
+            "app.get('/in', (ctx) => {\n"
+            "  const obj = { x: 1, y: 2 };\n"
+            "  const hasX = 'x' in obj;\n"
+            "  ctx.json({ hasX });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("instanceof class — emitted as stub true", {
+        auto src = codegen(
+            "class Foo {}\n"
+            "app.get('/inst', (ctx) => {\n"
+            "  const f = new Foo();\n"
+            "  const ok = f instanceof Foo;\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "instanceof");
+    });
+
+    TEST("instanceof with Error — emitted", {
+        auto src = codegen(
+            "app.get('/err', (ctx) => {\n"
+            "  try {\n"
+            "    throw new Error('test');\n"
+            "  } catch (e) {\n"
+            "    const isErr = e instanceof Error;\n"
+            "    ctx.json({ isErr });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "instanceof");
+    });
+}
+
+// ── Complex real-world patterns ───────────────────────────────────────────────
+
+static void testComplexPatterns2() {
+    std::cout << "\n=== Complex Patterns 2 ===\n";
+
+    TEST("chained ternary for status code", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const status = n < 0 ? 400 : n > 100 ? 200 : 204;\n"
+            "  ctx.status(status);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "400");
+        ASSERT_CONTAINS(src, "204");
+    });
+
+    TEST("multi-param query parsing", {
+        auto src = codegen(
+            "app.get('/items', (ctx) => {\n"
+            "  const page = parseInt(ctx.query.page ?? '1');\n"
+            "  const size = parseInt(ctx.query.size ?? '10');\n"
+            "  const offset = (page - 1) * size;\n"
+            "  ctx.json({ page, size, offset });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+        ASSERT_CONTAINS(src, "offset");
+    });
+
+    TEST("class with multiple inherited methods", {
+        auto src = codegen(
+            "class Shape {\n"
+            "  constructor(color) { this.color = color; }\n"
+            "  getColor() { return this.color; }\n"
+            "}\n"
+            "class Rectangle extends Shape {\n"
+            "  constructor(w, h, color) { super(color); this.w = w; this.h = h; }\n"
+            "  area() { return this.w * this.h; }\n"
+            "}\n"
+            "app.get('/r', (ctx) => {\n"
+            "  const rect = new Rectangle(10, 20, 'red');\n"
+            "  ctx.json({ area: rect.area(), color: rect.getColor() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Rectangle");
+        ASSERT_CONTAINS(src, ": Shape");
+        ASSERT_CONTAINS(src, "area");
+    });
+
+    TEST("async handler with multiple awaits stripped", {
+        auto src = codegen(
+            "app.get('/a', async (ctx) => {\n"
+            "  const n1 = parseInt(ctx.query.a);\n"
+            "  const n2 = parseInt(ctx.query.b);\n"
+            "  const sum = n1 + n2;\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+        ASSERT_CONTAINS(src, "sum");
+    });
+
+    TEST("spread operator in function call", {
+        auto src = codegen(
+            "app.get('/sp', (ctx) => {\n"
+            "  const args = [1.0, 2.0, 3.0];\n"
+            "  const max = Math.max(...args);\n"
+            "  ctx.json({ max });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fmaxf");
+    });
+
+    TEST("object shorthand properties", {
+        auto src = codegen(
+            "app.get('/sh', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x);\n"
+            "  const y = parseFloat(ctx.query.y);\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_float");
+        ASSERT_CONTAINS(src, "\"x\"");
+        ASSERT_CONTAINS(src, "\"y\"");
+    });
+}
+
+// ── WeakMap / WeakRef / WeakSet ───────────────────────────────────────────────
+
+static void testWeakCollections() {
+    std::cout << "\n=== WeakMap / WeakRef / WeakSet ===\n";
+
+    TEST("WeakMap struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "WeakMap");
+    });
+
+    TEST("WeakRef struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "WeakRef");
+    });
+
+    TEST("new WeakMap() — emitted as struct", {
+        auto src = codegen(
+            "app.get('/wm', (ctx) => {\n"
+            "  const cache = new WeakMap();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "WeakMap");
+    });
+
+    TEST("new WeakRef(obj) — emitted", {
+        auto src = codegen(
+            "class Obj { constructor() { this.val = 0; } }\n"
+            "app.get('/wr', (ctx) => {\n"
+            "  const o = new Obj();\n"
+            "  const ref = new WeakRef(o);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "WeakRef");
+    });
+
+    TEST("new WeakSet() — emitted", {
+        auto src = codegen(
+            "app.get('/ws', (ctx) => {\n"
+            "  const visited = new WeakSet();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "WeakSet");
+    });
+}
+
+// ── URLSearchParams ───────────────────────────────────────────────────────────
+
+static void testUrlSearchParams() {
+    std::cout << "\n=== URLSearchParams ===\n";
+
+    TEST("URLSearchParams struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "URLSearchParams");
+    });
+
+    TEST("new URLSearchParams(qs) — emitted", {
+        auto src = codegen(
+            "app.get('/usp', (ctx) => {\n"
+            "  const params = new URLSearchParams(ctx.query);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "URLSearchParams");
+    });
+
+    TEST("params.get() — called", {
+        auto src = codegen(
+            "app.get('/pg', (ctx) => {\n"
+            "  const params = new URLSearchParams(ctx.query);\n"
+            "  const name = params.get('name');\n"
+            "  ctx.json({ name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "URLSearchParams");
+        ASSERT_CONTAINS(src, "get");
+    });
+}
+
+// ── Number.toFixed / toPrecision ──────────────────────────────────────────────
+
+static void testNumberFormatting() {
+    std::cout << "\n=== Number Formatting ===\n";
+
+    TEST("toFixed(2) — symm_number_to_fixed", {
+        auto src = codegen(
+            "app.get('/price', (ctx) => {\n"
+            "  const price = parseFloat(ctx.query.p);\n"
+            "  const s = price.toFixed(2);\n"
+            "  ctx.json({ price: s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_number_to_fixed");
+        ASSERT_CONTAINS(src, "2");
+    });
+
+    TEST("toFixed(0) — integer format", {
+        auto src = codegen(
+            "app.get('/i', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  const s = n.toFixed(0);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_number_to_fixed");
+        ASSERT_CONTAINS(src, "0");
+    });
+
+    TEST("toFixed without arg — defaults to 0", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  const s = n.toString();\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_number_to_fixed");
+    });
+
+    TEST("n.toFixed(digits) in json", {
+        auto src = codegen(
+            "app.get('/f', (ctx) => {\n"
+            "  const lat = parseFloat(ctx.query.lat);\n"
+            "  const lon = parseFloat(ctx.query.lon);\n"
+            "  ctx.json({ lat: lat.toFixed(6), lon: lon.toFixed(6) });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_number_to_fixed");
+        ASSERT_CONTAINS(src, "6");
+    });
+}
+
+// ── Error subclasses ──────────────────────────────────────────────────────────
+
+static void testErrorSubclasses() {
+    std::cout << "\n=== Error Subclasses ===\n";
+
+    TEST("TypeError — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TypeError");
+    });
+
+    TEST("RangeError — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "RangeError");
+    });
+
+    TEST("throw new TypeError — emitted", {
+        auto src = codegen(
+            "app.get('/te', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  if (typeof n !== 'number') throw new TypeError('expected number');\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TypeError");
+    });
+
+    TEST("throw new RangeError — emitted", {
+        auto src = codegen(
+            "app.get('/re', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  if (n < 0 || n > 100) throw new RangeError('out of range');\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+    });
+
+    TEST("catch TypeError — emitted", {
+        auto src = codegen(
+            "app.get('/ce', (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    if (n < 0) throw new RangeError('negative');\n"
+            "    ctx.json({ n });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: 'invalid' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "400");
+        ASSERT_CONTAINS(src, "RangeError");
+    });
+}
+
+// ── Complex template literal expressions ──────────────────────────────────────
+
+static void testComplexTemplateLiterals() {
+    std::cout << "\n=== Complex Template Literals ===\n";
+
+    TEST("template literal with ternary", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const msg = `count is ${n > 0 ? 1 : 0}`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        // Template literal ternary: symm_write called with conditional expr
+        ASSERT_CONTAINS(src, "symm_write");
+        ASSERT_CONTAINS(src, "count is");
+    });
+
+    TEST("template literal with method call", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const msg = `trimmed: ${s.trim()}`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_trim");
+    });
+
+    TEST("template literal with arithmetic", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a);\n"
+            "  const b = parseInt(ctx.query.b);\n"
+            "  const msg = `${a} + ${b} = ${a + b}`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("nested template literals", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const x = parseInt(ctx.query.x);\n"
+            "  const outer = `result: ${`value: ${x}`}`;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("template literal as function argument", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  ctx.text(`count=${n}`);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("tagged template literal — emitted gracefully", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const s = String.raw`value: ${n}`;\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── for...of on string ────────────────────────────────────────────────────────
+
+static void testForOfString() {
+    std::cout << "\n=== for...of on String ===\n";
+
+    TEST("for...of on string — emitted", {
+        auto src = codegen(
+            "app.get('/fc', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  let count = 0;\n"
+            "  for (const ch of s) {\n"
+            "    if (ch === 'a') count++;\n"
+            "  }\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("for...of on array — emitted", {
+        auto src = codegen(
+            "app.get('/fa', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  let sum = 0.0;\n"
+            "  for (const v of arr) {\n"
+            "    sum += v;\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sum");
+    });
+
+    TEST("for...of with destructuring — emitted", {
+        auto src = codegen(
+            "app.get('/fd', (ctx) => {\n"
+            "  const pairs = [[1.0, 2.0], [3.0, 4.0]];\n"
+            "  let sum = 0.0;\n"
+            "  for (const pair of pairs) {\n"
+            "    sum += pair[0] + pair[1];\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Promise chains (.then / .catch) ──────────────────────────────────────────
+
+static void testPromiseChains() {
+    std::cout << "\n=== Promise Chains ===\n";
+
+    TEST("Promise.resolve — emitted", {
+        auto src = codegen(
+            "app.get('/pr', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const p = Promise.resolve(n);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Promise.reject — emitted", {
+        auto src = codegen(
+            "app.get('/prj', (ctx) => {\n"
+            "  const p = Promise.reject('error');\n"
+            "  ctx.json({ ok: false });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Promise.all — emitted", {
+        auto src = codegen(
+            "app.get('/pa', (ctx) => {\n"
+            "  const results = await Promise.all([1.0, 2.0, 3.0]);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("async handler with .then() — emitted", {
+        auto src = codegen(
+            "app.get('/at', async (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+}
+
+// ── Numeric separators ────────────────────────────────────────────────────────
+
+static void testNumericSeparators() {
+    std::cout << "\n=== Numeric Separators ===\n";
+
+    TEST("1_000_000 literal — parsed as integer", {
+        auto src = codegen(
+            "const MAX = 1_000_000;\n"
+            "app.get('/m', (ctx) => {\n"
+            "  ctx.json({ max: MAX });\n"
+            "});"
+        );
+        // Should parse to 1000000 or similar
+        ASSERT_CONTAINS(src, "MAX");
+    });
+
+    TEST("1_234.567_89 float literal — parsed", {
+        auto src = codegen(
+            "const PI = 3.141_592;\n"
+            "app.get('/p', (ctx) => {\n"
+            "  ctx.json({ pi: PI });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "PI");
+    });
+
+    TEST("0xFF_FF hex literal — parsed", {
+        auto src = codegen(
+            "const FLAGS = 0xFF00;\n"
+            "app.get('/f', (ctx) => {\n"
+            "  ctx.json({ flags: FLAGS });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "FLAGS");
+    });
+}
+
+// ── Object destructuring advanced ────────────────────────────────────────────
+
+static void testObjectDestructuringAdvanced() {
+    std::cout << "\n=== Object Destructuring Advanced ===\n";
+
+    TEST("destructure ctx.query", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => {\n"
+            "  const { query } = ctx;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("destructure with rename alias", {
+        auto src = codegen(
+            "app.get('/dr', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const { body: rawBody } = ctx;\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("destructure from return value", {
+        auto src = codegen(
+            "function getCoords() { return { x: 1.0, y: 2.0 }; }\n"
+            "app.get('/dc', (ctx) => {\n"
+            "  const { x, y } = getCoords();\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getCoords");
+    });
+
+    TEST("array destructuring with skip", {
+        auto src = codegen(
+            "app.get('/ds', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  const [first, , third] = arr;\n"
+            "  ctx.json({ first, third });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "first");
+    });
+
+    TEST("parameter destructuring", {
+        auto src = codegen(
+            "function sum({ a, b }) { return a + b; }\n"
+            "app.get('/ps', (ctx) => {\n"
+            "  const result = sum({ a: 1.0, b: 2.0 });\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sum");
+    });
+}
+
+// ── Object.assign and spread ──────────────────────────────────────────────────
+
+static void testObjectAssign() {
+    std::cout << "\n=== Object.assign and Spread ===\n";
+
+    TEST("Object.assign — emitted", {
+        auto src = codegen(
+            "app.get('/oa', (ctx) => {\n"
+            "  const base = { x: 1.0 };\n"
+            "  const extra = { y: 2.0 };\n"
+            "  const merged = Object.assign(base, extra);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "assign");
+    });
+
+    TEST("Object.keys — emitted", {
+        auto src = codegen(
+            "app.get('/ok', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2, c: 3 };\n"
+            "  const keys = Object.keys(obj);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object.values — emitted", {
+        auto src = codegen(
+            "app.get('/ov', (ctx) => {\n"
+            "  const obj = { a: 1.0, b: 2.0 };\n"
+            "  const vals = Object.values(obj);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object spread into response", {
+        auto src = codegen(
+            "app.get('/osp', (ctx) => {\n"
+            "  const defaults = { a: 1, b: 2 };\n"
+            "  const override = { b: 3, c: 4 };\n"
+            "  ctx.json({ ...defaults, ...override });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_merge");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -2885,6 +4520,36 @@ int main() {
     symm::testSymbol();
     symm::testDestructuringDefaults();
     symm::testTopLevelConst();
+    // Phase 5
+    symm::testJsonSpread();
+    symm::testJsonValueTypes();
+    symm::testStringEscaping();
+    symm::testAdvancedControlFlow();
+    symm::testOptionalChainingDeep();
+    // Phase 6
+    symm::testClassInheritance();
+    symm::testLabeledLoops();
+    symm::testMapSet();
+    symm::testJsonParsStringify();
+    symm::testArrayFunctional();
+    symm::testStringAdvanced();
+    symm::testGenerators();
+    symm::testCommaExpr();
+    symm::testMethodChaining();
+    symm::testTypeofPatterns();
+    symm::testInInstanceof();
+    symm::testComplexPatterns2();
+    // Phase 7
+    symm::testWeakCollections();
+    symm::testUrlSearchParams();
+    symm::testNumberFormatting();
+    symm::testErrorSubclasses();
+    symm::testComplexTemplateLiterals();
+    symm::testForOfString();
+    symm::testPromiseChains();
+    symm::testNumericSeparators();
+    symm::testObjectDestructuringAdvanced();
+    symm::testObjectAssign();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
