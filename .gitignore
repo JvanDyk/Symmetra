@@ -1,0 +1,51 @@
+# Build artifacts
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.o
+*.obj
+*.deb
+*.rpm
+*.snap
+*.msi
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+*.tmp
+
+# Binaries (source code only in this repo)
+sym
+sym.exe
+symmetra
+
+# Test artifacts
+test_output/
+coverage/
+*.lcov
+
+# Dependencies (not in public repo)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Temporary files
+*.log
+*.pid
+*.seed
+.env
+.env.local
