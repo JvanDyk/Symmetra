@@ -111,7 +111,7 @@ struct TypeofExpr  { NodePtr expr; };
 struct VoidExpr    { NodePtr expr; };
 
 struct Literal {
-    enum Kind { Int, Float, Str, Bool, Null } kind;
+    enum Kind { Int, Float, Str, Bool, Null, BigInt } kind;
     std::string raw;
 };
 

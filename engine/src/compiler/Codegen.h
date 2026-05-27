@@ -63,7 +63,9 @@ private:
     std::string mathRemap(const std::string& name);
 
     int _tmpIdx = 0;
-    std::set<std::string> _ctxBodyVars;  // _doN vars that came from ctx.json() body reads
+    std::set<std::string> _ctxBodyVars;     // vars that came from ctx.json() body reads
+    std::set<std::string> _jsonParseVars;   // vars that hold JSON.parse() results
+    std::set<std::string> _flatPrefixes;    // enum/namespace names whose members are Prefix_Member
 
     // Route context — set before emitting each handler; used for param extraction.
     std::string _currentRoutePath;

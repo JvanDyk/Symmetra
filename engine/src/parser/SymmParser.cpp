@@ -76,14 +76,18 @@ void SymmParser::tokenize() {
             continue;
         }
 
-        // Number
+        // Number (supports 0x hex, 0b binary, 0o octal, 1_000_000 separators)
         if (std::isdigit(c) || (c == '.' && std::isdigit(peek()))) {
             std::string n;
             while (i < src.size() && (std::isdigit(src[i]) || src[i] == '.' || src[i] == 'e' ||
                                       src[i] == 'E' || src[i] == '-' || src[i] == '+' ||
                                       src[i] == 'x' || src[i] == 'b' || src[i] == 'o' ||
+                                      src[i] == 'n' ||  // BigInt suffix: 42n
+                                      src[i] == '_' ||  // Numeric separator: 1_000_000
                                       std::isxdigit(src[i]))) {
-                n += src[i++];
+                if (src[i] != '_')  // Strip underscores — they are visual separators only
+                    n += src[i];
+                ++i;
             }
             _tokens.push_back({Token::Number, n, line});
             continue;
@@ -146,7 +150,11 @@ void SymmParser::tokenize() {
             }
         }
 
-        // Multi-char punctuation — 3-char first, then 2-char, then 1-char
+        // Multi-char punctuation — 4-char first, then 3-char, then 2-char, then 1-char
+        if (i + 3 < src.size()) {
+            char c1 = src[i+1], c2 = src[i+2], c3 = src[i+3];
+            if (c == '>' && c1 == '>' && c2 == '>' && c3 == '=') { _tokens.push_back({Token::Punct, ">>>=", line}); i += 4; continue; }
+        }
         if (i + 2 < src.size()) {
             char c1 = src[i+1], c2 = src[i+2];
             if (c == '.' && c1 == '.' && c2 == '.') { _tokens.push_back({Token::Punct, "...", line}); i += 3; continue; }
@@ -154,6 +162,12 @@ void SymmParser::tokenize() {
             if (c == '!' && c1 == '=' && c2 == '=') { _tokens.push_back({Token::Punct, "!==", line}); i += 3; continue; }
             if (c == '>' && c1 == '>' && c2 == '>') { _tokens.push_back({Token::Punct, ">>>", line}); i += 3; continue; }
             if (c == '*' && c1 == '*' && c2 == '=') { _tokens.push_back({Token::Punct, "**=", line}); i += 3; continue; }
+            if (c == '<' && c1 == '<' && c2 == '=') { _tokens.push_back({Token::Punct, "<<=", line}); i += 3; continue; }
+            if (c == '>' && c1 == '>' && c2 == '=') { _tokens.push_back({Token::Punct, ">>=", line}); i += 3; continue; }
+            // Logical assignment operators (must be before 2-char && || ?? tokenization)
+            if (c == '&' && c1 == '&' && c2 == '=') { _tokens.push_back({Token::Punct, "&&=", line}); i += 3; continue; }
+            if (c == '|' && c1 == '|' && c2 == '=') { _tokens.push_back({Token::Punct, "||=", line}); i += 3; continue; }
+            if (c == '?' && c1 == '?' && c2 == '=') { _tokens.push_back({Token::Punct, "??=", line}); i += 3; continue; }
         }
         if (i + 1 < src.size()) {
             std::string two = std::string(1, c) + src[i+1];
@@ -161,7 +175,8 @@ void SymmParser::tokenize() {
                 two == ">=" || two == "&&" || two == "||" || two == "++" ||
                 two == "--" || two == "**" || two == "??" || two == "::" ||
                 two == "+=" || two == "-=" || two == "*=" || two == "/=" ||
-                two == "%=" || two == "<<" || two == ">>") {
+                two == "%=" || two == "<<" || two == ">>" || two == "&=" ||
+                two == "|=" || two == "^=") {
                 _tokens.push_back({Token::Punct, two, line});
                 i += 2; continue;
             }
@@ -316,6 +331,15 @@ NodePtr SymmParser::parseStmt() {
         }
     }
 
+    // using name = expr — TypeScript 5 explicit resource management: treat as const.
+    // GPU has no destructors/RAII, so Symbol.dispose is not called. Emit as const binding.
+    if (tok.kind == Token::Ident && tok.value == "using") {
+        consume(); // 'using'
+        // Optional 'await' keyword for 'await using'
+        if (cur().kind == Token::Ident && cur().value == "await") consume();
+        return parseConst(false); // parse like const (isMut=false)
+    }
+
     // enum Name { A = val, B, C } — TypeScript/JS enum: emit as __device__ constexpr ints.
     // We convert to a Block of ConstDecl nodes so existing codegen handles them.
     if (tok.kind == Token::Ident && tok.value == "enum") {
@@ -359,6 +383,56 @@ NodePtr SymmParser::parseStmt() {
             cd->data = ConstDecl{enumName + "_" + memberName, initExpr, false};
             blk.stmts.push_back(cd);
             match(",");
+        }
+        expect("}");
+        match(";");
+        auto n = std::make_shared<Node>(); n->kind = NodeKind::Block;
+        n->data = blk; n->line = tok.line;
+        return n;
+    }
+
+    // namespace Name { export const X = v; export function f() {...} }
+    // Flatten to: const Name_X = v;  function Name_f() {...}
+    // Enables TypeScript-style namespaces on GPU.
+    if (tok.kind == Token::Ident && (tok.value == "namespace" || tok.value == "module")) {
+        consume(); // 'namespace'
+        std::string nsName;
+        if (cur().kind == Token::Ident || cur().kind == Token::Keyword || cur().kind == Token::String)
+            nsName = consume().value;
+        if (cur().value != "{") { match(";"); return nullptr; } // ambient module decl
+        expect("{");
+        Block blk; blk.flat = true;
+        while (cur().value != "}" && cur().kind != Token::Eof) {
+            // Strip 'export' keyword
+            if (cur().value == "export") consume();
+            auto inner = parseStmt();
+            if (!inner) continue;
+            // Prefix declaration name with nsName_
+            if (inner->kind == NodeKind::ConstDecl) {
+                auto& d = std::get<ConstDecl>(inner->data);
+                d.name = nsName + "_" + d.name;
+                blk.stmts.push_back(inner);
+            } else if (inner->kind == NodeKind::FuncDecl) {
+                auto& f = std::get<FuncDecl>(inner->data);
+                if (!f.name.empty()) f.name = nsName + "_" + f.name;
+                blk.stmts.push_back(inner);
+            } else if (inner->kind == NodeKind::ClassDecl) {
+                auto& c = std::get<ClassDecl>(inner->data);
+                if (!c.name.empty()) c.name = nsName + "_" + c.name;
+                blk.stmts.push_back(inner);
+            } else if (inner->kind == NodeKind::Block) {
+                // Nested enum inside namespace — re-prefix
+                auto& nb = std::get<Block>(inner->data);
+                for (auto& s : nb.stmts) {
+                    if (s && s->kind == NodeKind::ConstDecl) {
+                        auto& d = std::get<ConstDecl>(s->data);
+                        d.name = nsName + "_" + d.name;
+                    }
+                    blk.stmts.push_back(s);
+                }
+            } else {
+                blk.stmts.push_back(inner);
+            }
         }
         expect("}");
         match(";");
@@ -678,7 +752,8 @@ NodePtr SymmParser::parseConst(bool isMut) {
 bool SymmParser::isAssignOp(const std::string& op) {
     return op == "=" || op == "+=" || op == "-=" || op == "*=" ||
            op == "/=" || op == "%=" || op == "**=" || op == "&&=" ||
-           op == "||=" || op == "??=";
+           op == "||=" || op == "??=" || op == "&=" || op == "|=" ||
+           op == "^=" || op == "<<=" || op == ">>=" || op == ">>>=";
 }
 
 int SymmParser::precedence(const std::string& op) {
@@ -827,10 +902,14 @@ NodePtr SymmParser::parseUnary() {
     }
     if (tok.value == "yield") {
         consume();
+        // yield* — delegation: yield all values from inner generator
+        bool isDelegation = (cur().value == "*");
+        if (isDelegation) consume(); // skip '*'
         NodePtr expr;
         if (cur().value != ";" && cur().value != "}" && cur().kind != Token::Eof)
             expr = parseExpr();
-        // Emit as a call-like node (generators desugar to state machines later)
+        // For yield* delegation: wrap in a special marker (for now, same as yield)
+        // Codegen treats yield/yield* the same in simplified state machine
         auto n = std::make_shared<Node>();
         n->kind = NodeKind::AwaitExpr;  // treat yield same as await for now
         n->data = AwaitExpr{expr};
@@ -894,6 +973,35 @@ NodePtr SymmParser::parsePostfix(NodePtr left) {
             if (cur().value == "(") left = parseCall(left);
         } else if (cur().value == "(") {
             left = parseCall(left);
+        } else if (cur().kind == Token::Template) {
+            // Tagged template literal: tag`str ${expr} str`
+            // Emit as: tag([strings...], ...exprs)
+            auto tmplNode = parseTemplate();
+            CallExpr ce;
+            ce.callee = left;
+            if (tmplNode && tmplNode->kind == NodeKind::TemplateLit) {
+                auto& tl = std::get<TemplateLit>(tmplNode->data);
+                // First argument: array of string parts (raw strings without interpolation)
+                ArrayExpr strArr;
+                for (auto& part : tl.parts) {
+                    auto lit = std::make_shared<Node>(); lit->kind = NodeKind::Literal;
+                    lit->data = Literal{Literal::Str, part};
+                    strArr.elements.push_back(lit);
+                }
+                auto sa = std::make_shared<Node>(); sa->kind = NodeKind::ArrayExpr;
+                sa->data = strArr;
+                ce.args.push_back(sa);
+                // Remaining arguments: the interpolated expressions
+                for (auto& expr : tl.exprs) {
+                    if (expr) ce.args.push_back(expr);
+                }
+            } else if (tmplNode) {
+                // Plain template (no interpolation) — pass as a single string arg
+                ce.args.push_back(tmplNode);
+            }
+            auto n = std::make_shared<Node>(); n->kind = NodeKind::CallExpr;
+            n->data = ce;
+            left = n;
         } else if (cur().value == "++" || cur().value == "--") {
             // Postfix increment/decrement
             auto op = consume().value;
@@ -1011,11 +1119,16 @@ NodePtr SymmParser::parsePrimary() {
 
     if (tok.kind == Token::Number) {
         consume();
-        bool isFloat = tok.value.find('.') != std::string::npos
-                    || tok.value.find('e') != std::string::npos;
+        bool isBigInt = !tok.value.empty() && tok.value.back() == 'n';
+        bool isFloat = !isBigInt && (tok.value.find('.') != std::string::npos
+                                   || tok.value.find('e') != std::string::npos);
         auto n = std::make_shared<Node>();
         n->kind = NodeKind::Literal;
-        n->data = Literal{isFloat ? Literal::Float : Literal::Int, tok.value};
+        if (isBigInt) {
+            n->data = Literal{Literal::BigInt, tok.value};
+        } else {
+            n->data = Literal{isFloat ? Literal::Float : Literal::Int, tok.value};
+        }
         n->line = tok.line;
         return n;
     }
@@ -1171,12 +1284,22 @@ NodePtr SymmParser::parseObject() {
             match(","); continue;
         }
         // Computed key: { [expr]: val }
+        // For string/ident literal keys (most common case), extract the key name.
         if (cur().value == "[") {
-            consume();
-            while (cur().value != "]" && cur().kind != Token::Eof) consume();
+            consume(); // '['
+            std::string computedKey = "__computed__";
+            // Try to extract a known string/ident key (most common: { ["propName"]: val })
+            if (cur().kind == Token::String || cur().kind == Token::Ident) {
+                computedKey = cur().value;
+                consume();
+            } else {
+                // Complex expression: consume tokens until ']'
+                while (cur().value != "]" && cur().kind != Token::Eof) consume();
+            }
             expect("]");
-            if (cur().value == ":") { consume(); parseExpr(); }
-            obj.props.push_back({"__computed__", nullptr});
+            NodePtr val;
+            if (cur().value == ":") { consume(); val = parseExpr(); }
+            obj.props.push_back({computedKey, val});
             match(","); continue;
         }
         // Key
@@ -1577,6 +1700,32 @@ NodePtr SymmParser::parseClass() {
             while (cur().value != "\n" && cur().kind != Token::Eof) consume();
             continue;
         }
+        // Static initializer block: static { ... }
+        if (cur().value == "static" && peek().value == "{") {
+            consume(); // 'static'
+            consume(); // '{'
+            // Collect the body statements as a special init method named __static_init__
+            Block blk;
+            while (cur().value != "}" && cur().kind != Token::Eof) {
+                auto s = parseStmt();
+                if (s) blk.stmts.push_back(s);
+            }
+            expect("}");
+            // Emit as a static method __static_init__ on the class
+            auto body = std::make_shared<Node>(); body->kind = NodeKind::Block; body->data = blk;
+            ClassMethod initM;
+            initM.name = "__static_init__";
+            initM.params = {};
+            initM.body = body;
+            initM.isStatic = true;
+            initM.isConstructor = false;
+            initM.isGetter = false;
+            initM.isSetter = false;
+            initM.isAsync = false;
+            cls.methods.push_back(initM);
+            continue;
+        }
+
         // Modifiers
         bool isStatic = match("static");
         bool isAsync  = match("async");

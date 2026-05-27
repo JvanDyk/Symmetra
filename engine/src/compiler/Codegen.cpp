@@ -3,6 +3,11 @@
 #include <set>
 #include <stdexcept>
 
+// Suppress C2026 string literal truncation warnings (MSVC limitation)
+#ifdef _MSC_VER
+  #pragma warning(disable: 2026)
+#endif
+
 namespace symm {
 
 // Maps JS Math.* names to CUDA single-precision intrinsics
@@ -28,1546 +33,20 @@ static const std::map<std::string, std::string> MATH_REMAP = {
     {"random","Math::random"},
 };
 
-static const char* PRELUDE = R"(
-// ── Symmetra GPU Runtime Prelude ──────────────────────────────────────────────
-// NVRTC: math functions and stdint types are built-in — no includes needed.
-typedef unsigned char      uint8_t;
-typedef unsigned int       uint32_t;
-typedef unsigned long long uint64_t;
+// WORKAROUND FOR MSVC C2026: The GPU runtime prelude is ~81KB, exceeding MSVC's 16KB string literal limit.
+// Solution: Store the prelude as separate smaller strings that are concatenated dynamically,
+// bypassing the C2026 compilation error while maintaining full functionality.
+// This is declared as extern from a dedicated prelude source file.
 
-// Request and response structures (in VRAM)
-struct SymmCtx {
-    // ── Request fields (filled by batch dispatch or legacy dispatch) ──────────
-    const char* method;        // "GET", "POST", "PUT", "DELETE", "PATCH", …
-    const char* path;          // URL path (null-terminated in VRAM)
-    const char* query;         // Query string (after '?')
-    const char* body;          // Raw request body bytes
-    int         body_len;
-    // ── Routing ───────────────────────────────────────────────────────────────
-    int         route_id;      // resolved route index (set by dispatch)
-    int         batch_slot;    // thread index within the batch (0–255)
-    // ── Response fields (written by handler kernel) ───────────────────────────
-    char*       resp_buf;      // response body output buffer (in VRAM)
-    int         resp_len;      // byte count written to resp_buf
-    int         resp_status;   // HTTP status code (default 200)
-    // ── GPU fingerprint (anti-tamper) ─────────────────────────────────────────
-    uint64_t    fingerprint;
-    // ── I/O stage marker (for split-kernel continuation) ─────────────────────
-    // When a handler hits a Tier-3 I/O boundary, it writes the stage index here
-    // and returns early.  The host re-launches with stage_resume pointing past
-    // the completed I/O.
-    int         io_stage;      // 0 = no pending I/O, N > 0 = resume at stage N
-};
+extern "C" const char* _get_gpu_prelude();
+static const char* PRELUDE = nullptr;
 
-// Route descriptor (registered at startup)
-struct SymmRoute {
-    const char* method;
-    const char* path;
-    int         handler_id;
-};
-
-// ── GPU-side utility functions ─────────────────────────────────────────────────
-
-__device__ int symm_strlen(const char* s) {
-    int n = 0;
-    while (s && s[n]) ++n;
-    return n;
-}
-
-__device__ void symm_strcpy(char* dst, const char* src, int maxlen) {
-    int i = 0;
-    while (src && src[i] && i < maxlen - 1) { dst[i] = src[i]; i++; }
-    dst[i] = '\0';
-}
-
-// Write a JSON string response into ctx->resp_buf
-__device__ void symm_json_str(SymmCtx* ctx, const char* json) {
-    int len = symm_strlen(json);
-    symm_strcpy(ctx->resp_buf, json, 65536);
-    ctx->resp_len    = len;
-    ctx->resp_status = 200;
-}
-
-// Write a float array as JSON array
-__device__ void symm_json_f32arr(SymmCtx* ctx, const float* arr, int n) {
-    char* p = ctx->resp_buf;
-    int cap = 65536;
-    int off = 0;
-    p[off++] = '[';
-    for (int i = 0; i < n && off < cap - 20; i++) {
-        if (i > 0) p[off++] = ',';
-        // Simple float-to-string (limited precision for GPU)
-        float v = arr[i];
-        int iv = (int)v;
-        int frac = (int)((v - iv) * 1000000);
-        if (frac < 0) frac = -frac;
-        // itoa-like
-        if (iv < 0) { p[off++] = '-'; iv = -iv; }
-        char tmp[20]; int tlen = 0;
-        if (iv == 0) tmp[tlen++] = '0';
-        while (iv > 0) { tmp[tlen++] = '0' + (iv % 10); iv /= 10; }
-        for (int j = tlen-1; j >= 0; j--) p[off++] = tmp[j];
-        if (frac > 0) {
-            p[off++] = '.';
-            char ft[10]; int fl = 0;
-            int ff = frac;
-            while (ff > 0) { ft[fl++] = '0' + (ff % 10); ff /= 10; }
-            for (int j = fl-1; j >= 0; j--) p[off++] = ft[j];
-        }
+inline const char* _get_prelude() {
+    if (!PRELUDE) {
+        PRELUDE = _get_gpu_prelude();
     }
-    p[off++] = ']';
-    p[off]   = '\0';
-    ctx->resp_len    = off;
-    ctx->resp_status = 200;
+    return PRELUDE;
 }
-
-// Write a simple key-value JSON object with a string field
-__device__ void symm_json_obj_str(SymmCtx* ctx, const char* key, const char* val) {
-    char* p = ctx->resp_buf;
-    int off = 0;
-    p[off++] = '{'; p[off++] = '"';
-    for (int i = 0; key[i]; i++) p[off++] = key[i];
-    p[off++] = '"'; p[off++] = ':'; p[off++] = '"';
-    for (int i = 0; val[i]; i++) p[off++] = val[i];
-    p[off++] = '"'; p[off++] = '}'; p[off] = '\0';
-    ctx->resp_len    = off;
-    ctx->resp_status = 200;
-}
-
-// Template literal helpers: write parts into a scratch char buffer
-__device__ int symm_write_str(char* buf, const char* s) {
-    if (!s) return 0;
-    int n = 0;
-    while (s[n]) { buf[n] = s[n]; n++; }
-    return n;
-}
-__device__ int symm_write_int(char* buf, long long v) {
-    if (v == 0) { buf[0]='0'; return 1; }
-    char tmp[24]; int n = 0; bool neg = v < 0;
-    if (neg) v = -v;
-    while (v > 0) { tmp[n++] = '0' + (int)(v % 10); v /= 10; }
-    if (neg) tmp[n++] = '-';
-    for (int i = 0, j = n-1; i < j; i++, j--) { char c=tmp[i]; tmp[i]=tmp[j]; tmp[j]=c; }
-    for (int i = 0; i < n; i++) buf[i] = tmp[i];
-    return n;
-}
-__device__ int symm_write_float(char* buf, float v) {
-    // Handle special values
-    if (v != v) { buf[0]='N'; buf[1]='a'; buf[2]='N'; buf[3]=0; return 3; }
-    float inf = _symm_inf();
-    if (v == inf)  { buf[0]='I'; buf[1]='n'; buf[2]='f'; buf[3]='i'; buf[4]='n'; buf[5]='i'; buf[6]='t'; buf[7]='y'; buf[8]=0; return 8; }
-    if (v == -inf) { buf[0]='-'; buf[1]='I'; buf[2]='n'; buf[3]='f'; buf[4]='i'; buf[5]='n'; buf[6]='i'; buf[7]='t'; buf[8]='y'; buf[9]=0; return 9; }
-    long long iv = (long long)v;
-    float frac = v - (float)iv;
-    if (frac < 0.f) frac = -frac;
-    // If fractional part is negligible, write as integer (cleaner JSON)
-    if (frac < 0.000001f) return symm_write_int(buf, iv);
-    int n = symm_write_int(buf, iv);
-    buf[n++] = '.';
-    // Up to 6 decimal places
-    for (int d = 0; d < 6; d++) { frac *= 10.f; int dig = (int)frac; buf[n++] = '0' + dig; frac -= dig; }
-    // Strip trailing zeros (must null-terminate after stripping)
-    while (n > 1 && buf[n-1] == '0') n--;
-    if (n > 1 && buf[n-1] == '.') n--;
-    buf[n] = '\0';
-    return n;
-}
-__device__ int symm_write_bool(char* buf, bool v) {
-    const char* s = v ? "true" : "false";
-    return symm_write_str(buf, s);
-}
-// Overloaded dispatchers — C++ picks the right variant by argument type
-__device__ int symm_write(char* buf, const char* s) { return symm_write_str(buf, s); }
-__device__ int symm_write(char* buf, float v)        { return symm_write_float(buf, v); }
-__device__ int symm_write(char* buf, int v)          { return symm_write_int(buf, v); }
-__device__ int symm_write(char* buf, long long v)    { return symm_write_int(buf, v); }
-__device__ int symm_write(char* buf, bool v)         { return symm_write_bool(buf, v); }
-__device__ int symm_write(char* buf, double v)       { return symm_write_float(buf, (float)v); }
-template<typename T> __device__ int symm_write(char* buf, T v) { return symm_write_str(buf, (const char*)v); }
-// JSON value emitters: strings get quoted, numbers bare, bools bare
-__device__ int symm_json_val(char* buf, const char* s) {
-    // Emit a JSON-escaped string literal: "value"
-    int n = 0; buf[n++] = '"';
-    while (s && *s) {
-        char c = *s++;
-        if      (c == '"')  { buf[n++] = '\\'; buf[n++] = '"';  }
-        else if (c == '\\') { buf[n++] = '\\'; buf[n++] = '\\'; }
-        else if (c == '\n') { buf[n++] = '\\'; buf[n++] = 'n';  }
-        else if (c == '\r') { buf[n++] = '\\'; buf[n++] = 'r';  }
-        else if (c == '\t') { buf[n++] = '\\'; buf[n++] = 't';  }
-        else                { buf[n++] = c; }
-    }
-    buf[n++] = '"'; buf[n] = '\0'; return n;
-}
-__device__ int symm_json_val(char* buf, float v)      { return symm_write_float(buf, v); }
-__device__ int symm_json_val(char* buf, double v)     { return symm_write_float(buf, (float)v); }
-__device__ int symm_json_val(char* buf, int v)        { return symm_write_int(buf, v); }
-__device__ int symm_json_val(char* buf, long long v)  { return symm_write_int(buf, v); }
-__device__ int symm_json_val(char* buf, unsigned v)   { return symm_write_int(buf, (int)v); }
-__device__ int symm_json_val(char* buf, bool v)       { return symm_write_bool(buf, v); }
-template<typename T> __device__ int symm_json_val(char* buf, T v) { return symm_write_float(buf, (float)v); }
-// nullptr → "null"
-__device__ int symm_json_val(char* buf, decltype(nullptr)) { return symm_write_str(buf, "null"); }
-// symm_json_merge: merge a JSON object string into a destination buffer.
-// Used for object spread: {...src}  — strips outer braces and appends fields.
-// Returns bytes written (without null terminator).
-__device__ int symm_json_merge(char* dst, int maxlen, const char* src) {
-    if (!src || !*src || maxlen <= 0) return 0;
-    // Locate the first '{' and last '}' in src
-    int s = 0, e = symm_strlen(src) - 1;
-    while (src[s] && src[s] != '{') s++;
-    while (e > s && src[e] != '}') e--;
-    if (s >= e) return 0;
-    s++; // skip '{'
-    // Copy src[s..e-1] into dst, up to maxlen-1 chars
-    int n = 0;
-    while (s < e && n < maxlen - 1) dst[n++] = src[s++];
-    dst[n] = '\0';
-    return n;
-}
-// Overload for _SBuf
-__device__ int symm_json_merge(char* dst, int maxlen, _SBuf s) { return symm_json_merge(dst, maxlen, s._b); }
-// float3 array as JSON "[x,y,z]"
-__device__ int symm_json_val(char* buf, float3 v) {
-    int n = 0; buf[n++] = '[';
-    n += symm_write_float(buf + n, v.x); buf[n++] = ',';
-    n += symm_write_float(buf + n, v.y); buf[n++] = ',';
-    n += symm_write_float(buf + n, v.z);
-    buf[n++] = ']'; buf[n] = '\0'; return n;
-}
-// JS parseFloat() stub → direct float cast
-template<typename T> __device__ float parseFloat(T v) { return (float)v; }
-
-// Extract a string field from a JSON body {"key":"value",...}
-// Writes the field value into out[0..maxlen-1] (null-terminated).
-// Returns true if found.
-__device__ bool symm_body_get_str(const char* json, const char* key, char* out, int maxlen) {
-    out[0] = 0;
-    if (!json || !key) return false;
-    int klen = symm_strlen(key);
-    for (int i = 0; json[i]; i++) {
-        if (json[i] != '"') continue;
-        bool match = true;
-        for (int j = 0; j < klen && match; j++) match = (json[i+1+j] == key[j]);
-        if (!match || json[i+1+klen] != '"') continue;
-        int j = i + 1 + klen + 1;
-        while (json[j]==' ' || json[j]=='\t' || json[j]==':') j++;
-        if (json[j] == '"') {
-            j++; int n = 0;
-            while (json[j] && json[j] != '"' && n < maxlen-1) {
-                if (json[j]=='\\' && json[j+1]) { j++; out[n++] = json[j]; }
-                else out[n++] = json[j];
-                j++;
-            }
-            out[n] = 0; return true;
-        }
-        break;
-    }
-    return false;
-}
-// Extract an integer field from JSON body
-__device__ int symm_body_get_int(const char* json, const char* key) {
-    char buf[32]; if (!symm_body_get_str(json, key, buf, 32)) {
-        // try numeric: find "key": N
-        int klen = symm_strlen(key);
-        for (int i = 0; json[i]; i++) {
-            if (json[i] != '"') continue;
-            bool match = true;
-            for (int j = 0; j < klen && match; j++) match = (json[i+1+j] == key[j]);
-            if (!match || json[i+1+klen] != '"') continue;
-            int j = i+1+klen+1;
-            while (json[j]==' '||json[j]==':'||json[j]=='\t') j++;
-            if (json[j]>='0' && json[j]<='9') {
-                int v = 0;
-                while (json[j]>='0' && json[j]<='9') { v = v*10 + (json[j]-'0'); j++; }
-                return v;
-            }
-        }
-        return 0;
-    }
-    int v=0; for (int i=0; buf[i]>='0'&&buf[i]<='9'; i++) v=v*10+(buf[i]-'0');
-    return v;
-}
-
-// ── JS standard library stubs (compile to no-ops; GPU has no native equiv.) ──────
-// These allow TS→CUDA codegen to produce compilable output for unsupported features.
-struct __MapEntry { const char* k; float v; };
-struct Map {
-    __MapEntry _e[64]; int _n = 0;
-    __device__ void set(const char* k, float v) {
-        for (int i=0;i<_n;i++) if (_e[i].k==k){_e[i].v=v;return;}
-        if (_n<64) { _e[_n].k=k; _e[_n].v=v; _n++; }
-    }
-    __device__ float get(const char* k) const {
-        for (int i=0;i<_n;i++) if (_e[i].k==k) return _e[i].v;
-        return 0.f;
-    }
-    __device__ bool has(const char* k) const {
-        for (int i=0;i<_n;i++) if (_e[i].k==k) return true;
-        return false;
-    }
-    __device__ int size() const { return _n; }
-};
-struct Set {
-    const char* _e[64]; int _n = 0;
-    __device__ void add(const char* k) {
-        for (int i=0;i<_n;i++) if (_e[i]==k) return;
-        if (_n<64) _e[_n++]=k;
-    }
-    __device__ bool has(const char* k) const {
-        for (int i=0;i<_n;i++) if (_e[i]==k) return true;
-        return false;
-    }
-    __device__ int size() const { return _n; }
-};
-// RegExp — full NFA implementation defined in the prelude extension block below.
-struct Error {
-    const char* message;
-    __device__ Error(const char* m = "") : message(m) {}
-};
-struct AbortSignal {
-    bool aborted = false;
-    bool* _targets[4] = {nullptr, nullptr, nullptr, nullptr};
-    int   _nTargets    = 0;
-    template<typename F> __device__ void addEventListener(const char*, F) {}
-    __device__ void _addTarget(bool* p) { if (_nTargets < 4) _targets[_nTargets++] = p; }
-    __device__ void _fire() {
-        aborted = true;
-        for (int i = 0; i < _nTargets; i++) if (_targets[i]) *_targets[i] = true;
-    }
-};
-struct AbortController {
-    AbortSignal signal;
-    __device__ void abort() { signal._fire(); }
-};
-// ByteArray — returned by TextEncoder; has byteLength field
-struct ByteArray {
-    const char* _data; int byteLength;
-    __device__ const char* buffer() const { return _data; }
-    __device__ const char* toString() const { return _data; }
-};
-struct TextEncoder { __device__ ByteArray encode(const char* s) {
-    int n = 0; if (s) while (s[n]) n++;
-    return ByteArray{s, n};
-} };
-struct TextDecoder {
-    __device__ const char* decode(ByteArray b) const { return b._data; }
-    __device__ const char* decode(const char* s) const { return s; }
-};
-// Promise stub — GPU execution is fully synchronous, so these are identity operations.
-// For real usage, `await` is stripped and the inner value is returned directly.
-struct Promise {
-    template<typename T> __device__ static auto all(T arr)        { return arr; }
-    template<typename T> __device__ static auto race(T arr)       { return arr; }
-    template<typename T> __device__ static auto any(T arr)        { return arr; }
-    template<typename T> __device__ static auto allSettled(T arr) { return arr; }
-    template<typename T> __device__ static auto resolve(T v)      { return v; }
-    __device__ static const char* reject(const char* r) { return r; }
-};
-// Type-aware equality: falls through to == for numbers, does string compare for char*
-__device__ bool symm_str_eq(const char* a, const char* b) {
-    if (!a && !b) return true;
-    if (!a || !b) return false;
-    while (*a && *b) { if (*a != *b) return false; a++; b++; }
-    return *a == *b;
-}
-template<typename A, typename B>
-__device__ bool symm_eq(A a, B b) { return a == b; }
-__device__ bool symm_eq(const char* a, const char* b) { return symm_str_eq(a, b); }
-// URL parser — scheme://hostname/pathname
-struct URL {
-    char _href[256]; char _protocol[32]; char _hostname[128]; char _pathname[256];
-    bool _valid;
-    const char* href; const char* protocol; const char* hostname; const char* pathname;
-    __device__ URL(const char* s = "") : _valid(false),
-        href(_href), protocol(_protocol), hostname(_hostname), pathname(_pathname) {
-        _href[0]=_protocol[0]=_hostname[0]=_pathname[0]=0;
-        if (!s || !*s) return;
-        // Find "://"
-        int protoEnd = -1;
-        for (int i = 0; s[i]; i++) {
-            if (s[i]==':' && s[i+1]=='/' && s[i+2]=='/') { protoEnd = i; break; }
-        }
-        if (protoEnd < 0) return;
-        // protocol = "https:" (includes colon)
-        for (int i = 0; i < protoEnd && i < 30; i++) _protocol[i] = s[i];
-        _protocol[protoEnd] = ':'; _protocol[protoEnd+1] = 0;
-        const char* p = s + protoEnd + 3;
-        // hostname ends at / ? # or end
-        int hostEnd = 0;
-        while (p[hostEnd] && p[hostEnd]!='/' && p[hostEnd]!='?' && p[hostEnd]!='#') hostEnd++;
-        for (int i = 0; i < hostEnd && i < 127; i++) _hostname[i] = p[i];
-        _hostname[hostEnd] = 0;
-        p += hostEnd;
-        // pathname
-        int pathEnd = 0;
-        while (p[pathEnd] && p[pathEnd]!='?' && p[pathEnd]!='#') pathEnd++;
-        if (pathEnd == 0) { _pathname[0]='/'; _pathname[1]=0; }
-        else { for (int i=0;i<pathEnd&&i<255;i++) _pathname[i]=p[i]; _pathname[pathEnd]=0; }
-        // href
-        int sl=0; while (s[sl]&&sl<255) { _href[sl]=s[sl]; sl++; } _href[sl]=0;
-        _valid = (_hostname[0] != 0);
-    }
-};
-// ─────────────────────────────────────────────────────────────────────────────
-
-__device__ uint64_t symm_fingerprint(const char* data, int len) {
-    uint32_t s[4] = {0x9e3779b9u, 0x6c62272eu, 0x517cc1b7u, 0x27220a95u};
-    for (int i = 0; i < len; i++)
-        s[i & 3] ^= (uint32_t)(uint8_t)data[i] << ((i & 3) << 3);
-    for (int step = 0; step < 16; step++) {
-        uint32_t n[4];
-        for (int w = 0; w < 4; w++) {
-            uint32_t C  = s[w];
-            uint32_t Lw = s[(w + 3) & 3];
-            uint32_t Rw = s[(w + 1) & 3];
-            uint32_t l  = (C << 1) | (Lw >> 31);
-            uint32_t r  = (C >> 1) | ((Rw & 1u) << 31);
-            n[w] = (C | r) & ~(l & C & r);
-        }
-        s[0]=n[0]; s[1]=n[1]; s[2]=n[2]; s[3]=n[3];
-    }
-    return ((uint64_t)s[0] << 32 | s[1]) ^ ((uint64_t)s[2] << 32 | s[3]);
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// ── Global constants ─────────────────────────────────────────────────────────
-__device__ __forceinline__ float _symm_nan() { float v; unsigned u = 0x7FC00000u; __builtin_memcpy(&v,&u,4); return v; }
-__device__ __forceinline__ float _symm_inf() { float v; unsigned u = 0x7F800000u; __builtin_memcpy(&v,&u,4); return v; }
-#define NaN               (_symm_nan())
-#define Infinity          (_symm_inf())
-#define POSITIVE_INFINITY (_symm_inf())
-#define NEGATIVE_INFINITY (-_symm_inf())
-#define undefined         nullptr
-
-// ── String scratch buffer — returned by value (thread-local on GPU stack) ─────
-struct _SBuf {
-    char _b[512];
-    __device__ operator const char*() const { return _b; }
-    __device__ const char* c_str()    const { return _b; }
-};
-// _SBuf-specific overloads (must come after struct definition)
-// Without these, the generic template matches _SBuf as T and calls (float)v which fails.
-__device__ int symm_write(char* buf, _SBuf v)     { return symm_write_str(buf, v._b); }
-__device__ int symm_json_val(char* buf, _SBuf v)  { return symm_json_val(buf, v._b); }
-
-// ── String utility functions ──────────────────────────────────────────────────
-__device__ _SBuf symm_str_pad_start(const char* s, int width, char fill = ' ') {
-    _SBuf out; int slen = symm_strlen(s); int off = 0;
-    for (int i = slen; i < width && off < 510; i++) out._b[off++] = fill;
-    for (int i = 0; s && s[i] && off < 511; i++) out._b[off++] = s[i];
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_pad_end(const char* s, int width, char fill = ' ') {
-    _SBuf out; int off = 0;
-    for (int i = 0; s && s[i] && off < 510; i++) out._b[off++] = s[i];
-    while (off < width && off < 510) out._b[off++] = fill;
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_trim(const char* s) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int start = 0;
-    while (s[start]==' '||s[start]=='\t'||s[start]=='\n'||s[start]=='\r') start++;
-    int end = symm_strlen(s);
-    while (end > start && (s[end-1]==' '||s[end-1]=='\t'||s[end-1]=='\n'||s[end-1]=='\r')) end--;
-    int n = end - start; if (n > 510) n = 510;
-    for (int i = 0; i < n; i++) out._b[i] = s[start+i];
-    out._b[n] = '\0'; return out;
-}
-__device__ _SBuf symm_str_trim_start(const char* s) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int start = 0;
-    while (s[start]==' '||s[start]=='\t'||s[start]=='\n'||s[start]=='\r') start++;
-    int off = 0;
-    for (int i = start; s[i] && off < 511; i++) out._b[off++] = s[i];
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_trim_end(const char* s) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int end = symm_strlen(s);
-    while (end > 0 && (s[end-1]==' '||s[end-1]=='\t'||s[end-1]=='\n'||s[end-1]=='\r')) end--;
-    int n = end > 510 ? 510 : end;
-    for (int i = 0; i < n; i++) out._b[i] = s[i];
-    out._b[n] = '\0'; return out;
-}
-__device__ _SBuf symm_str_replace_all(const char* s, const char* from, const char* to) {
-    _SBuf out; int off = 0;
-    int fl = symm_strlen(from); int tl = symm_strlen(to);
-    if (fl == 0) { symm_strcpy(out._b, s, 511); return out; }
-    for (int i = 0; s && s[i] && off < 508; ) {
-        bool match = true;
-        for (int j = 0; j < fl && match; j++) match = (s[i+j] == from[j]);
-        if (match) {
-            for (int j = 0; j < tl && off < 508; j++) out._b[off++] = to[j];
-            i += fl;
-        } else { out._b[off++] = s[i++]; }
-    }
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_replace(const char* s, const char* from, const char* to) {
-    // Single replacement — find first occurrence
-    _SBuf out; int off = 0;
-    int fl = symm_strlen(from); int tl = symm_strlen(to); bool replaced = false;
-    for (int i = 0; s && s[i] && off < 508; ) {
-        if (!replaced) {
-            bool match = true;
-            for (int j = 0; j < fl && match; j++) match = (s[i+j] == from[j]);
-            if (match && fl > 0) {
-                for (int j = 0; j < tl && off < 508; j++) out._b[off++] = to[j];
-                i += fl; replaced = true; continue;
-            }
-        }
-        out._b[off++] = s[i++];
-    }
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_repeat(const char* s, int n) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int sl = symm_strlen(s); int off = 0;
-    for (int r = 0; r < n && off < 508; r++)
-        for (int i = 0; i < sl && off < 508; i++) out._b[off++] = s[i];
-    out._b[off] = '\0'; return out;
-}
-__device__ char symm_str_char_at(const char* s, int i) {
-    if (!s) return '\0';
-    int len = symm_strlen(s);
-    if (i < 0) i = len + i;
-    if (i < 0 || i >= len) return '\0';
-    return s[i];
-}
-__device__ bool symm_str_includes(const char* s, const char* sub) {
-    if (!s || !sub) return false;
-    int sl = symm_strlen(s); int sbl = symm_strlen(sub);
-    for (int i = 0; i <= sl - sbl; i++) {
-        bool match = true;
-        for (int j = 0; j < sbl && match; j++) match = (s[i+j] == sub[j]);
-        if (match) return true;
-    }
-    return false;
-}
-__device__ bool symm_str_starts_with(const char* s, const char* prefix) {
-    if (!s || !prefix) return false;
-    int pl = symm_strlen(prefix);
-    for (int i = 0; i < pl; i++) if (!s[i] || s[i] != prefix[i]) return false;
-    return true;
-}
-__device__ bool symm_str_ends_with(const char* s, const char* suffix) {
-    if (!s || !suffix) return false;
-    int sl = symm_strlen(s); int sfl = symm_strlen(suffix);
-    if (sfl > sl) return false;
-    for (int i = 0; i < sfl; i++) if (s[sl-sfl+i] != suffix[i]) return false;
-    return true;
-}
-__device__ int symm_str_index_of(const char* s, const char* sub) {
-    if (!s || !sub) return -1;
-    int sl = symm_strlen(s); int sbl = symm_strlen(sub);
-    for (int i = 0; i <= sl - sbl; i++) {
-        bool match = true;
-        for (int j = 0; j < sbl && match; j++) match = (s[i+j] == sub[j]);
-        if (match) return i;
-    }
-    return -1;
-}
-__device__ int symm_str_last_index_of(const char* s, const char* sub) {
-    if (!s || !sub) return -1;
-    int sl = symm_strlen(s); int sbl = symm_strlen(sub); int last = -1;
-    for (int i = 0; i <= sl - sbl; i++) {
-        bool match = true;
-        for (int j = 0; j < sbl && match; j++) match = (s[i+j] == sub[j]);
-        if (match) last = i;
-    }
-    return last;
-}
-__device__ _SBuf symm_str_slice(const char* s, int start, int end = 2147483647) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int len = symm_strlen(s);
-    if (start < 0) start = len + start; if (start < 0) start = 0;
-    if (end < 0)   end   = len + end;   if (end > len)  end   = len;
-    int off = 0;
-    for (int i = start; i < end && off < 511; i++) out._b[off++] = s[i];
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_substring(const char* s, int start, int end = 2147483647) {
-    return symm_str_slice(s, start, end);  // simplified — same semantics for non-negative args
-}
-__device__ _SBuf symm_str_to_upper(const char* s) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int off = 0;
-    for (int i = 0; s[i] && off < 511; i++) {
-        char c = s[i];
-        out._b[off++] = (c>='a'&&c<='z') ? c-32 : c;
-    }
-    out._b[off] = '\0'; return out;
-}
-__device__ _SBuf symm_str_to_lower(const char* s) {
-    _SBuf out; if (!s) { out._b[0]=0; return out; }
-    int off = 0;
-    for (int i = 0; s[i] && off < 511; i++) {
-        char c = s[i];
-        out._b[off++] = (c>='A'&&c<='Z') ? c+32 : c;
-    }
-    out._b[off] = '\0'; return out;
-}
-__device__ int symm_str_char_code_at(const char* s, int i) {
-    if (!s) return -1;
-    int len = symm_strlen(s);
-    if (i < 0 || i >= len) return -1;
-    return (unsigned char)s[i];
-}
-__device__ _SBuf symm_str_concat(const char* a, const char* b) {
-    _SBuf out; int off = 0;
-    for (int i = 0; a && a[i] && off < 510; i++) out._b[off++] = a[i];
-    for (int i = 0; b && b[i] && off < 510; i++) out._b[off++] = b[i];
-    out._b[off] = '\0'; return out;
-}
-// str.split(sep) — returns the Nth segment (no dynamic allocation)
-__device__ _SBuf symm_str_split_at(const char* s, const char* sep, int idx) {
-    _SBuf out; out._b[0] = '\0';
-    int sl = symm_strlen(sep); int cur = 0; int part = 0;
-    for (int i = 0; s[i]; ) {
-        bool match = true;
-        if (sl > 0) for (int j = 0; j < sl && match; j++) match = (s[i+j] == sep[j]);
-        if (match && sl > 0) {
-            if (part == idx) { out._b[cur] = '\0'; return out; }
-            part++; cur = 0; i += sl;
-        } else {
-            if (part == idx && cur < 511) out._b[cur++] = s[i++];
-            else i++;
-        }
-    }
-    if (part == idx) out._b[cur] = '\0';
-    return out;
-}
-
-// ── symm_parse_float — full JS parseFloat semantics ───────────────────────────
-// Parses an optional sign, integer part, optional decimal part, optional exponent.
-__device__ float symm_parse_float(const char* s) {
-    if (!s) return 0.f;
-    int i = 0;
-    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') i++;
-    bool neg = false;
-    if (s[i] == '-') { neg = true; i++; } else if (s[i] == '+') { i++; }
-    // Check for NaN / Infinity
-    if (s[i]=='N' && s[i+1]=='a' && s[i+2]=='N') return _symm_nan();
-    if (s[i]=='I' && s[i+1]=='n' && s[i+2]=='f') { float inf=_symm_inf(); return neg?-inf:inf; }
-    // Integer part
-    float v = 0.f;
-    bool hasDigit = false;
-    while (s[i] >= '0' && s[i] <= '9') { v = v * 10.f + (s[i] - '0'); i++; hasDigit = true; }
-    // Fractional part
-    if (s[i] == '.') {
-        i++;
-        float scale = 0.1f;
-        while (s[i] >= '0' && s[i] <= '9') { v += (s[i] - '0') * scale; scale *= 0.1f; i++; hasDigit = true; }
-    }
-    if (!hasDigit) return _symm_nan();
-    // Exponent part
-    if (s[i] == 'e' || s[i] == 'E') {
-        i++;
-        bool eneg = false;
-        if (s[i] == '-') { eneg = true; i++; } else if (s[i] == '+') { i++; }
-        int exp = 0;
-        while (s[i] >= '0' && s[i] <= '9') { exp = exp * 10 + (s[i] - '0'); i++; }
-        float ep = 1.f;
-        for (int k = 0; k < exp && k < 38; k++) ep *= 10.f;
-        v = eneg ? v / ep : v * ep;
-    }
-    return neg ? -v : v;
-}
-
-// ── Number namespace ──────────────────────────────────────────────────────────
-struct Number {
-    static constexpr float    EPSILON          = 1.1920929e-7f;
-    static constexpr long long MAX_SAFE_INTEGER = 9007199254740991LL;   // 2^53 - 1
-    static constexpr long long MIN_SAFE_INTEGER = -9007199254740991LL;  // -(2^53 - 1)
-    static constexpr float    MAX_VALUE        = 3.402823466e+38f;
-    static constexpr float    MIN_VALUE        = 1.175494351e-38f;
-    __device__ static bool isNaN(float v)         { return v != v; }
-    __device__ static bool isFinite(float v)       { float i=_symm_inf(); return v==v && v!=i && v!=-i; }
-    __device__ static bool isInteger(float v)      { return isFinite(v) && floorf(v)==v; }
-    __device__ static bool isSafeInteger(float v)  { return isInteger(v) && fabsf(v)<=16777216.f; }
-    __device__ static float parseInt(const char* s) {
-        if (!s) return 0.f;
-        float v = 0; bool neg = false; int i = 0;
-        while (s[i]==' ') i++;
-        if (s[i]=='-'){neg=true;i++;} else if(s[i]=='+')i++;
-        // handle 0x hex
-        if (s[i]=='0' && (s[i+1]=='x'||s[i+1]=='X')) {
-            i+=2; while ((s[i]>='0'&&s[i]<='9')||(s[i]>='a'&&s[i]<='f')||(s[i]>='A'&&s[i]<='F')) {
-                int d = s[i]<='9'?s[i]-'0':s[i]<='F'?s[i]-'A'+10:s[i]-'a'+10; v=v*16+d; i++;
-            }
-        } else {
-            while (s[i]>='0' && s[i]<='9') { v=v*10+(s[i]-'0'); i++; }
-        }
-        return neg ? -v : v;
-    }
-    __device__ static float parseFloat(const char* s) { return symm_parse_float(s); }
-};
-// Top-level isNaN / isFinite / isInteger matching Number.*
-__device__ bool isNaN(float v)   { return v != v; }
-__device__ bool isFinite(float v) { float i=_symm_inf(); return v==v&&v!=i&&v!=-i; }
-// top-level free-function versions of Number.parseInt / parseFloat (JS global compat)
-__device__ float parseInt(const char* s)   { return Number::parseInt(s); }
-__device__ float parseFloat(const char* s) { return symm_parse_float(s); }
-// parseInt(str, radix) — supports any radix 2-36
-__device__ float symm_parse_int_radix(const char* s, int radix) {
-    if (!s || radix < 2 || radix > 36) return 0.f;
-    float v = 0; bool neg = false; int i = 0;
-    while (s[i]==' ') i++;
-    if (s[i]=='-'){neg=true;i++;} else if(s[i]=='+')i++;
-    // 0x prefix implies hex regardless of radix
-    if (radix==16 && s[i]=='0' && (s[i+1]=='x'||s[i+1]=='X')) i+=2;
-    while (s[i]) {
-        int d;
-        if (s[i]>='0' && s[i]<='9') d = s[i]-'0';
-        else if (s[i]>='a' && s[i]<='z') d = s[i]-'a'+10;
-        else if (s[i]>='A' && s[i]<='Z') d = s[i]-'A'+10;
-        else break;
-        if (d >= radix) break;
-        v = v * radix + d; i++;
-    }
-    return neg ? -v : v;
-}
-
-// ── Additional Math helpers (referenced from MATH_REMAP) ─────────────────────
-__device__ float symm_math_sign(float x)  { return (x>0.f)?1.f:(x<0.f)?-1.f:0.f; }
-__device__ int   symm_math_clz32(int x)   { return x ? __clz(x) : 32; }
-__device__ int   symm_math_imul(int a, int b) { return a * b; }
-__device__ float symm_math_fround(float x) { return x; }
-
-// ── Math struct (for Math::random and static property access) ─────────────────
-struct Math {
-    // Math.random() — simple thread-local LCG (different per thread, not cryptographic)
-    __device__ static float random() {
-        uint32_t seed = (uint32_t)(threadIdx.x + blockIdx.x * blockDim.x) * 1664525u + 1013904223u;
-        return (float)(seed >> 8) * (1.0f / (float)(1u << 24));
-    }
-};
-
-// ── Array namespace (static helpers) ─────────────────────────────────────────
-template<typename T>
-__device__ bool symm_array_is_array(T) { return true; }
-__device__ bool symm_array_is_array(const char*) { return false; }
-__device__ bool symm_array_is_array(float)       { return false; }
-__device__ bool symm_array_is_array(int)         { return false; }
-__device__ bool symm_array_is_array(bool)        { return false; }
-
-struct Array {
-    template<typename T> __device__ static bool isArray(T v)         { return symm_array_is_array(v); }
-    template<typename T> __device__ static bool isArray(T* v)        { return true; }
-    __device__ static bool isArray(const char* v) { return false; }
-    __device__ static bool isArray(float v)       { return false; }
-    __device__ static bool isArray(int v)         { return false; }
-
-    // Array.from(str) — char array from string (max 256 chars)
-    __device__ static char* from(const char* s) {
-        static __device__ char _from_buf[256];
-        int i = 0;
-        while (s && s[i] && i < 255) { _from_buf[i] = s[i]; i++; }
-        _from_buf[i] = '\0';
-        return _from_buf;
-    }
-    // Array.from({length:n}, fn) — generate array via callback (up to 256 elements)
-    template<typename Fn>
-    __device__ static float* from_fn(int n, Fn fn) {
-        static __device__ float _from_fn_buf[256];
-        int cnt = (n < 256) ? n : 256;
-        for (int i = 0; i < cnt; i++) _from_fn_buf[i] = fn(i);
-        return _from_fn_buf;
-    }
-    // Array.of(args...) — not easily variadic on GPU; return a 1-element array
-    template<typename T> __device__ static T* of(T v) {
-        static __device__ T _of_buf[1];
-        _of_buf[0] = v;
-        return _of_buf;
-    }
-};
-
-// ── Object namespace ──────────────────────────────────────────────────────────
-template<typename T>
-__device__ bool symm_object_has_own(T, const char*) { return true; }
-
-struct Object {
-    // Object.keys(obj) — GPU stub: returns a sentinel _SBuf (no dynamic key enum on GPU)
-    template<typename T> __device__ static _SBuf keys(T)    { _SBuf b; b._b[0]='\0'; return b; }
-    template<typename T> __device__ static _SBuf values(T)  { _SBuf b; b._b[0]='\0'; return b; }
-    template<typename T> __device__ static _SBuf entries(T) { _SBuf b; b._b[0]='\0'; return b; }
-    template<typename T, typename U> __device__ static T& assign(T& dst, U src) { return dst; }
-    template<typename T> __device__ static bool hasOwn(T, const char*) { return true; }
-    template<typename T> __device__ static T& freeze(T& v) { return v; }
-    template<typename T> __device__ static T& seal(T& v)   { return v; }
-    // fromEntries: no-op on GPU — returns a default-constructed value
-    template<typename T> __device__ static T fromEntries(T v) { return v; }
-    // create: no prototype chain on GPU — just default-construct
-    template<typename T> __device__ static T create(T proto) { return T{}; }
-    template<typename T> __device__ static T create(T proto, T desc) { return T{}; }
-    __device__ static void* create(void*) { return nullptr; }
-};
-
-// ── console stub (no-op on GPU — output goes to host log in production) ───────
-struct _Console {
-    template<typename T> __device__ void log(T)   {}
-    template<typename T> __device__ void warn(T)  {}
-    template<typename T> __device__ void error(T) {}
-    template<typename T> __device__ void info(T)  {}
-    template<typename T> __device__ void debug(T) {}
-    template<typename A, typename B> __device__ void log(A, B)   {}
-    template<typename A, typename B> __device__ void warn(A, B)  {}
-    template<typename A, typename B> __device__ void error(A, B) {}
-};
-__device__ _Console console;
-
-// ── performance.now() ─────────────────────────────────────────────────────────
-struct _Performance { __device__ long long now() { return 0LL; } };
-__device__ _Performance performance;
-
-// ── globalThis stub ───────────────────────────────────────────────────────────
-struct _GlobalThis {};
-__device__ _GlobalThis globalThis;
-
-// ── Symbol stub (compile-time constants, no runtime symbol table on GPU) ──────
-// Symbol.for(str) → hash the string to an integer constant
-__device__ int _symm_symbol_hash(const char* s) {
-    unsigned h = 2166136261u;
-    while (s && *s) { h ^= (unsigned char)*s++; h *= 16777619u; }
-    return (int)h;
-}
-struct _Symbol {
-    // Symbol() constructor → unique integer
-    __device__ _Symbol() : _val(0) {}
-    __device__ explicit _Symbol(int v) : _val(v) {}
-    int _val;
-    __device__ bool operator==(_Symbol o) const { return _val == o._val; }
-    __device__ bool operator!=(_Symbol o) const { return _val != o._val; }
-    // Symbol.for(str) — global registry stub: hash-based
-    __device__ static _Symbol for_(const char* s) { return _Symbol(_symm_symbol_hash(s)); }
-    // Symbol.iterator, Symbol.asyncIterator, Symbol.toPrimitive — well-known symbols
-    static constexpr int _ITERATOR        = 0xA001;
-    static constexpr int _ASYNC_ITERATOR  = 0xA002;
-    static constexpr int _TO_PRIMITIVE    = 0xA003;
-    static constexpr int _HAS_INSTANCE    = 0xA004;
-    static constexpr int _SPECIES         = 0xA005;
-    __device__ static _Symbol iterator()       { return _Symbol(_ITERATOR); }
-    __device__ static _Symbol asyncIterator()  { return _Symbol(_ASYNC_ITERATOR); }
-    __device__ static _Symbol toPrimitive()    { return _Symbol(_TO_PRIMITIVE); }
-    __device__ static _Symbol hasInstance()    { return _Symbol(_HAS_INSTANCE); }
-    __device__ static _Symbol species()        { return _Symbol(_SPECIES); }
-};
-__device__ _Symbol Symbol;
-
-// ── Buffer (Node.js compat — alias for ByteArray with extra methods) ──────────
-struct Buffer : ByteArray {
-    __device__ Buffer() : ByteArray{ nullptr, 0 } {}
-    __device__ Buffer(const char* d, int n) : ByteArray{ d, n } {}
-    __device__ static Buffer from(const char* s) { int n=0; while(s&&s[n])n++; return Buffer{s,n}; }
-    __device__ static Buffer alloc(int n)         { return Buffer{nullptr,n}; }
-    __device__ const char* toString(const char* = "utf8") const { return _data; }
-};
-
-// ── WeakMap / WeakRef / WeakSet — no-op stubs for TypeScript compatibility ───
-template<typename K, typename V = float>
-struct WeakMap {
-    __device__ void set(K, V) {}
-    __device__ V    get(K)    { return V{}; }
-    __device__ bool has(K)    { return false; }
-    __device__ void del(K)    {}
-};
-template<typename T>
-struct WeakRef {
-    T* _ptr = nullptr;
-    __device__ WeakRef() = default;
-    __device__ explicit WeakRef(T* p) : _ptr(p) {}
-    __device__ T* deref() const { return _ptr; }
-};
-template<typename T>
-struct WeakSet {
-    __device__ void add(T) {}
-    __device__ bool has(T) { return false; }
-    __device__ void del(T) {}
-};
-
-// ── URLSearchParams — simple query string parser ───────────────────────────
-struct URLSearchParams {
-    const char* _qs;  // the raw query string
-    __device__ URLSearchParams() : _qs(nullptr) {}
-    __device__ URLSearchParams(const char* qs) : _qs(qs) {}
-    // get(key) — finds &key=value in _qs, returns pointer to value start (or nullptr)
-    __device__ const char* get(const char* key) const {
-        if (!_qs || !key) return nullptr;
-        int klen = symm_strlen(key);
-        for (int i = 0; _qs[i]; i++) {
-            if (i == 0 || _qs[i-1] == '&') {
-                bool match = true;
-                for (int j = 0; j < klen && match; j++) match = (_qs[i+j] == key[j]);
-                if (match && _qs[i+klen] == '=') return _qs + i + klen + 1;
-            }
-        }
-        return nullptr;
-    }
-    __device__ bool has(const char* key) const { return get(key) != nullptr; }
-};
-
-// ── BigInt — maps to long long on GPU ────────────────────────────────────────
-typedef long long bigint;
-
-// ── Date — real-time via DateNow host injection ───────────────────────────────
-// The host writes the current Unix-ms timestamp into _symm_now_ms via
-// cuMemcpyHtoD before launching each batch kernel (see NvrtcCompiler.cpp).
-__device__ uint64_t _symm_now_ms = 0;
-struct Date {
-    long long _ms;
-    __device__ Date() : _ms((long long)_symm_now_ms) {}
-    __device__ Date(long long ms) : _ms(ms) {}
-    __device__ static long long now() { return (long long)_symm_now_ms; }
-    __device__ int getFullYear() {
-        long long d = _ms/86400000LL; int y = 1970;
-        while (true) { int days=(y%4==0&&(y%100!=0||y%400==0))?366:365; if(d<days)break; d-=days; y++; }
-        return y;
-    }
-    __device__ int getMonth()        { return (int)((_ms/2592000000LL)%12); }
-    __device__ int getDate()         { return (int)((_ms/86400000LL)%31)+1; }
-    __device__ int getHours()        { return (int)((_ms/3600000LL)%24); }
-    __device__ int getMinutes()      { return (int)((_ms/60000LL)%60); }
-    __device__ int getSeconds()      { return (int)((_ms/1000LL)%60); }
-    __device__ int getMilliseconds() { return (int)(_ms%1000LL); }
-    __device__ long long getTime()   { return _ms; }
-    __device__ const char* toISOString() { return "1970-01-01T00:00:00.000Z"; }
-    __device__ long long valueOf()   { return _ms; }
-};
-
-// ── Promise — race / all / any / allSettled ───────────────────────────────────
-// Note: GPU execution is synchronous per kernel; all "concurrent" operations
-// complete before the next line. race() returns the first element (or the one
-// with the smallest ms delay argument if all are setTimeout-based).
-struct _PromiseVal {
-    enum { Pending=0, Fulfilled=1, Rejected=2 } status = Pending;
-    float       value   = 0.f;
-    const char* reason  = nullptr;
-    const char* label   = nullptr;   // optional string value
-    __device__ bool fulfilled() const { return status == Fulfilled; }
-    __device__ bool rejected()  const { return status == Rejected;  }
-};
-// ── RegExp with basic NFA simulation ─────────────────────────────────────────
-// (Replaces the stub from the original prelude above)
-// Supports: . * + ? [abc] [^abc] \d \w \s ^ $ (…) (?:…) alternation |
-static constexpr int SYMM_RE_MAX_PAT = 256;
-static constexpr int SYMM_RE_MAX_MAT = 32;
-struct MatchResult { int start; int end; const char* input; };
-struct MatchArray  {
-    MatchResult _m[SYMM_RE_MAX_MAT]; int _n = 0;
-    __device__ int length() const { return _n; }
-    __device__ MatchResult operator[](int i) const { return _m[i]; }
-};
-// Forward declaration of NFA matcher (defined after RegExp struct)
-__device__ bool _symm_nfa(const char* pat, const char* str, int si, int& matchEnd);
-struct RegExp {
-    char   _pat[SYMM_RE_MAX_PAT];
-    char   _flags[8];
-    bool   _global, _ignoreCase, _multiline;
-    __device__ RegExp(const char* p = "", const char* fl = "") {
-        symm_strcpy(_pat, p, SYMM_RE_MAX_PAT);
-        symm_strcpy(_flags, fl, 8);
-        _global=false; _ignoreCase=false; _multiline=false;
-        for (int i=0; fl[i]; i++) {
-            if (fl[i]=='g') _global=true;
-            else if (fl[i]=='i') _ignoreCase=true;
-            else if (fl[i]=='m') _multiline=true;
-        }
-    }
-    __device__ bool test(const char* s) const {
-        if (!s) return false;
-        int end=0;
-        for (int i=0; s[i]; i++) { if (_symm_nfa(_pat, s, i, end)) return true; }
-        return false;
-    }
-    __device__ MatchResult exec(const char* s) const {
-        if (!s) return {-1,-1,s};
-        int end=0;
-        for (int i=0; s[i]; i++) { if (_symm_nfa(_pat, s, i, end)) return {i,end,s}; }
-        return {-1,-1,s};
-    }
-    __device__ MatchArray matchAll(const char* s) const {
-        MatchArray arr; if (!s) return arr;
-        int end=0;
-        for (int i=0; s[i] && arr._n < SYMM_RE_MAX_MAT; ) {
-            if (_symm_nfa(_pat, s, i, end)) {
-                arr._m[arr._n++] = {i, end, s};
-                i = (end > i) ? end : i+1;
-            } else i++;
-        }
-        return arr;
-    }
-    int lastIndex = 0;
-};
-// ── GPU RegExp NFA — correct recursive backtracking implementation ─────────────
-// Supports: . * + ? {n} {n,m} [abc] [^abc] \d \w \s \b ^ $ (?:...) | alternation
-// Limitation: no capturing groups (returned as MatchResult.start/end only)
-// Recursion depth bounded by pattern length (~256) — safe on GPU stack.
-
-__device__ bool _symm_re_word(char c)  { return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'; }
-__device__ bool _symm_re_digit(char c) { return c>='0'&&c<='9'; }
-__device__ bool _symm_re_space(char c) { return c==' '||c=='\t'||c=='\n'||c=='\r'||c=='\f'||c=='\v'; }
-
-// Match a character class [...] starting at pat[pi] (pi should be after '[')
-// Returns true if c matches; advances pi to past ']'
-__device__ bool _symm_re_class(const char* pat, int& pi, char c, bool ignCase) {
-    bool negate = (pat[pi]=='^'); if (negate) pi++;
-    bool found = false;
-    while (pat[pi] && pat[pi]!=']') {
-        if (pat[pi]=='\\' && pat[pi+1]) {
-            pi++; char esc=pat[pi++];
-            char low = (ignCase && c>='A' && c<='Z') ? c+32 : c;
-            if (esc=='d') { if (_symm_re_digit(c)) found=true; }
-            else if (esc=='D') { if (!_symm_re_digit(c)) found=true; }
-            else if (esc=='w') { if (_symm_re_word(c)) found=true; }
-            else if (esc=='W') { if (!_symm_re_word(c)) found=true; }
-            else if (esc=='s') { if (_symm_re_space(c)) found=true; }
-            else if (esc=='S') { if (!_symm_re_space(c)) found=true; }
-            else { if (ignCase?(low==(esc>='A'&&esc<='Z'?esc+32:esc)):(c==esc)) found=true; }
-        } else if (pat[pi+1]=='-' && pat[pi+2] && pat[pi+2]!=']') {
-            char lo=pat[pi]; char hi=pat[pi+2]; pi+=3;
-            char lc = (ignCase && c>='A' && c<='Z') ? c+32 : c;
-            char ll = (ignCase && lo>='A' && lo<='Z') ? lo+32 : lo;
-            char lh = (ignCase && hi>='A' && hi<='Z') ? hi+32 : hi;
-            if (lc>=ll && lc<=lh) found=true;
-        } else {
-            char ec=pat[pi++];
-            char lc=(ignCase && c>='A' && c<='Z')?c+32:c;
-            char le=(ignCase && ec>='A' && ec<='Z')?ec+32:ec;
-            if (lc==le) found=true;
-        }
-    }
-    if (pat[pi]==']') pi++;
-    return found != negate;
-}
-
-// Match a single atom at pat[pi] against str[si]
-// Returns true on match; advances pi to after atom (before quantifier); does not advance si.
-__device__ bool _symm_re_atom(const char* pat, int& pi, const char* str, int si, bool ignCase) {
-    char c = str[si];
-    if (!c) {
-        // End of string — only $ or \b can match at end
-        if (pat[pi]=='$') return true;  // handled elsewhere
-        return false;
-    }
-    char lc = (ignCase && c>='A' && c<='Z') ? c+32 : c;
-    if (pat[pi]=='\\' && pat[pi+1]) {
-        pi++; char esc=pat[pi++];
-        char le=(ignCase && esc>='A' && esc<='Z')?esc+32:esc;
-        if (esc=='d') return _symm_re_digit(c);
-        if (esc=='D') return !_symm_re_digit(c);
-        if (esc=='w') return _symm_re_word(c);
-        if (esc=='W') return !_symm_re_word(c);
-        if (esc=='s') return _symm_re_space(c);
-        if (esc=='S') return !_symm_re_space(c);
-        if (esc=='n') return c=='\n';
-        if (esc=='r') return c=='\r';
-        if (esc=='t') return c=='\t';
-        return lc==le;
-    }
-    if (pat[pi]=='.') { pi++; return (c!='\n'); }
-    if (pat[pi]=='[') { pi++; return _symm_re_class(pat, pi, c, ignCase); }
-    if (pat[pi]=='^' || pat[pi]=='$') return false;  // anchors handled in nfa
-    // Literal character
-    char lp=(ignCase && pat[pi]>='A' && pat[pi]<='Z')?pat[pi]+32:pat[pi];
-    char lc2=(ignCase && c>='A' && c<='Z')?c+32:c;
-    return (lc2 == lp) ? (pi++, true) : (false);
-}
-
-// Forward declaration for alternation
-__device__ bool _symm_nfa(const char* pat, int pi, const char* str, int si, int& matchEnd, bool ignCase, int depth);
-
-// Try to match the rest of the pattern (pat from pi onwards) against str from si.
-// Returns true and sets matchEnd to the end position on success.
-__device__ bool _symm_nfa(const char* pat, int pi, const char* str, int si, int& matchEnd, bool ignCase, int depth) {
-    if (depth > 64) return false;  // prevent stack overflow on pathological patterns
-    while (true) {
-        // End of pattern — success
-        if (!pat[pi]) { matchEnd = si; return true; }
-
-        // Anchor: ^
-        if (pat[pi]=='^') {
-            if (si != 0) return false;
-            pi++; continue;
-        }
-        // Anchor: $
-        if (pat[pi]=='$') {
-            if (str[si] != '\0') return false;
-            pi++; matchEnd = si; continue;
-        }
-
-        // Alternation: |  — try left branch first; if fails, try right
-        // Scan to find the top-level | in the current group scope
-        {
-            int depth2 = 0; int altPi = pi;
-            while (pat[altPi]) {
-                if (pat[altPi]=='('||pat[altPi]=='[') depth2++;
-                else if ((pat[altPi]==')'||pat[altPi]==']') && depth2>0) depth2--;
-                else if (pat[altPi]=='|' && depth2==0) {
-                    // Found alternation — try left branch up to altPi
-                    // Build sub-pattern for left branch
-                    int lEnd = 0;
-                    if (_symm_nfa(pat, pi, str, si, lEnd, ignCase, depth+1)) {
-                        // Left branch succeeded — but we need to also consume the rest AFTER |...
-                        // For simplicity: try matching only if left branch consumed to some point
-                        matchEnd = lEnd;
-                        return true;
-                    }
-                    // Try right branch from altPi+1
-                    return _symm_nfa(pat, altPi+1, str, si, matchEnd, ignCase, depth+1);
-                }
-                altPi++;
-            }
-        }
-
-        // Non-capturing group: (?:...) or (...)
-        if (pat[pi]=='(') {
-            pi++;
-            bool nonCapture = (pat[pi]=='?' && pat[pi+1]==':');
-            if (nonCapture) pi += 2;
-            // Find matching ')'
-            int groupStart = pi;
-            int depth2 = 1;
-            while (pat[pi] && depth2>0) {
-                if (pat[pi]=='(') depth2++;
-                else if (pat[pi]==')') depth2--;
-                if (depth2>0) pi++;
-                else pi++;  // consume ')'
-            }
-            int groupEnd = pi - 1;  // pi is now after ')'
-            // Check for quantifier after group
-            char quant = pat[pi];
-            int minR = 1, maxR = 1;
-            if (quant=='*'||quant=='+'||quant=='?') {
-                minR = (quant=='+') ? 1 : 0;
-                maxR = (quant=='?') ? 1 : 255;
-                pi++;
-            } else if (quant=='{') {
-                // {n} or {n,m} or {n,}
-                pi++; int n=0, m=0; bool hasComma=false;
-                while (pat[pi]>='0'&&pat[pi]<='9') n=n*10+(pat[pi++]-'0');
-                if (pat[pi]==',') { hasComma=true; pi++; while(pat[pi]>='0'&&pat[pi]<='9') m=m*10+(pat[pi++]-'0'); }
-                if (pat[pi]=='}') pi++;
-                minR=n; maxR=hasComma?(m>0?m:255):n;
-            } else { minR=1; maxR=1; }
-            // Match the group minR..maxR times
-            // Build a temporary sub-pattern string for the group
-            char subPat[256]; int sl=0;
-            for (int k=groupStart; k<groupEnd && sl<254; k++) subPat[sl++]=pat[k];
-            subPat[sl]=0;
-            int r=0, curSi=si;
-            while (r<maxR) {
-                int subEnd=0;
-                if (!_symm_nfa(subPat, 0, str, curSi, subEnd, ignCase, depth+1)) break;
-                if (subEnd==curSi && r>=minR) break;  // zero-width match — stop to avoid infinite loop
-                curSi=subEnd; r++;
-            }
-            if (r < minR) return false;
-            si = curSi;
-            continue;
-        }
-
-        // Regular atom + optional quantifier
-        int atomPi = pi;
-        // Peek at atom to determine its extent
-        // We need to advance pi past the atom, then check quantifier
-        char quant = 0;
-        // Determine atom end
-        int atomPiEnd = pi;
-        if (pat[atomPiEnd]=='\\' && pat[atomPiEnd+1]) { atomPiEnd+=2; }
-        else if (pat[atomPiEnd]=='[') {
-            atomPiEnd++; if(pat[atomPiEnd]=='^') atomPiEnd++;
-            while(pat[atomPiEnd] && pat[atomPiEnd]!=']') {
-                if(pat[atomPiEnd]=='\\' && pat[atomPiEnd+1]) atomPiEnd++;
-                atomPiEnd++;
-            }
-            if(pat[atomPiEnd]==']') atomPiEnd++;
-        } else { atomPiEnd++; }
-        quant = pat[atomPiEnd];
-        int minR=1, maxR=1;
-        int quantEnd = atomPiEnd;
-        if (quant=='*'||quant=='+'||quant=='?') {
-            minR = (quant=='+') ? 1 : 0;
-            maxR = (quant=='?') ? 1 : 255;
-            quantEnd++;
-        } else if (quant=='{') {
-            int qp=atomPiEnd+1; int n=0, m=0; bool hasComma=false;
-            while(pat[qp]>='0'&&pat[qp]<='9') n=n*10+(pat[qp++]-'0');
-            if(pat[qp]==',') { hasComma=true; qp++; while(pat[qp]>='0'&&pat[qp]<='9') m=m*10+(pat[qp++]-'0'); }
-            if(pat[qp]=='}') qp++;
-            minR=n; maxR=hasComma?(m>0?m:255):n;
-            quantEnd=qp;
-        } else { minR=1; maxR=1; quantEnd=atomPiEnd; }
-
-        // Greedy match: consume as many as possible then backtrack
-        int r = 0, curSi = si;
-        while (r < maxR) {
-            if (!str[curSi]) break;
-            int tmpPi = pi;
-            bool matched = _symm_re_atom(pat, tmpPi, str, curSi, ignCase);
-            if (!matched) break;
-            curSi++; r++;
-        }
-        if (r < minR) return false;
-        // Backtrack from max down to min, trying the rest
-        pi = quantEnd;
-        for (int k = r; k >= minR; k--) {
-            int trySi = si + k;
-            if (_symm_nfa(pat, pi, str, trySi, matchEnd, ignCase, depth+1)) return true;
-        }
-        return false;
-    }
-}
-// String.prototype.matchAll — uses the above RegExp
-__device__ MatchArray symm_str_match_all(const char* s, const RegExp& re) {
-    return re.matchAll(s);
-}
-__device__ MatchResult symm_str_match_first(const char* s, const RegExp& re) {
-    return re.exec(s);
-}
-__device__ bool symm_str_test(const char* s, const RegExp& re) {
-    return re.test(s);
-}
-
-// ── Generator / async-iterator state machine support ─────────────────────────
-template<typename V>
-struct GpuGenState {
-    int  _step = 0;
-    bool _done = false;
-    V    _val  = {};
-    struct IterResult { V value; bool done; };
-    __device__ IterResult next_val(V v) { _val=v; return {_val, _done}; }
-    __device__ IterResult finish()      { _done=true; return {_val, true}; }
-    __device__ bool       done()  const { return _done; }
-    __device__ V          value() const { return _val; }
-};
-template<typename T, typename V>
-struct GpuAsyncIterState {
-    T*   _obj;
-    int  _step = 0;
-    bool _done = false;
-    V    _val  = {};
-    __device__ void advance() { _done = !_obj->__asyncIter_step(_step, _val); _step++; }
-    struct Proxy {
-        GpuAsyncIterState* _it;
-        __device__ Proxy(GpuAsyncIterState* it) : _it(it) { _it->advance(); }
-        __device__ bool    operator!=(int) const { return !_it->_done; }
-        __device__ Proxy&  operator++()  { _it->advance(); return *this; }
-        __device__ V       operator*() const { return _it->_val; }
-    };
-    __device__ Proxy begin() { return Proxy(this); }
-    __device__ int   end()   { return 0; }
-};
-
-// ── Error subclasses ──────────────────────────────────────────────────────────
-struct TypeError      : Error { __device__ TypeError(const char* m = "type error") : Error(m) {} };
-struct RangeError     : Error { __device__ RangeError(const char* m = "range error") : Error(m) {} };
-struct SyntaxError    : Error { __device__ SyntaxError(const char* m = "syntax error") : Error(m) {} };
-struct ReferenceError : Error { __device__ ReferenceError(const char* m = "reference error") : Error(m) {} };
-struct URIError       : Error { __device__ URIError(const char* m = "URI error") : Error(m) {} };
-struct EvalError      : Error { __device__ EvalError(const char* m = "eval error") : Error(m) {} };
-// ── AggregateError (for Promise.any) ─────────────────────────────────────────
-struct AggregateError : Error {
-    __device__ AggregateError(const char* m = "All promises rejected") : Error(m) {}
-};
-
-// ── Number.toFixed(n) — format float to N decimal places ─────────────────────
-__device__ _SBuf symm_number_to_fixed(float v, int decimals) {
-    _SBuf out;
-    if (v != v) { out._b[0]='N'; out._b[1]='a'; out._b[2]='N'; out._b[3]=0; return out; }
-    float inf = _symm_inf();
-    if (v == inf || v == -inf) {
-        if (v < 0) { out._b[0]='-'; out._b[1]='I'; out._b[2]='n'; out._b[3]='f'; out._b[4]=0; }
-        else       { out._b[0]='I'; out._b[1]='n'; out._b[2]='f'; out._b[3]=0; }
-        return out;
-    }
-    // Clamp decimals to [0, 20]
-    if (decimals < 0) decimals = 0;
-    if (decimals > 20) decimals = 20;
-    // Round to N decimal places
-    float multiplier = 1.f;
-    for (int i = 0; i < decimals; i++) multiplier *= 10.f;
-    float rounded = (v >= 0.f) ? floorf(v * multiplier + 0.5f) / multiplier
-                                : ceilf(v * multiplier - 0.5f) / multiplier;
-    bool neg = rounded < 0.f; if (neg) rounded = -rounded;
-    long long intPart = (long long)rounded;
-    float     fracPart = rounded - (float)intPart;
-    // Build integer part
-    int off = 0;
-    if (neg) out._b[off++] = '-';
-    char tmp[24]; int tlen = 0;
-    if (intPart == 0) { tmp[tlen++] = '0'; }
-    else { long long ip = intPart; while (ip>0) { tmp[tlen++]='0'+(int)(ip%10); ip/=10; } }
-    for (int j = tlen-1; j >= 0; j--) out._b[off++] = tmp[j];
-    if (decimals > 0) {
-        out._b[off++] = '.';
-        for (int d = 0; d < decimals && off < 510; d++) {
-            fracPart *= 10.f;
-            int dig = (int)fracPart;
-            if (dig > 9) dig = 9;
-            out._b[off++] = '0' + dig;
-            fracPart -= (float)dig;
-        }
-    }
-    out._b[off] = '\0';
-    return out;
-}
-
-// ── String.fromCharCode(n, ...) ───────────────────────────────────────────────
-__device__ _SBuf symm_str_from_char_code(int c) {
-    _SBuf out;
-    // UTF-8 encode a Unicode code point (basic BMP support)
-    int off = 0;
-    if (c < 0x80) {
-        out._b[off++] = (char)c;
-    } else if (c < 0x800) {
-        out._b[off++] = (char)(0xC0 | (c >> 6));
-        out._b[off++] = (char)(0x80 | (c & 0x3F));
-    } else {
-        out._b[off++] = (char)(0xE0 | (c >> 12));
-        out._b[off++] = (char)(0x80 | ((c >> 6) & 0x3F));
-        out._b[off++] = (char)(0x80 | (c & 0x3F));
-    }
-    out._b[off] = '\0';
-    return out;
-}
-
-// ── String.prototype.at(i) — negative index support ──────────────────────────
-__device__ char symm_str_at_char(const char* s, int i) {
-    if (!s) return '\0';
-    int len = symm_strlen(s);
-    if (i < 0) i = len + i;
-    if (i < 0 || i >= len) return '\0';
-    return s[i];
-}
-__device__ _SBuf symm_str_at(const char* s, int i) {
-    _SBuf out; out._b[0] = symm_str_at_char(s, i); out._b[1] = '\0'; return out;
-}
-
-// ── Route path parameter extraction ──────────────────────────────────────────
-// Extract the Nth URL segment (0-based) from an actual path string.
-// e.g. symm_extract_param("/users/42/posts/7", 1) → "42"
-__device__ _SBuf symm_extract_param(const char* path, int segIdx) {
-    _SBuf out; out._b[0] = '\0';
-    int seg = 0, i = 0, off = 0;
-    // Skip leading slashes
-    while (path[i] == '/') i++;
-    int start = i;
-    while (true) {
-        bool slash = (path[i] == '/' || path[i] == '\0');
-        if (slash) {
-            if (seg == segIdx) {
-                int n = i - start;
-                if (n > 510) n = 510;
-                for (int j = 0; j < n; j++) out._b[j] = path[start + j];
-                out._b[n] = '\0';
-                return out;
-            }
-            if (path[i] == '\0') break;
-            i++; while (path[i] == '/') i++;
-            seg++; start = i;
-        } else {
-            i++;
-        }
-    }
-    return out;
-}
-
-// ── Query string parameter extraction ────────────────────────────────────────
-// Extract the value of a named query param from a query string.
-// e.g. symm_extract_query("q=hello&limit=10", "limit") → "10"
-__device__ _SBuf symm_extract_query(const char* qs, const char* key) {
-    _SBuf out; out._b[0] = '\0';
-    if (!qs || !key) return out;
-    int klen = symm_strlen(key);
-    int i = 0;
-    while (qs[i]) {
-        // Match key at current position
-        bool match = true;
-        for (int j = 0; j < klen && match; j++) match = (qs[i+j] == key[j]);
-        if (match && qs[i+klen] == '=') {
-            int vstart = i + klen + 1, off = 0;
-            while (qs[vstart] && qs[vstart] != '&' && off < 511)
-                out._b[off++] = qs[vstart++];
-            out._b[off] = '\0';
-            return out;
-        }
-        // Advance to next & or end
-        while (qs[i] && qs[i] != '&') i++;
-        if (qs[i] == '&') i++;
-    }
-    return out;
-}
-
-// ── JSON.stringify — GPU-side serialisation ───────────────────────────────────
-// String values are JSON-quoted; numbers/bools/null are bare; objects → "{}".
-__device__ _SBuf symm_json_stringify(const char* s) {
-    _SBuf b; int n = 0; b._b[n++] = '"';
-    if (s) { while (*s && n < 509) { if (*s == '"') { b._b[n++]='\\'; } b._b[n++] = *s++; } }
-    b._b[n++] = '"'; b._b[n] = '\0'; return b;
-}
-__device__ _SBuf symm_json_stringify(float v)         { _SBuf b; symm_write_float(b._b, v); return b; }
-__device__ _SBuf symm_json_stringify(int v)           { _SBuf b; symm_write_int(b._b, v);   return b; }
-__device__ _SBuf symm_json_stringify(long long v)     { _SBuf b; symm_write_int(b._b, v);   return b; }
-__device__ _SBuf symm_json_stringify(bool v)          { _SBuf b; symm_write_bool(b._b, v);  return b; }
-__device__ _SBuf symm_json_stringify(decltype(nullptr)) { _SBuf b; b._b[0]='n'; b._b[1]='u'; b._b[2]='l'; b._b[3]='l'; b._b[4]=0; return b; }
-template<typename T> __device__ _SBuf symm_json_stringify(T v) {
-    // Fallback for _SBuf and other types: try implicit const char* conversion, else "{}"
-    _SBuf b; const char* s = (const char*)v; int n = 0; b._b[n++] = '"';
-    if (s) { while (*s && n < 509) { if (*s == '"') { b._b[n++]='\\'; } b._b[n++] = *s++; } }
-    b._b[n++] = '"'; b._b[n] = '\0'; return b;
-}
-// JSON.parse stub — returns the raw string (caller extracts fields with symm_body_get_*)
-__device__ const char* symm_json_parse(const char* s) { return s; }
-
-// ── Array/GpuBuffer prototype helpers ────────────────────────────────────────
-// These are templated device functions that work on stack-allocated arrays.
-// The codegen emits calls to these for common array methods.
-
-// arr.join(sep) — produces a comma-separated string of numeric elements
-template<typename T>
-__device__ _SBuf symm_arr_join(T* arr, int n, const char* sep = ",") {
-    _SBuf out; int off = 0; int sl = symm_strlen(sep);
-    for (int i = 0; i < n && off < 508; i++) {
-        if (i > 0) { for (int j = 0; j < sl && off < 508; j++) out._b[off++] = sep[j]; }
-        off += symm_write_float(out._b + off, (float)arr[i]);
-    }
-    out._b[off] = '\0'; return out;
-}
-// arr.indexOf(val) — linear search
-template<typename T, typename U>
-__device__ int symm_arr_index_of(T* arr, int n, U val) {
-    for (int i = 0; i < n; i++) if ((T)val == arr[i]) return i;
-    return -1;
-}
-// arr.includes(val)
-template<typename T, typename U>
-__device__ bool symm_arr_includes(T* arr, int n, U val) { return symm_arr_index_of(arr, n, val) >= 0; }
-
-// arr.every(fn) — returns true if fn returns true for all elements
-template<typename T, typename Fn>
-__device__ bool symm_arr_every(T* arr, int n, Fn fn) {
-    for (int i = 0; i < n; i++) if (!fn(arr[i])) return false;
-    return true;
-}
-// arr.some(fn) — returns true if fn returns true for any element
-template<typename T, typename Fn>
-__device__ bool symm_arr_some(T* arr, int n, Fn fn) {
-    for (int i = 0; i < n; i++) if (fn(arr[i])) return true;
-    return false;
-}
-// arr.find(fn) — returns first matching element, or default
-template<typename T, typename Fn>
-__device__ T symm_arr_find(T* arr, int n, Fn fn) {
-    for (int i = 0; i < n; i++) if (fn(arr[i])) return arr[i];
-    return T{};
-}
-// arr.findIndex(fn)
-template<typename T, typename Fn>
-__device__ int symm_arr_find_index(T* arr, int n, Fn fn) {
-    for (int i = 0; i < n; i++) if (fn(arr[i])) return i;
-    return -1;
-}
-// arr.fill(val, start=0, end=n)
-template<typename T, typename U>
-__device__ void symm_arr_fill(T* arr, int n, U val, int start = 0, int end = -1) {
-    if (end < 0 || end > n) end = n;
-    for (int i = start; i < end; i++) arr[i] = (T)val;
-}
-// arr.reverse() — in-place
-template<typename T>
-__device__ void symm_arr_reverse(T* arr, int n) {
-    for (int i = 0, j = n-1; i < j; i++, j--) { T t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
-}
-// arr.map(fn) — apply fn to each element, return new array (on stack, max 256 elems)
-template<typename T, typename Fn>
-__device__ T* symm_arr_map(T* arr, int n, Fn fn) {
-    // Returns pointer to thread-local static buffer — safe for read-only use
-    static __device__ T _map_buf[256];
-    int cnt = (n < 256) ? n : 256;
-    for (int i = 0; i < cnt; i++) _map_buf[i] = fn(arr[i]);
-    return _map_buf;
-}
-// arr.filter(fn) — collect elements matching predicate, return new array + count
-// Usage: int out_len; auto* out = symm_arr_filter(arr, n, fn, &out_len);
-template<typename T, typename Fn>
-__device__ T* symm_arr_filter(T* arr, int n, Fn fn) {
-    static __device__ T _flt_buf[256];
-    int cnt = 0;
-    for (int i = 0; i < n && cnt < 256; i++) if (fn(arr[i])) _flt_buf[cnt++] = arr[i];
-    return _flt_buf;
-}
-// arr.forEach(fn) — iterate without collecting result
-template<typename T, typename Fn>
-__device__ void symm_arr_for_each(T* arr, int n, Fn fn) {
-    for (int i = 0; i < n; i++) fn(arr[i]);
-}
-// Array.prototype.reduce(fn, init) — fold left over an array
-template<typename T, typename Acc, typename Fn>
-__device__ Acc symm_arr_reduce(const T* arr, int n, Fn fn, Acc init) {
-    Acc acc = init;
-    for (int i = 0; i < n; i++) acc = fn(acc, arr[i]);
-    return acc;
-}
-// Array.prototype.slice(start, end?) — copy a sub-range into a new array
-// Returns a _SBuf carrying the slice pointer + length (for numeric arrays this
-// just returns the pointer offset; for strings it builds a char buffer).
-template<typename T>
-__device__ T* symm_arr_slice(T* arr, int n, int start, int end = -1) {
-    if (start < 0) start = n + start;
-    if (start < 0) start = 0;
-    if (end < 0 || end > n) end = n;
-    if (start >= end) return arr + end;  // empty slice (caller tracks length separately)
-    return arr + start;
-}
-// Array.prototype.concat(other, otherLen) — appends other[] to arr[]; returns arr
-template<typename T>
-__device__ T* symm_arr_concat(T* arr, int* nPtr, const T* other, int otherLen) {
-    for (int i = 0; i < otherLen; i++) arr[(*nPtr)++] = other[i];
-    return arr;
-}
-// Array.prototype.flat() — no-op on typed GPU arrays (already flat)
-template<typename T>
-__device__ T* symm_arr_flat(T* arr, int) { return arr; }
-// Simple insertion sort (no stdlib on GPU)
-template<typename T>
-__device__ void symm_arr_sort(T* arr, int n) {
-    for (int i = 1; i < n; i++) {
-        T key = arr[i]; int j = i - 1;
-        while (j >= 0 && arr[j] > key) { arr[j+1] = arr[j]; j--; }
-        arr[j+1] = key;
-    }
-}
-template<typename T, typename Fn>
-__device__ void symm_arr_sort_fn(T* arr, int n, Fn cmp) {
-    for (int i = 1; i < n; i++) {
-        T key = arr[i]; int j = i - 1;
-        while (j >= 0 && cmp(arr[j], key) > 0) { arr[j+1] = arr[j]; j--; }
-        arr[j+1] = key;
-    }
-}
-
-// ── process.env — host-injected environment variable map ─────────────────────
-// Actual env var values are injected as __constant__ strings by the compiler.
-// process.env["NAME"] falls through to an empty string unless overridden.
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── process global ────────────────────────────────────────────────────────────
-// _symm_start_ms: set once by host at module load time (see NvrtcCompiler.cpp).
-__device__ uint64_t _symm_start_ms = 0;
-struct _Process {
-    struct _Env { __device__ const char* operator[](const char*) const { return ""; } } env;
-    const char* platform = "gpu";
-    int exitCode = 0;
-    __device__ void exit(int code = 0) { exitCode = code; }
-    // uptime() — seconds since server start (float, like Node.js process.uptime())
-    __device__ float  uptime()    { return (float)((_symm_now_ms - _symm_start_ms) / 1000ULL); }
-    // hrtime() — high-resolution nanoseconds since start (bigint-compatible)
-    __device__ long long hrtime() { return (long long)((_symm_now_ms - _symm_start_ms) * 1000000LL); }
-    __device__ long long hrtime_ms() { return (long long)(_symm_now_ms - _symm_start_ms); }
-} _symm_process;
-// 'process' is accessed as a global identifier in emitExpr → mapped above
-// ─────────────────────────────────────────────────────────────────────────────
-)";
 
 Codegen::Codegen(const ServerOptions& opts) : _opts(opts) {}
 
@@ -1576,7 +55,7 @@ std::string Codegen::emitShared(const Module& mod) {
     _kernelIdx = 0;
     _handlerIdx = 0;
     _tmpIdx = 0;
-    _out += PRELUDE;
+    _out += _get_prelude();
     _out += "\n";
     for (auto& stmt : mod.stmts) {
         if (!stmt) continue;
@@ -1595,10 +74,20 @@ std::string Codegen::emitShared(const Module& mod) {
                 break;
             }
             case NodeKind::Block: {
-                // Flat block (e.g. from enum expansion, array destructuring) —
+                // Flat block (e.g. from enum expansion, namespace, array destructuring) —
                 // emit each inner statement at top level
                 auto& blk = std::get<Block>(stmt->data);
                 if (blk.flat) {
+                    // Scan for Prefix_Member pattern to register flat prefixes
+                    // (enables Direction.Up → Direction_Up in emitMember)
+                    for (auto& s : blk.stmts) {
+                        if (!s || s->kind != NodeKind::ConstDecl) continue;
+                        auto& d = std::get<ConstDecl>(s->data);
+                        auto pos = d.name.find('_');
+                        if (pos != std::string::npos && pos > 0) {
+                            _flatPrefixes.insert(d.name.substr(0, pos));
+                        }
+                    }
                     for (auto& s : blk.stmts) {
                         if (!s) continue;
                         if (s->kind == NodeKind::ConstDecl) {
@@ -1625,6 +114,7 @@ std::string Codegen::emitHandlerCode(const RouteReg& route, int idx) {
     _out.clear();
     _tmpIdx = 0;
     _ctxBodyVars.clear();
+    _jsonParseVars.clear();
     emitHandler(route, idx);
     return _out;
 }
@@ -1883,6 +373,18 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                         std::string obj = emitExpr(mem.object);
                         if (obj == "ctx" && mem.prop == "json" && call.args.empty()) {
                             _ctxBodyVars.insert(d.name);
+                        }
+                    }
+                }
+
+                // Track JSON.parse() vars — property access needs symm_json_prop
+                if (d.init && d.init->kind == NodeKind::CallExpr) {
+                    auto& call = std::get<CallExpr>(d.init->data);
+                    if (call.callee && call.callee->kind == NodeKind::MemberExpr) {
+                        auto& mem = std::get<MemberExpr>(call.callee->data);
+                        std::string obj = emitExpr(mem.object);
+                        if (obj == "JSON" && mem.prop == "parse") {
+                            _jsonParseVars.insert(d.name);
                         }
                     }
                 }
@@ -2150,10 +652,18 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                     emitStmt(fo.body, depth + 1);
                     _out += ind + "}\n";
                 } else {
-                    // for (const x of arr) — indexed loop using companion _len variable
-                    _out += ind + "for (int " + idx + " = 0; " + idx + " < (int)(" + iter + "_len); " + idx + "++) {\n";
-                    _out += indent(depth+1) + "auto " + fo.varName + " = " + iter + "[" + idx + "];\n";
-                    emitStmt(fo.body, depth + 1);
+                    // for (const x of arr) — try iterator protocol first, then fall back to _len
+                    // Iterator protocol: object has __sym_iterator__() method that returns iterator with next()
+                    std::string itVar = freshTemp() + "_it";
+                    std::string resVar = freshTemp() + "_res";
+                    _out += ind + "{\n";
+                    _out += indent(depth+1) + "auto " + itVar + " = (" + iter + ").__sym_iterator__();\n";
+                    _out += indent(depth+1) + "for (;;) {\n";
+                    _out += indent(depth+2) + "auto " + resVar + " = " + itVar + ".next();\n";
+                    _out += indent(depth+2) + "if (" + resVar + ".done) break;\n";
+                    _out += indent(depth+2) + "auto " + fo.varName + " = " + resVar + ".value;\n";
+                    emitStmt(fo.body, depth + 2);
+                    _out += indent(depth+1) + "}\n";
                     _out += ind + "}\n";
                 }
             }
@@ -2189,22 +699,23 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
         }
         case NodeKind::TryCatchStmt: {
             auto& tc = std::get<TryCatchStmt>(node->data);
-            // GPU kernels can't throw C++ exceptions — model them with result codes.
+            // GPU kernels can't throw C++ exceptions — model them with Error objects.
             // Emit try body directly; catch block guarded by an error-check variable.
-            _out += ind + "{ int _err = 0;\n";
+            _out += ind + "{ Error _thrown_err; bool _err_caught = false;\n";
             _out += ind + "  // try\n";
             if (tc.tryBody && tc.tryBody->kind == NodeKind::Block)
                 emitBlock(std::get<Block>(tc.tryBody->data), depth + 1);
             if (tc.catchBody) {
-                _out += ind + "  if (_err) {\n";
+                _out += ind + "  if (_thrown_err.message != nullptr && _thrown_err.message[0] != '\\0') {\n";
+                _out += ind + "    _err_caught = true;\n";
                 if (!tc.catchParam.empty())
-                    _out += indent(depth+2) + "auto " + tc.catchParam + " = _err;\n";
+                    _out += indent(depth+2) + "Error " + tc.catchParam + " = _thrown_err;\n";
                 if (tc.catchBody->kind == NodeKind::Block)
                     emitBlock(std::get<Block>(tc.catchBody->data), depth + 2);
                 _out += ind + "  }\n";
             }
             if (tc.finallyBody) {
-                _out += ind + "  // finally\n";
+                _out += ind + "  // finally — always executes\n";
                 if (tc.finallyBody->kind == NodeKind::Block)
                     emitBlock(std::get<Block>(tc.finallyBody->data), depth + 1);
             }
@@ -2213,8 +724,9 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
         }
         case NodeKind::ThrowStmt: {
             auto& th = std::get<ThrowStmt>(node->data);
-            // GPU: set error context if available, else just note it
-            _out += ind + "{ /* throw */ _err = 1; (void)(" + emitExpr(th.expr) + "); }\n";
+            // GPU: create Error object and set it as thrown
+            std::string errExpr = emitExpr(th.expr);
+            _out += ind + "{ _thrown_err = " + errExpr + "; }\n";
             break;
         }
         case NodeKind::SwitchStmt: {
@@ -2293,6 +805,48 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
         case NodeKind::FuncDecl: {
             auto& fn = std::get<FuncDecl>(node->data);
             if (fn.name.empty()) break;  // anonymous — emitted inline as lambda
+
+            // Generator functions: emit state machine with next() method
+            if (fn.isGenerator && fn.body) {
+                // For generators, we need to implement a state machine.
+                // For now, emit a simplified generator that immediately returns done.
+                // Full implementation would split function body into state cases.
+
+                // Emit generator state machine struct
+                _out += ind + "struct " + fn.name + "_Gen {\n";
+                _out += indent(depth+1) + "int _state = 0;\n";
+                _out += indent(depth+1) + "bool _done = false;\n";
+                _out += indent(depth+1) + "float _return_val = 0;\n";
+
+                // Emit next() method — simplified state machine
+                _out += indent(depth+1) + "__device__ GeneratorResult<float> next() {\n";
+                _out += indent(depth+2) + "if (_done) return GeneratorResult<float>(_return_val, true);\n";
+                _out += indent(depth+2) + "if (_state == 0) { _state = 1; return GeneratorResult<float>(0, false); }\n";
+                _out += indent(depth+2) + "_done = true; return GeneratorResult<float>(_return_val, true);\n";
+                _out += indent(depth+1) + "}\n";
+                // return(val) — forces generator done with a value
+                _out += indent(depth+1) + "__device__ GeneratorResult<float> return_(float v = 0) {\n";
+                _out += indent(depth+2) + "_done = true; _return_val = v;\n";
+                _out += indent(depth+2) + "return GeneratorResult<float>(v, true);\n";
+                _out += indent(depth+1) + "}\n";
+                // throw(err) — marks done and propagates error
+                _out += indent(depth+1) + "template<typename E> __device__ GeneratorResult<float> throw_(E) {\n";
+                _out += indent(depth+2) + "_done = true;\n";
+                _out += indent(depth+2) + "return GeneratorResult<float>(0, true);\n";
+                _out += indent(depth+1) + "}\n";
+                _out += ind + "};\n";
+
+                // Emit factory function that returns generator
+                _out += ind + "__device__ " + fn.name + "_Gen " + fn.name + "(";
+                for (int i = 0; i < (int)fn.params.size(); i++) {
+                    if (i) _out += ", ";
+                    _out += "auto " + fn.params[i];
+                }
+                _out += ") { return " + fn.name + "_Gen{}; }\n";
+                break;
+            }
+
+            // Regular (non-generator) function
             // NVRTC rejects C++20 `auto` params and template decls inside functions
             if (!fn.params.empty() && depth == 0) {
                 _out += ind + "template<";
@@ -2308,8 +862,14 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                 _out += "_Fp" + std::to_string(i) + " " + fn.params[i];
             }
             _out += ") {\n";
-            if (fn.body && fn.body->kind == NodeKind::Block)
-                emitBlock(std::get<Block>(fn.body->data), depth + 1);
+            if (fn.body) {
+                if (fn.body->kind == NodeKind::Block) {
+                    emitBlock(std::get<Block>(fn.body->data), depth + 1);
+                } else {
+                    // Arrow function with implicit return: body is an expression
+                    _out += ind + "    return " + emitExpr(fn.body) + ";\n";
+                }
+            }
             _out += ind + "}\n";
             break;
         }
@@ -2357,6 +917,10 @@ std::string Codegen::emitExpr(const NodePtr& node) {
 
         case NodeKind::UnaryExpr: {
             auto& u = std::get<UnaryExpr>(node->data);
+            // Handle delete operator specially — return true (property deletion is a no-op on GPU)
+            if (u.op == "delete") {
+                return "(true)";  // delete always succeeds on GPU; properties are immutable
+            }
             std::string e = emitExpr(u.expr);
             if (u.postfix) {
                 // postfix ++/-- : strip the "_post" suffix
@@ -2387,6 +951,10 @@ std::string Codegen::emitExpr(const NodePtr& node) {
 
         case NodeKind::NewExpr: {
             auto& ne = std::get<NewExpr>(node->data);
+            // Function() constructor not supported on GPU — can't generate code at runtime
+            if (ne.className == "Function") {
+                return "nullptr";  // Safe no-op
+            }
             std::string args;
             for (int i = 0; i < (int)ne.args.size(); i++) {
                 if (i) args += ", ";
@@ -2427,6 +995,11 @@ std::string Codegen::emitExpr(const NodePtr& node) {
                         json += "null";
                     else if (lit.kind == Literal::Bool)
                         json += lit.raw;
+                    else if (lit.kind == Literal::BigInt) {
+                        std::string val_str = lit.raw;
+                        if (!val_str.empty() && val_str.back() == 'n') val_str.pop_back();
+                        json += val_str + "ull";
+                    }
                     else
                         json += lit.raw;
                 }
@@ -2443,6 +1016,11 @@ std::string Codegen::emitExpr(const NodePtr& node) {
                     auto& lit = std::get<Literal>(val->data);
                     if (lit.kind == Literal::Str)
                         body += "_on += symm_write_str(_ob._b + _on, \"\\\"" + lit.raw + "\\\"\"); ";
+                    else if (lit.kind == Literal::BigInt) {
+                        std::string val_str = lit.raw;
+                        if (!val_str.empty() && val_str.back() == 'n') val_str.pop_back();
+                        body += "_on += symm_json_val(_ob._b + _on, " + val_str + "ull); ";
+                    }
                     else
                         body += "_on += symm_json_val(_ob._b + _on, " + lit.raw + "); ";
                 } else {
@@ -2572,6 +1150,36 @@ std::string Codegen::emitExpr(const NodePtr& node) {
             return "(void)(" + emitExpr(ve.expr) + "), nullptr";
         }
 
+        case NodeKind::FuncDecl: {
+            // Arrow function or anonymous function in expression context
+            auto& fn = std::get<FuncDecl>(node->data);
+            std::string lambda = "[&](";
+            for (int i = 0; i < (int)fn.params.size(); i++) {
+                if (i) lambda += ", ";
+                lambda += "auto " + fn.params[i];
+            }
+            lambda += ") { ";
+            if (fn.body) {
+                if (fn.body->kind == NodeKind::Block) {
+                    // Block body: emit statements
+                    auto& blk = std::get<Block>(fn.body->data);
+                    for (auto& stmt : blk.stmts) {
+                        // Inline the statement without depth indentation
+                        std::string saved_out = _out;
+                        _out = "";
+                        emitStmt(stmt, 0);
+                        lambda += _out;
+                        _out = saved_out;
+                    }
+                } else {
+                    // Expression body: emit as return
+                    lambda += "return " + emitExpr(fn.body) + "; ";
+                }
+            }
+            lambda += "}";
+            return lambda;
+        }
+
         default:
             return "/*unsupported*/0";
     }
@@ -2581,6 +1189,11 @@ std::string Codegen::emitLiteral(const Literal& l) {
     switch (l.kind) {
         case Literal::Int:   return l.raw;
         case Literal::Float: return l.raw + "f";
+        case Literal::BigInt: {
+            std::string val = l.raw;
+            if (!val.empty() && val.back() == 'n') val.pop_back();
+            return val + "ull";
+        }
         case Literal::Str: {
             // Escape the raw string for embedding in a C++ string literal.
             // The tokenizer stores the unescaped content (e.g. a literal newline or quote).
@@ -2649,7 +1262,13 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
     }
     // JS logical operators — same in C++
     if (op == "instanceof") return "(true /*instanceof*/)";
-    if (op == "in") return "(true /*in*/)";
+    if (op == "in") {
+        // "key" in obj → obj.has(key) for Map/Set; symm_arr_includes for arrays
+        // Use .has() method which both Map and Set support; falls back to true for structs
+        std::string key = emitExpr(b.left);
+        std::string obj = emitExpr(b.right);
+        return "(" + obj + ".has(" + key + "))";
+    }
     // Unsigned right shift
     if (op == ">>>") return "((unsigned)(" + emitExpr(b.left) + ") >> " + emitExpr(b.right) + ")";
     return "(" + emitExpr(b.left) + " " + op + " " + emitExpr(b.right) + ")";
@@ -2657,6 +1276,27 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
 
 std::string Codegen::emitMember(const MemberExpr& m) {
     std::string obj = emitExpr(m.object);
+
+    // Check if obj is a JSON.parse() call or a variable holding JSON.parse() result
+    bool isJsonValue = (obj.find("symm_json_parse(") != std::string::npos);
+
+    // Check if obj is a variable assigned from JSON.parse()
+    if (!isJsonValue && m.object && m.object->kind == NodeKind::Ident) {
+        std::string varName = std::get<Ident>(m.object->data).name;
+        if (_jsonParseVars.count(varName)) {
+            isJsonValue = true;
+        }
+    }
+
+    if (isJsonValue) {
+        return "symm_json_prop(" + obj + ", \"" + m.prop + "\")";
+    }
+
+    // Enum / namespace member access: Direction.Up → Direction_Up
+    // (enum members are emitted as flat Prefix_Member constants by the parser)
+    if (_flatPrefixes.count(obj)) {
+        return obj + "_" + m.prop;
+    }
 
     // Math.X → CUDA intrinsic
     if (obj == "Math") {
@@ -2737,6 +1377,21 @@ std::string Codegen::emitMember(const MemberExpr& m) {
         if (m.prop == "create")      return "Object::create";
         return "Object::" + m.prop;
     }
+    // Symbol.* — well-known symbols
+    if (obj == "Symbol") {
+        if (m.prop == "iterator")      return "Symbol::iterator()";
+        if (m.prop == "asyncIterator") return "Symbol::asyncIterator()";
+        if (m.prop == "hasInstance")   return "Symbol::hasInstance()";
+        if (m.prop == "match")         return "Symbol::match()";
+        if (m.prop == "replace")       return "Symbol::replace()";
+        if (m.prop == "search")        return "Symbol::search()";
+        if (m.prop == "split")         return "Symbol::split()";
+        if (m.prop == "species")       return "Symbol::species()";
+        if (m.prop == "toPrimitive")   return "Symbol::toPrimitive()";
+        if (m.prop == "toStringTag")   return "Symbol::toStringTag()";
+        if (m.prop == "unscopables")   return "Symbol::unscopables()";
+        return "Symbol::" + m.prop;
+    }
     // Math.PI, Math.E, Math.LN2 etc. — map to MATH_REMAP constants
     // (already handled above, but guard for completeness)
 
@@ -2748,10 +1403,9 @@ std::string Codegen::emitMember(const MemberExpr& m) {
         // Other props (uptime, hrtime, etc.) → forward to _symm_process.prop
         return "_symm_process." + m.prop;
     }
-    // process.env["NAME"] subscript access
+    // process.env.NAME — direct property access (e.g. process.env.NODE_ENV)
     if (obj == "_symm_process.env") {
-        // Subscript access handled in emitBinary [] — return sentinel
-        return "_symm_process.env";
+        return "_symm_process.env[\"" + m.prop + "\"]";
     }
 
     // signal.aborted, signal.reason — these are struct fields
@@ -2849,6 +1503,16 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "symm_fingerprint(" + arg + ", symm_strlen(" + arg + "))";
         }
 
+        // Reflect.get(...), Reflect.set(...) — static reflection API
+        if (obj == "Reflect") {
+            std::string args;
+            for (int i = 0; i < (int)c.args.size(); i++) {
+                if (i) args += ", ";
+                args += emitExpr(c.args[i]);
+            }
+            return "Reflect::" + prop + "(" + args + ")";
+        }
+
         // Math.sin(x) etc. — callee is Math.sin, args is [x]
         if (obj == "Math") {
             auto it = MATH_REMAP.find(prop);
@@ -2861,11 +1525,22 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return fn + "(" + args + ")";
         }
 
-        // console.log/warn/error → printf (GPU side ring-buffer in production)
+        // console.log/warn/error → writes to GPU debug ring buffer
         if (obj == "console") {
             std::string args;
             for (auto& a : c.args) { if (!args.empty()) args += ", "; args += emitExpr(a); }
-            return "/* console." + prop + "(" + args + ") */";
+            if (prop == "assert") {
+                // console.assert(cond, msg?) → if (!cond) log
+                std::string cond = c.args.empty() ? "true" : emitExpr(c.args[0]);
+                std::string msg  = (c.args.size() > 1) ? emitExpr(c.args[1]) : "\"Assertion failed\"";
+                return "console.assert_(" + cond + ", " + msg + ")";
+            }
+            if (args.empty()) {
+                return "console." + prop + "()";
+            }
+            // log/warn/error with first arg only (variadic not supported on GPU)
+            std::string first = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+            return "console." + prop + "(" + first + ")";
         }
 
         // process.*() — remap 'process' identifier to '_symm_process' struct instance
@@ -2882,8 +1557,25 @@ std::string Codegen::emitCall(const CallExpr& c) {
         if (obj == "Date") {
             std::string arg0 = c.args.empty() ? "0" : emitExpr(c.args[0]);
             if (prop == "now")   return "Date::now()";
-            if (prop == "parse") return "Date::now()";  // stub — return current time
+            if (prop == "parse") return "Date::parse(" + arg0 + ")";  // ISO 8601 parser
             return "Date::" + prop + "(" + arg0 + ")";
+        }
+
+        // Date prototype instance methods — emitted as method calls on Date objects
+        // e.g. myDate.getFullYear() → myDate.getFullYear()
+        static const std::set<std::string> DATE_INSTANCE_METHODS = {
+            "getFullYear", "getMonth", "getDate", "getDay",
+            "getHours", "getMinutes", "getSeconds", "getMilliseconds",
+            "getTimezoneOffset", "getTime",
+            "toISOString", "toLocaleDateString", "toString",
+        };
+        if (DATE_INSTANCE_METHODS.count(prop)) {
+            std::string args;
+            for (int i = 0; i < (int)c.args.size(); i++) {
+                if (i) args += ", ";
+                args += emitExpr(c.args[i]);
+            }
+            return obj + "." + prop + "(" + args + ")";
         }
 
         // Array.* static methods — Array.isArray, Array.from, etc.
@@ -2937,10 +1629,27 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "Number::" + prop + "(" + arg0 + ")";
         }
 
+        // Symbol.*() — static well-known symbols
+        if (obj == "Symbol") {
+            std::string arg0 = c.args.empty() ? "" : emitExpr(c.args[0]);
+            if (prop == "iterator") return "Symbol::iterator()";
+            if (prop == "asyncIterator") return "Symbol::asyncIterator()";
+            if (prop == "for") return arg0.empty() ? "Symbol()" : "Symbol::for_(" + arg0 + ")";
+            if (prop == "keyFor") return arg0.empty() ? "nullptr" : "Symbol::keyFor(" + arg0 + ")";
+            return "Symbol::" + prop + (arg0.empty() ? "()" : "(" + arg0 + ")");
+        }
+
         // JSON.* static methods
         if (obj == "JSON") {
             std::string arg0 = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
-            if (prop == "stringify") return "symm_json_stringify(" + arg0 + ")";
+            if (prop == "stringify") {
+                // JSON.stringify(val, replacer, indent) — optional indent arg
+                if (c.args.size() >= 3) {
+                    std::string indent = emitExpr(c.args[2]);
+                    return "symm_json_stringify_indent(symm_json_stringify(" + arg0 + "), (int)(" + indent + "))";
+                }
+                return "symm_json_stringify(" + arg0 + ")";
+            }
             if (prop == "parse")     return "symm_json_parse(" + arg0 + ")";
             return arg0;  // fallback
         }
@@ -2951,6 +1660,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
             for (int i = 0; i < (int)c.args.size(); i++) {
                 if (i) callArgs += ", ";
                 callArgs += emitExpr(c.args[i]);
+            }
+            // String.raw`\n` — tagged template: first arg is strings array, rest are exprs
+            // For GPU: just concatenate the string parts (raw, no escape processing)
+            if (prop == "raw") {
+                // The strings array is args[0], the interpolated exprs are args[1..n]
+                // Simplified: just return the first element of the strings array
+                std::string stringsArg = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+                return stringsArg; // returns raw template string
             }
             if (prop == "fromCharCode")  return "symm_str_from_char_code(" + callArgs + ")";
             if (prop == "fromCodePoint") return "symm_str_from_char_code(" + callArgs + ")";
@@ -2970,16 +1687,28 @@ std::string Codegen::emitCall(const CallExpr& c) {
         // Number.prototype.toFixed(n) — format to N decimal places
         if (prop == "toFixed") {
             std::string decimals = c.args.empty() ? "0" : emitExpr(c.args[0]);
-            return "symm_number_to_fixed(" + obj + ", " + decimals + ")";
+            return "/*toFixed*/ symm_number_to_fixed(" + obj + ", " + decimals + ")";
         }
-        // Number.prototype.toString(radix?) — simplified: only supports radix 10 and 16
+        // Number.prototype.toString(radix?) — supports radix 2, 8, 10, 16
         if (prop == "toString") {
-            if (!c.args.empty() && emitExpr(c.args[0]) == "16") {
-                // Convert to hex — use GPU printf-style approach
-                return "_SBuf([&]()-> _SBuf { _SBuf _hb; int _hv=(int)(" + obj + "); int _hn=0; if(_hv==0){_hb._b[0]='0';_hb._b[1]=0;return _hb;} if(_hv<0){_hb._b[_hn++]='-';_hv=-_hv;} char _ht[16]; int _htl=0; while(_hv>0){int d=_hv&0xF; _ht[_htl++]=(d<10)?'0'+d:'a'+d-10; _hv>>=4;} for(int j=_htl-1;j>=0;j--)_hb._b[_hn++]=_ht[j]; _hb._b[_hn]=0; return _hb; }())";
+            if (!c.args.empty()) {
+                std::string radix = emitExpr(c.args[0]);
+                return "symm_number_to_string_radix((long long)(" + obj + "), " + radix + ")";
             }
-            // Default: decimal string (same as toFixed(0) for ints)
+            // Default: decimal string
             return "symm_number_to_fixed(" + obj + ", 0)";
+        }
+
+        // Number.prototype.toPrecision(digits) — format to N significant digits
+        if (prop == "toPrecision") {
+            std::string precision = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return "/*toPrecision*/ symm_number_to_precision(" + obj + ", " + precision + ")";
+        }
+
+        // Number.prototype.toExponential(digits) — format in exponential notation
+        if (prop == "toExponential") {
+            std::string digits = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return "/*toExponential*/ symm_number_to_exponential(" + obj + ", " + digits + ")";
         }
 
         // ── Number.* static methods ──────────────────────────────────────────
@@ -3025,6 +1754,12 @@ std::string Codegen::emitCall(const CallExpr& c) {
             if (prop == "hasOwn") {
                 return "(true /*Object.hasOwn*/)";
             }
+            if (prop == "is") {
+                // NaN-safe equality: Object.is(NaN, NaN) == true, Object.is(-0, +0) == false
+                std::string a = c.args.empty() ? "0" : emitExpr(c.args[0]);
+                std::string b = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
+                return "_symm_object_is(" + a + ", " + b + ")";
+            }
             if (prop == "fromEntries" || prop == "assign") {
                 return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             }
@@ -3034,6 +1769,16 @@ std::string Codegen::emitCall(const CallExpr& c) {
             if (prop == "freeze" || prop == "seal" || prop == "create") {
                 return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             }
+        }
+
+        // ── Symbol.for('key') ────────────────────────────────────────────────
+        if (obj == "Symbol" && (prop == "for" || prop == "for_")) {
+            std::string key = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+            return "Symbol::for_(" + key + ")";
+        }
+        if (obj == "Symbol" && prop == "keyFor") {
+            std::string sym = c.args.empty() ? "Symbol()" : emitExpr(c.args[0]);
+            return "Symbol::keyFor(" + sym + ")";
         }
 
         // ── encodeURIComponent / decodeURIComponent stubs ────────────────────
@@ -3121,6 +1866,10 @@ std::string Codegen::emitCall(const CallExpr& c) {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
             return "symm_arr_includes(" + obj + ", " + obj + "_len, " + val + ")";
         }
+        if (prop == "at") {
+            std::string idx = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return "symm_arr_at(" + obj + ", " + obj + "_len, " + idx + ")";
+        }
         if (prop == "find") {
             std::string fn = c.args.empty() ? "[](auto x){return false;}" : emitExpr(c.args[0]);
             return "symm_arr_find(" + obj + ", " + obj + "_len, " + fn + ")";
@@ -3128,6 +1877,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
         if (prop == "findIndex") {
             std::string fn = c.args.empty() ? "[](auto x){return false;}" : emitExpr(c.args[0]);
             return "symm_arr_find_index(" + obj + ", " + obj + "_len, " + fn + ")";
+        }
+        if (prop == "findLast") {
+            std::string fn = c.args.empty() ? "[](auto x){return false;}" : emitExpr(c.args[0]);
+            return "symm_arr_find_last(" + obj + ", " + obj + "_len, " + fn + ")";
+        }
+        if (prop == "findLastIndex") {
+            std::string fn = c.args.empty() ? "[](auto x){return false;}" : emitExpr(c.args[0]);
+            return "symm_arr_find_last_index(" + obj + ", " + obj + "_len, " + fn + ")";
         }
         if (prop == "some") {
             std::string fn = c.args.empty() ? "[](auto x){return false;}" : emitExpr(c.args[0]);
@@ -3196,6 +1953,39 @@ std::string Codegen::emitCall(const CallExpr& c) {
         if (prop == "flat" || prop == "flatMap") {
             return "symm_arr_flat(" + obj + ", " + obj + "_len)";
         }
+        if (prop == "copyWithin") {
+            std::string target = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            std::string start  = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
+            std::string end    = (c.args.size() > 2) ? emitExpr(c.args[2]) : "-1";
+            return "symm_arr_copy_within(" + obj + ", " + obj + "_len, " + target + ", " + start + ", " + end + ")";
+        }
+        if (prop == "toReversed") {
+            // non-mutating: need a temp copy — emit inline
+            return "symm_arr_to_reversed(" + obj + ", " + obj + "_len, " + obj + ")";
+        }
+        if (prop == "toSorted") {
+            std::string fn = c.args.empty() ? "" : emitExpr(c.args[0]);
+            return "symm_arr_to_sorted(" + obj + ", " + obj + "_len, " + obj + ")";
+        }
+        if (prop == "toSpliced") {
+            // simplified: same as slice + splice semantics; returns modified copy
+            std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return "symm_arr_slice(" + obj + ", " + obj + "_len, 0, " + obj + "_len)";
+        }
+        if (prop == "with") {
+            std::string idx = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            std::string val = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
+            return "(" + obj + "[" + idx + "] = " + val + ", " + obj + ")";
+        }
+        if (prop == "entries") {
+            return "symm_arr_entries(" + obj + ", " + obj + "_len)";
+        }
+        if (prop == "keys") {
+            return "symm_arr_keys(" + obj + ", " + obj + "_len)";
+        }
+        if (prop == "values") {
+            return "symm_arr_values(" + obj + ", " + obj + "_len)";
+        }
         if (prop == "pop") {
             return "(" + obj + "_len > 0 ? " + obj + "[--" + obj + "_len] : 0)";
         }
@@ -3210,6 +2000,26 @@ std::string Codegen::emitCall(const CallExpr& c) {
         if (prop == "unshift") {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
             return "(++(" + obj + "_len))";  // simplified; actual shift not safe without bounds
+        }
+
+        // ── Map / Set forEach ────────────────────────────────────────────────
+        if (prop == "forEach") {
+            std::string fn = c.args.empty() ? "[](auto v, auto k){}" : emitExpr(c.args[0]);
+            return "symm_map_for_each(" + obj + ", " + fn + ")";
+        }
+        // ── Map keys() / values() / entries() — return JSON-array string reps ─
+        if (prop == "keys")    return "symm_map_keys("    + obj + ")";
+        if (prop == "values")  return "symm_map_values("  + obj + ")";
+        if (prop == "entries") return "symm_map_entries(" + obj + ")";
+
+        // ── Generator protocol: gen.return(val) / gen.throw(err) ────────────
+        if (prop == "return" || prop == "return_") {
+            std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return obj + ".return_(" + val + ")";
+        }
+        if (prop == "throw" || prop == "throw_") {
+            std::string err = c.args.empty() ? "Error()" : emitExpr(c.args[0]);
+            return obj + ".throw_(" + err + ")";
         }
 
         // ── RegExp instance methods ──────────────────────────────────────────
@@ -3264,6 +2074,25 @@ std::string Codegen::emitCall(const CallExpr& c) {
     if (fn == "encodeURIComponent" || fn == "decodeURIComponent" ||
         fn == "encodeURI"          || fn == "decodeURI") {
         return c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+    }
+    // eval(expr) — dynamic execution not supported on GPU; return null (safe no-op)
+    if (fn == "eval") {
+        return "(static_cast<void>(0), nullptr)";
+    }
+    // BigInt(42) — cast to long long
+    if (fn == "BigInt") {
+        std::string v = c.args.empty() ? "0" : emitExpr(c.args[0]);
+        return "BigInt(" + v + ")";
+    }
+    // structuredClone — deep copy by value
+    if (fn == "structuredClone") {
+        std::string v = c.args.empty() ? "0" : emitExpr(c.args[0]);
+        return "structuredClone(" + v + ")";
+    }
+    // queueMicrotask — GPU has no event loop; call synchronously
+    if (fn == "queueMicrotask") {
+        std::string v = c.args.empty() ? "[]{}" : emitExpr(c.args[0]);
+        return "(" + v + "(), (void)0)";
     }
 
     std::string args;
@@ -3329,7 +2158,9 @@ static std::string inferMethodReturn(const ClassMethod& m, const std::string& cl
             case NodeKind::TemplateLit: return "const char*";
             case NodeKind::Literal: {
                 auto& lit = std::get<Literal>(rs.expr->data);
-                return (lit.kind == Literal::Str) ? "const char*" : "float";
+                if (lit.kind == Literal::Str) return "const char*";
+                if (lit.kind == Literal::BigInt) return "unsigned long long";
+                return "float";
             }
             case NodeKind::BinaryExpr:
             case NodeKind::CallExpr:   return "float";

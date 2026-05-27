@@ -2369,40 +2369,43 @@ static void testObjectExtended() {
 // ── console.* ─────────────────────────────────────────────────────────────────
 
 static void testConsole() {
-    std::cout << "\n=== Console (GPU no-op) ===\n";
+    std::cout << "\n=== Console (GPU debug ring buffer) ===\n";
 
-    TEST("console.log — no-op comment", {
+    TEST("console.log — writes to debug ring buffer", {
         auto src = codegen(
             "app.get('/l', (ctx) => {\n"
             "  console.log('hello');\n"
             "  ctx.json({ ok: true });\n"
             "});"
         );
-        // Should compile without errors; handler must be emitted
+        // Should emit actual console.log call, not comment
+        ASSERT_CONTAINS(src, "console.log");
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
 
-    TEST("console.error — no-op", {
+    TEST("console.error — writes to ring buffer", {
         auto src = codegen(
             "app.get('/e', (ctx) => {\n"
             "  console.error('oops');\n"
             "  ctx.json({ ok: false });\n"
             "});"
         );
+        ASSERT_CONTAINS(src, "console.error");
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
 
-    TEST("console.warn — no-op", {
+    TEST("console.warn — writes to ring buffer", {
         auto src = codegen(
             "app.get('/w', (ctx) => {\n"
             "  console.warn('warn');\n"
             "  ctx.json({ ok: true });\n"
             "});"
         );
+        ASSERT_CONTAINS(src, "console.warn");
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
 
-    TEST("console.log with variable — no-op", {
+    TEST("console.log with variable — converts and logs", {
         auto src = codegen(
             "app.get('/v', (ctx) => {\n"
             "  const n = parseInt(ctx.query.n);\n"
@@ -2410,6 +2413,7 @@ static void testConsole() {
             "  ctx.json({ n });\n"
             "});"
         );
+        ASSERT_CONTAINS(src, "console.log");
         ASSERT_CONTAINS(src, "symm_parse_int");
     });
 }
@@ -3385,6 +3389,45 @@ static void testMapSet() {
         );
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
+
+    TEST("Map key comparison by value — strcmp usage", {
+        auto src = codegen(
+            "app.get('/m', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('name', 10.0);\n"
+            "  m.set('age', 20.0);\n"
+            "  const n = m.get('name');\n"
+            "  const a = m.get('age');\n"
+            "  ctx.json({ n, a });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set key comparison by value — string equality", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('apple');\n"
+            "  s.add('banana');\n"
+            "  const has_apple = s.has('apple');\n"
+            "  ctx.json({ has_apple });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Map.has() — value key comparison", {
+        auto src = codegen(
+            "app.get('/h', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('test', 99.0);\n"
+            "  const exists = m.has('test');\n"
+            "  ctx.json({ exists });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
 }
 
 // ── JSON.parse / JSON.stringify ───────────────────────────────────────────────
@@ -3411,6 +3454,43 @@ static void testJsonParsStringify() {
             "  ctx.json({ name });\n"
             "});"
         );
+        ASSERT_CONTAINS(src, "symm_json_parse");
+    });
+
+    TEST("JSON.parse — property extraction with symm_json_prop", {
+        auto src = codegen(
+            "app.post('/jp2', (ctx) => {\n"
+            "  const obj = JSON.parse(ctx.body);\n"
+            "  const val = obj.key;\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_prop");
+        ASSERT_CONTAINS(src, "\"key\"");
+    });
+
+    TEST("JSON.parse — multiple properties", {
+        auto src = codegen(
+            "app.post('/jp3', (ctx) => {\n"
+            "  const data = JSON.parse(ctx.body);\n"
+            "  const name = data.name;\n"
+            "  const age = data.age;\n"
+            "  ctx.json({ name, age });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_prop");
+        ASSERT_CONTAINS(src, "\"name\"");
+        ASSERT_CONTAINS(src, "\"age\"");
+    });
+
+    TEST("JSON.parse — direct property access", {
+        auto src = codegen(
+            "app.post('/jp4', (ctx) => {\n"
+            "  const val = JSON.parse(ctx.body).email;\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_prop");
         ASSERT_CONTAINS(src, "symm_json_parse");
     });
 
@@ -4457,6 +4537,5765 @@ static void testObjectAssign() {
     });
 }
 
+// ── Phase 8: Numeric separators ──────────────────────────────────────────────
+
+static void testNumericSeparators2() {
+    std::cout << "\n=== Numeric Separators (Fixed) ===\n";
+
+    TEST("1_000_000 parsed correctly", {
+        auto src = codegen(
+            "const MILLION = 1_000_000;\n"
+            "app.get('/m', (ctx) => { ctx.json({ n: MILLION }); });"
+        );
+        ASSERT_CONTAINS(src, "MILLION");
+        // Numeric separators stripped: value should be 1000000
+        ASSERT_CONTAINS(src, "1000000");
+    });
+
+    TEST("1_234.567_89 float parsed", {
+        auto src = codegen(
+            "const PHI = 1_618.033;\n"
+            "app.get('/p', (ctx) => { ctx.json({ phi: PHI }); });"
+        );
+        ASSERT_CONTAINS(src, "PHI");
+    });
+
+    TEST("0xFF_FF hex with separator", {
+        auto src = codegen(
+            "const MASK = 0xFF_FF;\n"
+            "app.get('/m', (ctx) => { ctx.json({ mask: MASK }); });"
+        );
+        ASSERT_CONTAINS(src, "MASK");
+    });
+}
+
+// ── Phase 8: Private class fields ────────────────────────────────────────────
+
+static void testPrivateFields() {
+    std::cout << "\n=== Private Class Fields ===\n";
+
+    TEST("private field — emitted without #", {
+        auto src = codegen(
+            "class Counter {\n"
+            "  #count = 0;\n"
+            "  increment() { this.#count += 1; }\n"
+            "  get value() { return this.#count; }\n"
+            "}\n"
+            "app.get('/c', (ctx) => {\n"
+            "  const c = new Counter();\n"
+            "  c.increment();\n"
+            "  ctx.json({ n: c.value });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Counter");
+        ASSERT_CONTAINS(src, "count");
+    });
+
+    TEST("private method — emitted as regular method", {
+        auto src = codegen(
+            "class Validator {\n"
+            "  #validate(v) { return v > 0; }\n"
+            "  check(v) { return this.#validate(v); }\n"
+            "}\n"
+            "app.get('/v', (ctx) => {\n"
+            "  const v = new Validator();\n"
+            "  const ok = v.check(parseInt(ctx.query.n));\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Validator");
+    });
+
+    TEST("static private field — emitted", {
+        auto src = codegen(
+            "class Singleton {\n"
+            "  static #instance = null;\n"
+            "  static getInstance() { return Singleton.#instance; }\n"
+            "}\n"
+            "app.get('/s', (ctx) => {\n"
+            "  const s = Singleton.getInstance();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Singleton");
+    });
+}
+
+// ── Phase 8: Complex async/await ─────────────────────────────────────────────
+
+static void testComplexAsync() {
+    std::cout << "\n=== Complex Async/Await ===\n";
+
+    TEST("async IIFE — emitted", {
+        auto src = codegen(
+            "app.get('/ai', async (ctx) => {\n"
+            "  const result = await (async () => {\n"
+            "    return parseInt(ctx.query.n);\n"
+            "  })();\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("await in try/catch", {
+        auto src = codegen(
+            "app.get('/atc', async (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    if (n < 0) throw new RangeError('negative');\n"
+            "    ctx.json({ n });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: 'invalid' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+        ASSERT_CONTAINS(src, "400");
+    });
+
+    TEST("multiple awaits — all emitted inline", {
+        auto src = codegen(
+            "app.get('/ma', async (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a);\n"
+            "  const b = parseInt(ctx.query.b);\n"
+            "  const c = parseInt(ctx.query.c);\n"
+            "  ctx.json({ sum: a + b + c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+        ASSERT_CONTAINS(src, "sum");
+    });
+}
+
+// ── Phase 8: URL struct usage ─────────────────────────────────────────────────
+
+static void testUrlStruct() {
+    std::cout << "\n=== URL Struct ===\n";
+
+    TEST("new URL() — emitted", {
+        auto src = codegen(
+            "app.get('/url', (ctx) => {\n"
+            "  try {\n"
+            "    const u = new URL('https://example.com/path?q=1');\n"
+            "    ctx.json({ host: u.host });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: 'invalid url' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "URL");
+    });
+
+    TEST("URL properties — pathname, host, search", {
+        auto src = codegen(
+            "app.get('/props', (ctx) => {\n"
+            "  try {\n"
+            "    const u = new URL(ctx.query.url);\n"
+            "    ctx.json({ path: u.pathname, search: u.search });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: 'bad url' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Phase 8: process.env ──────────────────────────────────────────────────────
+
+static void testProcessEnv() {
+    std::cout << "\n=== process.env ===\n";
+
+    TEST("process.env.NODE_ENV — emitted", {
+        auto src = codegen(
+            "const isProduction = process.env.NODE_ENV === 'production';\n"
+            "app.get('/env', (ctx) => {\n"
+            "  ctx.json({ prod: isProduction });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "process");
+        ASSERT_CONTAINS(src, "NODE_ENV");
+    });
+
+    TEST("process.env access in handler", {
+        auto src = codegen(
+            "app.get('/secret', (ctx) => {\n"
+            "  const key = process.env.API_KEY;\n"
+            "  ctx.json({ ok: key !== undefined });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("process.uptime() — emitted", {
+        auto src = codegen(
+            "app.get('/uptime', (ctx) => {\n"
+            "  const up = process.uptime();\n"
+            "  ctx.json({ uptime: up });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_symm_start_ms");
+    });
+
+    TEST("process.pid — emitted", {
+        auto src = codegen(
+            "app.get('/pid', (ctx) => {\n"
+            "  const pid = process.pid;\n"
+            "  ctx.json({ pid });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Phase 8: Buffer / TextEncoder ────────────────────────────────────────────
+
+static void testBufferTextEncoder() {
+    std::cout << "\n=== Buffer / TextEncoder ===\n";
+
+    TEST("Buffer.from() — emitted", {
+        auto src = codegen(
+            "app.get('/buf', (ctx) => {\n"
+            "  const b = Buffer.from('hello world');\n"
+            "  ctx.json({ len: b.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Buffer");
+    });
+
+    TEST("TextEncoder encode — emitted", {
+        auto src = codegen(
+            "app.get('/te', (ctx) => {\n"
+            "  const enc = new TextEncoder();\n"
+            "  const bytes = enc.encode('hello');\n"
+            "  ctx.json({ len: bytes.byteLength });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TextEncoder");
+    });
+
+    TEST("TextDecoder decode — emitted", {
+        auto src = codegen(
+            "app.get('/td', (ctx) => {\n"
+            "  const dec = new TextDecoder();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TextDecoder");
+    });
+
+    TEST("Buffer struct — in prelude", {
+        auto src = codegen("app.get('/x', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Buffer");
+    });
+}
+
+// ── Phase 8: Nested functions ─────────────────────────────────────────────────
+
+static void testNestedFunctions() {
+    std::cout << "\n=== Nested Functions ===\n";
+
+    TEST("inner function declaration — emitted", {
+        auto src = codegen(
+            "app.get('/nf', (ctx) => {\n"
+            "  function double(x) { return x * 2; }\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  ctx.json({ result: double(n) });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "double");
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("closure over outer variable", {
+        auto src = codegen(
+            "app.get('/cl', (ctx) => {\n"
+            "  const factor = parseFloat(ctx.query.f);\n"
+            "  const multiply = (x) => x * factor;\n"
+            "  const n = parseFloat(ctx.query.n);\n"
+            "  ctx.json({ result: multiply(n) });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "factor");
+        ASSERT_CONTAINS(src, "symm_parse_float");
+    });
+
+    TEST("IIFE — emitted", {
+        auto src = codegen(
+            "app.get('/iife', (ctx) => {\n"
+            "  const result = (() => {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    return n * 2;\n"
+            "  })();\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+
+    TEST("recursive function — emitted", {
+        auto src = codegen(
+            "function factorial(n) {\n"
+            "  if (n <= 1) return 1;\n"
+            "  return n * factorial(n - 1);\n"
+            "}\n"
+            "app.get('/fact', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  ctx.json({ result: factorial(n) });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "factorial");
+        ASSERT_CONTAINS(src, "symm_parse_int");
+    });
+}
+
+// ── Phase 8: Complex string patterns ─────────────────────────────────────────
+
+static void testComplexStringPatterns() {
+    std::cout << "\n=== Complex String Patterns ===\n";
+
+    TEST("str.split + join round-trip", {
+        auto src = codegen(
+            "app.post('/csv', (ctx) => {\n"
+            "  const parts = ctx.body.split(',');\n"
+            "  const joined = parts.join('|');\n"
+            "  ctx.text(joined);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_split");
+        ASSERT_CONTAINS(src, "symm_arr_join");
+    });
+
+    TEST("str.replace with regex — emitted", {
+        auto src = codegen(
+            "app.post('/clean', (ctx) => {\n"
+            "  const clean = ctx.body.replace(/[<>]/g, '');\n"
+            "  ctx.text(clean);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("str.match — emitted", {
+        auto src = codegen(
+            "app.get('/match', (ctx) => {\n"
+            "  const q = ctx.query.q ?? '';\n"
+            "  const m = q.match(/^[a-z]+$/);\n"
+            "  ctx.json({ ok: m !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("str.charCodeAt — emitted", {
+        auto src = codegen(
+            "app.get('/char', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'A';\n"
+            "  const code = s.charCodeAt(0);\n"
+            "  ctx.json({ code });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_char_code_at");
+    });
+
+    TEST("str.normalize — graceful fallback", {
+        auto src = codegen(
+            "app.get('/norm', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const n = s.normalize();\n"
+            "  ctx.json({ s: n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Phase 8: Array advanced patterns ─────────────────────────────────────────
+
+static void testArrayAdvancedPatterns() {
+    std::cout << "\n=== Array Advanced Patterns ===\n";
+
+    TEST("Array.from with length — emitted", {
+        auto src = codegen(
+            "app.get('/af', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const arr = Array.from({ length: n }, (_, i) => i * 2);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.flatMap — emitted", {
+        auto src = codegen(
+            "app.get('/fm', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const result = arr.flatMap((x) => [x, x * 2]);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.findIndex — emitted", {
+        auto src = codegen(
+            "app.get('/fi', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  const idx = arr.findIndex((x) => x > 2);\n"
+            "  ctx.json({ idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.fill — emitted", {
+        auto src = codegen(
+            "app.get('/fill', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const arr = new Array(n).fill(0.0);\n"
+            "  ctx.json({ len: n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.sort — emitted", {
+        auto src = codegen(
+            "app.get('/sort', (ctx) => {\n"
+            "  const arr = [3.0, 1.0, 4.0, 1.0, 5.0];\n"
+            "  arr.sort();\n"
+            "  ctx.json({ first: arr[0] });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("arr.reverse — emitted", {
+        auto src = codegen(
+            "app.get('/rev', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  arr.reverse();\n"
+            "  ctx.json({ first: arr[0] });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array spread into new array", {
+        auto src = codegen(
+            "app.get('/asp', (ctx) => {\n"
+            "  const a = [1.0, 2.0];\n"
+            "  const b = [3.0, 4.0];\n"
+            "  const c = [...a, ...b];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Phase 8: Number edge cases ────────────────────────────────────────────────
+
+static void testNumberEdgeCases2() {
+    std::cout << "\n=== Number Edge Cases 2 ===\n";
+
+    TEST("Number() coercion — emitted", {
+        auto src = codegen(
+            "app.get('/nc', (ctx) => {\n"
+            "  const s = ctx.query.n ?? '0';\n"
+            "  const n = Number(s);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("parseInt radix 16 — emitted", {
+        auto src = codegen(
+            "app.get('/hex', (ctx) => {\n"
+            "  const s = ctx.query.hex ?? '0';\n"
+            "  const n = parseInt(s, 16);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int_radix");
+    });
+
+    TEST("parseInt radix 2 — binary", {
+        auto src = codegen(
+            "app.get('/bin', (ctx) => {\n"
+            "  const s = ctx.query.b ?? '0';\n"
+            "  const n = parseInt(s, 2);\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_parse_int_radix");
+    });
+
+    TEST("Number.MAX_SAFE_INTEGER — emitted", {
+        auto src = codegen(
+            "app.get('/max', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const ok = n <= Number.MAX_SAFE_INTEGER;\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "MAX_SAFE_INTEGER");
+    });
+
+    TEST("BigInt coercion — mapped to long long", {
+        auto src = codegen(
+            "app.get('/bi', (ctx) => {\n"
+            "  const n = BigInt(parseInt(ctx.query.n));\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── Phase 8: Multiple route handlers ─────────────────────────────────────────
+
+static void testMultipleRoutes() {
+    std::cout << "\n=== Multiple Route Handlers ===\n";
+
+    TEST("10 routes — all emitted", {
+        auto src = codegen(
+            "app.get('/a', (ctx) => { ctx.json({ r: 'a' }); });\n"
+            "app.get('/b', (ctx) => { ctx.json({ r: 'b' }); });\n"
+            "app.get('/c', (ctx) => { ctx.json({ r: 'c' }); });\n"
+            "app.get('/d', (ctx) => { ctx.json({ r: 'd' }); });\n"
+            "app.get('/e', (ctx) => { ctx.json({ r: 'e' }); });\n"
+            "app.post('/f', (ctx) => { ctx.json({ r: 'f' }); });\n"
+            "app.post('/g', (ctx) => { ctx.json({ r: 'g' }); });\n"
+            "app.put('/h', (ctx) => { ctx.json({ r: 'h' }); });\n"
+            "app.delete('/i', (ctx) => { ctx.json({ r: 'i' }); });\n"
+            "app.patch('/j', (ctx) => { ctx.json({ r: 'j' }); });\n"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_9");
+        ASSERT_CONTAINS(src, "symm_route_count");
+    });
+
+    TEST("handlers sharing top-level const", {
+        auto src = codegen(
+            "const BASE_URL = 'https://api.example.com';\n"
+            "const VERSION = 'v1';\n"
+            "app.get('/status', (ctx) => {\n"
+            "  ctx.json({ url: BASE_URL, version: VERSION });\n"
+            "});\n"
+            "app.get('/info', (ctx) => {\n"
+            "  ctx.json({ base: BASE_URL });\n"
+            "});\n"
+        );
+        ASSERT_CONTAINS(src, "BASE_URL");
+        ASSERT_CONTAINS(src, "VERSION");
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_1");
+    });
+
+    TEST("shared class across routes", {
+        auto src = codegen(
+            "class Timer {\n"
+            "  constructor() { this.start = Date.now(); }\n"
+            "  elapsed() { return Date.now() - this.start; }\n"
+            "}\n"
+            "app.get('/time1', (ctx) => {\n"
+            "  const t = new Timer();\n"
+            "  ctx.json({ ms: t.elapsed() });\n"
+            "});\n"
+            "app.get('/time2', (ctx) => {\n"
+            "  const t = new Timer();\n"
+            "  ctx.json({ ms: t.elapsed() });\n"
+            "});\n"
+        );
+        ASSERT_CONTAINS(src, "struct Timer");
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_1");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 9: Advanced patterns
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 9a: Computed property access and dynamic keys ────────────────────────────
+static void testComputedProps() {
+    std::cout << "\n=== Computed Properties ===\n";
+
+    TEST("obj[key] — dynamic access emitted", {
+        auto src = codegen(
+            "app.get('/cp', (ctx) => {\n"
+            "  const key = ctx.query.k ?? 'x';\n"
+            "  const obj = { x: 1.0, y: 2.0 };\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("process.env.NODE_ENV — subscript emitted", {
+        auto src = codegen(
+            "app.get('/env2', (ctx) => {\n"
+            "  const env = process.env.NODE_ENV;\n"
+            "  ctx.json({ env });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "NODE_ENV");
+        ASSERT_CONTAINS(src, "_symm_process.env");
+    });
+
+    TEST("process.env.API_KEY — subscript emitted", {
+        auto src = codegen(
+            "const API_KEY = process.env.API_KEY;\n"
+            "app.get('/key', (ctx) => {\n"
+            "  ctx.json({ ok: API_KEY !== undefined });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "API_KEY");
+    });
+
+    TEST("process.env.PORT — number env var", {
+        auto src = codegen(
+            "app.get('/port', (ctx) => {\n"
+            "  const p = parseInt(process.env.PORT ?? '8080');\n"
+            "  ctx.json({ port: p });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "PORT");
+    });
+}
+
+// ── 9b: Complex nullish coalescing chains ─────────────────────────────────────
+static void testNullishChains() {
+    std::cout << "\n=== Nullish Coalescing Chains ===\n";
+
+    TEST("a ?? b ?? c — triple nullish chain", {
+        auto src = codegen(
+            "app.get('/nc', (ctx) => {\n"
+            "  const v = ctx.query.a ?? ctx.query.b ?? 'default';\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("nullish with optional chain", {
+        auto src = codegen(
+            "app.get('/noc', (ctx) => {\n"
+            "  const s = ctx.query?.search ?? '';\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("nullish assignment ??=", {
+        auto src = codegen(
+            "app.get('/nca', (ctx) => {\n"
+            "  let x = ctx.query.x;\n"
+            "  x ??= 'fallback';\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("deeply nested nullish", {
+        auto src = codegen(
+            "const config = {\n"
+            "  timeout: 30.0\n"
+            "};\n"
+            "app.get('/cfg', (ctx) => {\n"
+            "  const t = config.timeout ?? 5.0;\n"
+            "  ctx.json({ t });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "timeout");
+    });
+}
+
+// ── 9c: Multiple assignment patterns ─────────────────────────────────────────
+static void testMultiAssign() {
+    std::cout << "\n=== Multiple Assignment Patterns ===\n";
+
+    TEST("compound += in loop", {
+        auto src = codegen(
+            "app.get('/sum', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '10');\n"
+            "  let s = 0.0;\n"
+            "  for (let i = 0; i < n; i++) s += i;\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "+=");
+    });
+
+    TEST("*= and /= — emitted", {
+        auto src = codegen(
+            "app.get('/muldiv', (ctx) => {\n"
+            "  let x = parseFloat(ctx.query.x ?? '1');\n"
+            "  x *= 2.0;\n"
+            "  x /= 3.0;\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "*=");
+        ASSERT_CONTAINS(src, "/=");
+    });
+
+    TEST("%= modulo assign", {
+        auto src = codegen(
+            "app.get('/mod', (ctx) => {\n"
+            "  let n = parseInt(ctx.query.n ?? '10');\n"
+            "  n %= 3;\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "%=");
+    });
+
+    TEST("-= subtraction assign", {
+        auto src = codegen(
+            "app.get('/sub', (ctx) => {\n"
+            "  let balance = parseFloat(ctx.query.b ?? '100');\n"
+            "  balance -= 10.5;\n"
+            "  ctx.json({ balance });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "-=");
+    });
+}
+
+// ── 9d: Nested object/array literals ─────────────────────────────────────────
+static void testNestedLiterals() {
+    std::cout << "\n=== Nested Literals ===\n";
+
+    TEST("nested object literal — emitted", {
+        auto src = codegen(
+            "app.get('/nl', (ctx) => {\n"
+            "  ctx.json({\n"
+            "    user: { name: 'Alice', age: 30 },\n"
+            "    meta: { version: 1 }\n"
+            "  });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array of numbers — emitted", {
+        auto src = codegen(
+            "app.get('/arr', (ctx) => {\n"
+            "  const nums = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  ctx.json({ count: 5 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array of strings — emitted", {
+        auto src = codegen(
+            "app.get('/strs', (ctx) => {\n"
+            "  const tags = ['alpha', 'beta', 'gamma'];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("object with array value", {
+        auto src = codegen(
+            "app.get('/oa', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '3');\n"
+            "  const items = [n * 1.0, n * 2.0, n * 3.0];\n"
+            "  ctx.json({ ok: true, count: n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── 9e: Complex try/catch/finally ────────────────────────────────────────────
+static void testTryCatchAdvanced() {
+    std::cout << "\n=== Try/Catch Advanced ===\n";
+
+    TEST("try/catch with error message", {
+        auto src = codegen(
+            "app.get('/err', (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    if (n < 0) throw new RangeError('negative');\n"
+            "    ctx.json({ n });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400).json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+        ASSERT_CONTAINS(src, "negative");
+    });
+
+    TEST("try/catch/finally — all three blocks", {
+        auto src = codegen(
+            "app.get('/tcf', (ctx) => {\n"
+            "  let done = false;\n"
+            "  try {\n"
+            "    const v = parseFloat(ctx.query.v ?? '0');\n"
+            "    ctx.json({ v });\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: true });\n"
+            "  } finally {\n"
+            "    done = true;\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "finally");
+        ASSERT_CONTAINS(src, "done");
+    });
+
+    TEST("nested try/catch", {
+        auto src = codegen(
+            "app.post('/parse', (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    try {\n"
+            "      if (n > 1000) throw new RangeError('too large');\n"
+            "      ctx.json({ n });\n"
+            "    } catch (inner) {\n"
+            "      ctx.status(422).json({ error: 'overflow' });\n"
+            "    }\n"
+            "  } catch (outer) {\n"
+            "    ctx.status(400).json({ error: 'bad input' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("throw TypeError — emitted", {
+        auto src = codegen(
+            "app.post('/validate', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  if (isNaN(n)) throw new TypeError('expected number');\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TypeError");
+        ASSERT_CONTAINS(src, "expected number");
+    });
+}
+
+// ── 9f: Class method patterns ────────────────────────────────────────────────
+static void testClassMethods() {
+    std::cout << "\n=== Class Method Patterns ===\n";
+
+    TEST("class with getter — emitted", {
+        auto src = codegen(
+            "class Vec2 {\n"
+            "  constructor(x, y) { this.x = x; this.y = y; }\n"
+            "  get length() { return Math.sqrt(this.x * this.x + this.y * this.y); }\n"
+            "  dot(other) { return this.x * other.x + this.y * other.y; }\n"
+            "}\n"
+            "app.get('/vec', (ctx) => {\n"
+            "  const v = new Vec2(3.0, 4.0);\n"
+            "  ctx.json({ len: v.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Vec2");
+        ASSERT_CONTAINS(src, "dot");
+    });
+
+    TEST("class static method — emitted", {
+        auto src = codegen(
+            "class MathHelper {\n"
+            "  static clamp(v, lo, hi) {\n"
+            "    return v < lo ? lo : (v > hi ? hi : v);\n"
+            "  }\n"
+            "}\n"
+            "app.get('/clamp', (ctx) => {\n"
+            "  const v = parseFloat(ctx.query.v ?? '0');\n"
+            "  const c = MathHelper.clamp(v, 0.0, 1.0);\n"
+            "  ctx.json({ c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct MathHelper");
+        ASSERT_CONTAINS(src, "clamp");
+    });
+
+    TEST("class with multiple methods", {
+        auto src = codegen(
+            "class Stats {\n"
+            "  constructor() { this.count = 0; this.sum = 0.0; }\n"
+            "  add(x) { this.count++; this.sum += x; }\n"
+            "  mean() { return this.count > 0 ? this.sum / this.count : 0.0; }\n"
+            "  reset() { this.count = 0; this.sum = 0.0; }\n"
+            "}\n"
+            "app.get('/stats', (ctx) => {\n"
+            "  const s = new Stats();\n"
+            "  s.add(1.0);\n"
+            "  s.add(2.0);\n"
+            "  s.add(3.0);\n"
+            "  ctx.json({ mean: s.mean() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Stats");
+        ASSERT_CONTAINS(src, "mean");
+        ASSERT_CONTAINS(src, "reset");
+    });
+
+    TEST("class fields with defaults", {
+        auto src = codegen(
+            "class Config {\n"
+            "  maxRetries = 3;\n"
+            "  timeout = 30.0;\n"
+            "  debug = false;\n"
+            "  constructor() {}\n"
+            "}\n"
+            "app.get('/cfg', (ctx) => {\n"
+            "  const c = new Config();\n"
+            "  ctx.json({ t: c.timeout });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Config");
+        ASSERT_CONTAINS(src, "maxRetries");
+    });
+}
+
+// ── 9g: Real-world API patterns ───────────────────────────────────────────────
+static void testRealWorldAPI() {
+    std::cout << "\n=== Real-World API Patterns ===\n";
+
+    TEST("pagination endpoint", {
+        auto src = codegen(
+            "app.get('/items', (ctx) => {\n"
+            "  const page = parseInt(ctx.query.page ?? '1');\n"
+            "  const limit = parseInt(ctx.query.limit ?? '20');\n"
+            "  const offset = (page - 1) * limit;\n"
+            "  ctx.json({ page, limit, offset });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "page");
+        ASSERT_CONTAINS(src, "limit");
+        ASSERT_CONTAINS(src, "offset");
+    });
+
+    TEST("auth token extraction", {
+        auto src = codegen(
+            "app.get('/secure', (ctx) => {\n"
+            "  const auth = ctx.query.token ?? '';\n"
+            "  const ok = auth.length > 0;\n"
+            "  if (!ok) {\n"
+            "    ctx.status(401).json({ error: 'unauthorized' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "unauthorized");
+        ASSERT_CONTAINS(src, "401");
+    });
+
+    TEST("rate limiter pattern", {
+        auto src = codegen(
+            "const RATE_LIMIT = 100;\n"
+            "app.get('/api', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  if (n > RATE_LIMIT) {\n"
+            "    ctx.status(429).json({ error: 'rate limit exceeded' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ ok: true, remaining: RATE_LIMIT - n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RATE_LIMIT");
+        ASSERT_CONTAINS(src, "429");
+    });
+
+    TEST("content type checking", {
+        auto src = codegen(
+            "app.post('/upload', (ctx) => {\n"
+            "  const len = ctx.body_len;\n"
+            "  if (len === 0) {\n"
+            "    ctx.status(400).json({ error: 'empty body' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ size: len });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "body_len");
+        ASSERT_CONTAINS(src, "empty body");
+    });
+
+    TEST("health check endpoint", {
+        auto src = codegen(
+            "const BUILD = 'v1.0.0';\n"
+            "const BUILT_AT = '2024-01-01';\n"
+            "app.get('/health', (ctx) => {\n"
+            "  ctx.json({\n"
+            "    status: 'ok',\n"
+            "    version: BUILD,\n"
+            "    built: BUILT_AT\n"
+            "  });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "v1.0.0");
+        ASSERT_CONTAINS(src, "BUILD");
+    });
+}
+
+// ── 9h: String concatenation and template ────────────────────────────────────
+static void testStringConcat() {
+    std::cout << "\n=== String Concatenation ===\n";
+
+    TEST("+ operator on strings", {
+        auto src = codegen(
+            "app.get('/greet', (ctx) => {\n"
+            "  const name = ctx.query.name ?? 'World';\n"
+            "  const msg = 'Hello, ' + name + '!';\n"
+            "  ctx.text(msg);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Hello, ");
+    });
+
+    TEST("template literal multi-expression", {
+        auto src = codegen(
+            "app.get('/fmt', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '0');\n"
+            "  const y = parseFloat(ctx.query.y ?? '0');\n"
+            "  ctx.json({ point: `(${x}, ${y})` });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_write");
+    });
+
+    TEST("template literal with method call", {
+        auto src = codegen(
+            "app.get('/up', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'hello';\n"
+            "  ctx.json({ upper: s.toUpperCase() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_to_upper");
+    });
+
+    TEST("concat with number", {
+        auto src = codegen(
+            "app.get('/msg', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  ctx.json({ msg: `count: ${n}` });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "count: ");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 10: Edge cases and stress tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 10a: Large number of routes ───────────────────────────────────────────────
+static void testLargeRouteSet() {
+    std::cout << "\n=== Large Route Set ===\n";
+
+    TEST("20 routes — all handlers emitted", {
+        std::string js;
+        for (int i = 0; i < 20; i++) {
+            js += "app.get('/r" + std::to_string(i) + "', (ctx) => { ctx.json({ i: " + std::to_string(i) + " }); });\n";
+        }
+        auto src = codegen(js);
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_19");
+        ASSERT_CONTAINS(src, "symm_route_count");
+    });
+
+    TEST("mixed HTTP methods", {
+        auto src = codegen(
+            "app.get('/get', (ctx) => { ctx.json({ m: 'GET' }); });\n"
+            "app.post('/post', (ctx) => { ctx.json({ m: 'POST' }); });\n"
+            "app.put('/put', (ctx) => { ctx.json({ m: 'PUT' }); });\n"
+            "app.delete('/del', (ctx) => { ctx.json({ m: 'DELETE' }); });\n"
+            "app.patch('/patch', (ctx) => { ctx.json({ m: 'PATCH' }); });\n"
+        );
+        ASSERT_CONTAINS(src, "GET");
+        ASSERT_CONTAINS(src, "POST");
+        ASSERT_CONTAINS(src, "PUT");
+        ASSERT_CONTAINS(src, "DELETE");
+        ASSERT_CONTAINS(src, "PATCH");
+    });
+
+    TEST("route with complex path — emitted", {
+        auto src = codegen(
+            "app.get('/api/v1/users/:id/profile', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "/api/v1/users/");
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── 10b: Bitwise operations ───────────────────────────────────────────────────
+static void testBitwiseOps() {
+    std::cout << "\n=== Bitwise Operations ===\n";
+
+    TEST("bitwise AND/OR/XOR — emitted", {
+        auto src = codegen(
+            "app.get('/bits', (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a ?? '0');\n"
+            "  const b = parseInt(ctx.query.b ?? '0');\n"
+            "  const andv = a & b;\n"
+            "  const orv  = a | b;\n"
+            "  const xorv = a ^ b;\n"
+            "  ctx.json({ andv, orv, xorv });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "& ");
+        ASSERT_CONTAINS(src, "| ");
+        ASSERT_CONTAINS(src, "^");
+    });
+
+    TEST("left/right shift — emitted", {
+        auto src = codegen(
+            "app.get('/shift', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '1');\n"
+            "  const l = n << 2;\n"
+            "  const r = n >> 1;\n"
+            "  const ur = n >>> 1;\n"
+            "  ctx.json({ l, r, ur });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "<<");
+        ASSERT_CONTAINS(src, ">>");
+    });
+
+    TEST("bitwise NOT — emitted", {
+        auto src = codegen(
+            "app.get('/bnot', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  const inv = ~n;\n"
+            "  ctx.json({ inv });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "~");
+    });
+
+    TEST("bitwise &= |= ^= — compound assign", {
+        auto src = codegen(
+            "app.get('/bca', (ctx) => {\n"
+            "  let flags = parseInt(ctx.query.f ?? '0');\n"
+            "  flags &= 0xFF;\n"
+            "  flags |= 0x01;\n"
+            "  flags ^= 0x02;\n"
+            "  ctx.json({ flags });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "&=");
+        ASSERT_CONTAINS(src, "|=");
+        ASSERT_CONTAINS(src, "^=");
+    });
+}
+
+// ── 10c: Control flow edge cases ─────────────────────────────────────────────
+static void testControlFlowEdge() {
+    std::cout << "\n=== Control Flow Edge Cases ===\n";
+
+    TEST("do-while loop", {
+        auto src = codegen(
+            "app.get('/dw', (ctx) => {\n"
+            "  let n = parseInt(ctx.query.n ?? '5');\n"
+            "  let s = 0.0;\n"
+            "  do {\n"
+            "    s += n;\n"
+            "    n--;\n"
+            "  } while (n > 0);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "do {");
+        ASSERT_CONTAINS(src, "while");
+    });
+
+    TEST("switch with fallthrough", {
+        auto src = codegen(
+            "app.get('/sw', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  let s = '';\n"
+            "  switch (n) {\n"
+            "    case 1:\n"
+            "    case 2:\n"
+            "      s = 'low';\n"
+            "      break;\n"
+            "    case 3:\n"
+            "      s = 'mid';\n"
+            "      break;\n"
+            "    default:\n"
+            "      s = 'high';\n"
+            "  }\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "switch");
+        ASSERT_CONTAINS(src, "case");
+        ASSERT_CONTAINS(src, "default");
+    });
+
+    TEST("while with break", {
+        auto src = codegen(
+            "app.get('/wb', (ctx) => {\n"
+            "  let i = 0;\n"
+            "  while (i < 100) {\n"
+            "    if (i * i > 50) break;\n"
+            "    i++;\n"
+            "  }\n"
+            "  ctx.json({ i });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "while");
+        ASSERT_CONTAINS(src, "break");
+    });
+
+    TEST("for with continue", {
+        auto src = codegen(
+            "app.get('/fc', (ctx) => {\n"
+            "  let sum = 0.0;\n"
+            "  for (let i = 0; i < 10; i++) {\n"
+            "    if (i % 2 === 0) continue;\n"
+            "    sum += i;\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "continue");
+    });
+}
+
+// ── 10d: Regex patterns ───────────────────────────────────────────────────────
+static void testRegexPatterns() {
+    std::cout << "\n=== Regex Patterns ===\n";
+
+    TEST("regex test() — emitted", {
+        auto src = codegen(
+            "app.post('/validate', (ctx) => {\n"
+            "  const email = ctx.query.email ?? '';\n"
+            "  const ok = /^[\\w.]+@[\\w]+\\.[a-z]{2,}$/.test(email);\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex match() — emitted", {
+        auto src = codegen(
+            "app.post('/match', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const m = s.match(/\\d+/);\n"
+            "  ctx.json({ ok: m !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex replace() — emitted", {
+        auto src = codegen(
+            "app.post('/sanitize', (ctx) => {\n"
+            "  const s = ctx.body ?? '';\n"
+            "  const clean = s.replace(/<[^>]*>/g, '');\n"
+            "  ctx.text(clean);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("named capture groups — emitted", {
+        auto src = codegen(
+            "app.get('/date', (ctx) => {\n"
+            "  const s = ctx.query.d ?? '';\n"
+            "  const m = s.match(/(?<y>\\d{4})-(?<m>\\d{2})-(?<d>\\d{2})/);\n"
+            "  ctx.json({ ok: m !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── 10e: Functional patterns ─────────────────────────────────────────────────
+static void testFunctionalPatterns() {
+    std::cout << "\n=== Functional Patterns ===\n";
+
+    TEST("map+filter pipeline", {
+        auto src = codegen(
+            "app.get('/pipeline', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '10');\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("reduce with initial value", {
+        auto src = codegen(
+            "app.get('/reduce', (ctx) => {\n"
+            "  const nums = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  const sum = nums.reduce((acc, x) => acc + x, 0.0);\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("higher-order function — callback", {
+        auto src = codegen(
+            "function applyTwice(f, x) { return f(f(x)); }\n"
+            "app.get('/ho', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n ?? '1');\n"
+            "  const result = applyTwice((x) => x * 2.0, n);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "applyTwice");
+    });
+
+    TEST("closure over outer variable", {
+        auto src = codegen(
+            "app.get('/closure', (ctx) => {\n"
+            "  const factor = parseFloat(ctx.query.f ?? '2');\n"
+            "  const scale = (x) => x * factor;\n"
+            "  const result = scale(5.0);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "factor");
+        ASSERT_CONTAINS(src, "scale");
+    });
+}
+
+// ── Advanced Generators and Iterators ──────────────────────────────────────
+static void testFullGeneratorSupport() {
+    std::cout << "\n=== Full Generator Support ===\n";
+
+    TEST("Generator with return value", {
+        auto src = codegen(
+            "function* gen() {\n"
+            "  yield 1;\n"
+            "  yield 2;\n"
+            "  return 3;\n"
+            "}\n"
+            "app.get('/genreturn', (ctx) => {\n"
+            "  const g = gen();\n"
+            "  const r1 = g.next();\n"
+            "  const r2 = g.next();\n"
+            "  const r3 = g.next();\n"
+            "  ctx.json({ done: r3.done });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "gen");
+        ASSERT_CONTAINS(src, "next");
+    });
+
+    TEST("Generator with multiple yields", {
+        auto src = codegen(
+            "function* count() {\n"
+            "  for (let i = 0; i < 5; i++) yield i;\n"
+            "}\n"
+            "app.get('/count', (ctx) => {\n"
+            "  const g = count();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "count");
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("Nested generators with yield*", {
+        auto src = codegen(
+            "function* inner() {\n"
+            "  yield 1;\n"
+            "  yield 2;\n"
+            "}\n"
+            "function* outer() {\n"
+            "  yield* inner();\n"
+            "  yield 3;\n"
+            "}\n"
+            "app.get('/nested', (ctx) => {\n"
+            "  const g = outer();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "outer");
+        ASSERT_CONTAINS(src, "inner");
+    });
+
+    TEST("Generator expression", {
+        auto src = codegen(
+            "const gen = function*() {\n"
+            "  yield 1;\n"
+            "  yield 2;\n"
+            "};\n"
+            "app.get('/genexpr', (ctx) => {\n"
+            "  const g = gen();\n"
+            "  const first = g.next();\n"
+            "  ctx.json({ value: first.value });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "gen");
+        ASSERT_CONTAINS(src, "next");
+    });
+}
+
+static void testCompleteIteratorSupport() {
+    std::cout << "\n=== Complete Iterator Protocol Support ===\n";
+
+    TEST("Custom iterator with Symbol.iterator method", {
+        auto src = codegen(
+            "const iterable = {\n"
+            "  data: [1, 2, 3],\n"
+            "  [Symbol.iterator]() {\n"
+            "    let index = 0;\n"
+            "    const self = this;\n"
+            "    return {\n"
+            "      next: () => ({ value: self.data[index], done: ++index > 3 })\n"
+            "    };\n"
+            "  }\n"
+            "};\n"
+            "app.get('/customiter', (ctx) => {\n"
+            "  const vals = [];\n"
+            "  for (const v of iterable) {\n"
+            "    vals.push(v);\n"
+            "  }\n"
+            "  ctx.json({ vals });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "iterable");
+        ASSERT_CONTAINS(src, "Symbol");
+    });
+
+    TEST("Iterator with return method", {
+        auto src = codegen(
+            "const iterable = {\n"
+            "  [Symbol.iterator]() {\n"
+            "    let count = 0;\n"
+            "    return {\n"
+            "      next: () => ({ value: count++, done: count > 3 }),\n"
+            "      return: () => ({ done: true })\n"
+            "    };\n"
+            "  }\n"
+            "};\n"
+            "app.get('/iterreturn', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "iterable");
+    });
+
+    TEST("String iterator protocol", {
+        auto src = codegen(
+            "app.get('/stringiter', (ctx) => {\n"
+            "  const str = 'hello';\n"
+            "  const chars = [];\n"
+            "  for (const ch of str) {\n"
+            "    chars.push(ch);\n"
+            "  }\n"
+            "  ctx.json({ chars });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("Array iterator protocol", {
+        auto src = codegen(
+            "app.get('/arrayiter', (ctx) => {\n"
+            "  const arr = [10, 20, 30];\n"
+            "  const doubled = [];\n"
+            "  for (const x of arr) {\n"
+            "    doubled.push(x * 2);\n"
+            "  }\n"
+            "  ctx.json({ doubled });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "arr");
+    });
+}
+
+// ── Metaprogramming Advanced Features ──────────────────────────────────────
+static void testAdvancedMetaprogramming() {
+    std::cout << "\n=== Advanced Metaprogramming ===\n";
+
+    TEST("Proxy with get trap handler", {
+        auto src = codegen(
+            "const handler = {\n"
+            "  get: (target, property) => {\n"
+            "    if (property === 'admin') return false;\n"
+            "    return target[property];\n"
+            "  }\n"
+            "};\n"
+            "const target = { admin: true, user: 'alice' };\n"
+            "const proxy = new Proxy(target, handler);\n"
+            "app.get('/proxytrap', (ctx) => {\n"
+            "  ctx.json({ admin: proxy.admin });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "handler");
+        ASSERT_CONTAINS(src, "Proxy");
+    });
+
+    TEST("Reflect.construct for class instantiation", {
+        auto src = codegen(
+            "class Point {\n"
+            "  constructor(x, y) {\n"
+            "    this.x = x;\n"
+            "    this.y = y;\n"
+            "  }\n"
+            "}\n"
+            "app.get('/reflect', (ctx) => {\n"
+            "  const p = Reflect.construct(Point, [3, 4]);\n"
+            "  ctx.json({ x: p.x, y: p.y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Reflect");
+        ASSERT_CONTAINS(src, "Point");
+    });
+
+    TEST("Reflect.apply for function invocation", {
+        auto src = codegen(
+            "function add(a, b) { return a + b; }\n"
+            "app.get('/apply', (ctx) => {\n"
+            "  const result = Reflect.apply(add, null, [5, 3]);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Reflect");
+        ASSERT_CONTAINS(src, "apply");
+    });
+
+    TEST("Object.getPrototypeOf and setPrototypeOf", {
+        auto src = codegen(
+            "const proto = { x: 1 };\n"
+            "const obj = {};\n"
+            "Object.setPrototypeOf(obj, proto);\n"
+            "const p = Object.getPrototypeOf(obj);\n"
+            "app.get('/proto', (ctx) => {\n"
+            "  ctx.json({ proto: p.x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "setPrototypeOf");
+        ASSERT_CONTAINS(src, "getPrototypeOf");
+    });
+
+    TEST("Reflect.ownKeys returns all property keys", {
+        auto src = codegen(
+            "const obj = {\n"
+            "  a: 1,\n"
+            "  b: 2,\n"
+            "  [Symbol.iterator]: () => {}\n"
+            "};\n"
+            "app.get('/keys', (ctx) => {\n"
+            "  const keys = Reflect.ownKeys(obj);\n"
+            "  ctx.json({ keys });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Reflect");
+        ASSERT_CONTAINS(src, "ownKeys");
+    });
+}
+
+static void testComprehensiveErrorHandling() {
+    std::cout << "\n=== Comprehensive Error Handling ===\n";
+
+    TEST("Multiple catch blocks with different error types", {
+        auto src = codegen(
+            "app.post('/errors', (ctx) => {\n"
+            "  try {\n"
+            "    const x = parseInt(ctx.query.val);\n"
+            "    if (x < 0) throw new RangeError('negative');\n"
+            "    if (!Number.isInteger(x)) throw new TypeError('not int');\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: e.message });\n"
+            "  } finally {\n"
+            "    console.log('done');\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+        ASSERT_CONTAINS(src, "TypeError");
+    });
+
+    TEST("Nested try-catch blocks", {
+        auto src = codegen(
+            "app.get('/nested', (ctx) => {\n"
+            "  try {\n"
+            "    try {\n"
+            "      throw new Error('inner');\n"
+            "    } catch (e) {\n"
+            "      throw new Error('wrapped: ' + e.message);\n"
+            "    }\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Error");
+        ASSERT_CONTAINS(src, "wrapped");
+    });
+
+    TEST("Custom error class inheritance", {
+        auto src = codegen(
+            "class ValidationError extends Error {\n"
+            "  constructor(msg) {\n"
+            "    super(msg);\n"
+            "    this.name = 'ValidationError';\n"
+            "  }\n"
+            "}\n"
+            "app.post('/validate', (ctx) => {\n"
+            "  try {\n"
+            "    throw new ValidationError('invalid input');\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.name, message: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ValidationError");
+        ASSERT_CONTAINS(src, "Error");
+    });
+
+    TEST("Error handling with conditional throwing", {
+        auto src = codegen(
+            "function validate(x) {\n"
+            "  if (x === null || x === undefined) throw new Error('required');\n"
+            "  if (x < 0) throw new RangeError('negative');\n"
+            "  if (typeof x !== 'number') throw new TypeError('not number');\n"
+            "  return x;\n"
+            "}\n"
+            "app.get('/strict', (ctx) => {\n"
+            "  try {\n"
+            "    const v = validate(parseInt(ctx.query.val || '-1'));\n"
+            "    ctx.json({ value: v });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "validate");
+        ASSERT_CONTAINS(src, "throw");
+    });
+}
+
+static void testAdvancedAsyncPatterns() {
+    std::cout << "\n=== Advanced Async Patterns ===\n";
+
+    TEST("Promise.all with error handling", {
+        auto src = codegen(
+            "async function fetchAll(ids) {\n"
+            "  const promises = ids.map(id => Promise.resolve({ id }));\n"
+            "  try {\n"
+            "    const results = await Promise.all(promises);\n"
+            "    return results;\n"
+            "  } catch (e) {\n"
+            "    throw new Error('failed: ' + e.message);\n"
+            "  }\n"
+            "}\n"
+            "app.post('/batch', async (ctx) => {\n"
+            "  const ids = [1, 2, 3];\n"
+            "  const results = await fetchAll(ids);\n"
+            "  ctx.json({ results });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fetchAll");
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    TEST("Promise.race for timeout", {
+        auto src = codegen(
+            "async function withTimeout(promise, ms) {\n"
+            "  const timeout = new Promise((_, reject) =>\n"
+            "    setTimeout(() => reject(new Error('timeout')), ms)\n"
+            "  );\n"
+            "  return await Promise.race([promise, timeout]);\n"
+            "}\n"
+            "app.get('/timeout', async (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "withTimeout");
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    TEST("Async function with multiple awaits", {
+        auto src = codegen(
+            "async function process() {\n"
+            "  const a = await Promise.resolve(1);\n"
+            "  const b = await Promise.resolve(2);\n"
+            "  const c = await Promise.resolve(3);\n"
+            "  return a + b + c;\n"
+            "}\n"
+            "app.get('/multi', async (ctx) => {\n"
+            "  const result = await process();\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "process");
+        ASSERT_CONTAINS(src, "Promise");
+    });
+}
+
+// ── 10f: Advanced destructuring ───────────────────────────────────────────────
+static void testAdvancedDestructuring() {
+    std::cout << "\n=== Advanced Destructuring ===\n";
+
+    TEST("nested destructuring", {
+        auto src = codegen(
+            "app.get('/nd', (ctx) => {\n"
+            "  const { a: { x, y } } = { a: { x: 1.0, y: 2.0 } };\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array destructuring with skip", {
+        auto src = codegen(
+            "app.get('/ad', (ctx) => {\n"
+            "  const [first, , third] = [1.0, 2.0, 3.0];\n"
+            "  ctx.json({ first, third });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("destructuring in for-of", {
+        auto src = codegen(
+            "class Pair { constructor(k, v) { this.k = k; this.v = v; } }\n"
+            "app.get('/pairs', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Pair");
+    });
+
+    TEST("rest in destructuring", {
+        auto src = codegen(
+            "app.get('/rest', (ctx) => {\n"
+            "  const [head, ...tail] = [1.0, 2.0, 3.0, 4.0];\n"
+            "  ctx.json({ head });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── 10g: Async patterns ───────────────────────────────────────────────────────
+static void testAsyncPatterns() {
+    std::cout << "\n=== Async Patterns ===\n";
+
+    TEST("async handler with await", {
+        auto src = codegen(
+            "app.get('/async', async (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("async function called in handler", {
+        auto src = codegen(
+            "async function fetchData(id) {\n"
+            "  return { id, value: id * 2.0 };\n"
+            "}\n"
+            "app.get('/data', async (ctx) => {\n"
+            "  const id = parseInt(ctx.query.id ?? '1');\n"
+            "  const data = await fetchData(id);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fetchData");
+    });
+
+    TEST("Promise.all pattern — emitted", {
+        auto src = codegen(
+            "app.get('/all', async (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '5');\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ── 10h: GPU-specific patterns ────────────────────────────────────────────────
+static void testGpuPatterns() {
+    std::cout << "\n=== GPU-Specific Patterns ===\n";
+
+    TEST("Math.sqrt on GPU — maps to sqrtf", {
+        auto src = codegen(
+            "app.get('/sqrt', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '4');\n"
+            "  const r = Math.sqrt(x);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sqrtf");
+    });
+
+    TEST("Math.sin/cos — maps to sinf/cosf", {
+        auto src = codegen(
+            "app.get('/trig', (ctx) => {\n"
+            "  const a = parseFloat(ctx.query.a ?? '0');\n"
+            "  const s = Math.sin(a);\n"
+            "  const c = Math.cos(a);\n"
+            "  ctx.json({ s, c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sinf");
+        ASSERT_CONTAINS(src, "cosf");
+    });
+
+    TEST("Math.pow — maps to powf", {
+        auto src = codegen(
+            "app.get('/pow', (ctx) => {\n"
+            "  const b = parseFloat(ctx.query.b ?? '2');\n"
+            "  const e = parseFloat(ctx.query.e ?? '10');\n"
+            "  const r = Math.pow(b, e);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "powf");
+    });
+
+    TEST("Math.abs — maps to fabsf", {
+        auto src = codegen(
+            "app.get('/abs', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '-1');\n"
+            "  const r = Math.abs(x);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fabsf");
+    });
+
+    TEST("Math.floor/ceil — maps to floorf/ceilf", {
+        auto src = codegen(
+            "app.get('/round', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '3.7');\n"
+            "  const fl = Math.floor(x);\n"
+            "  const ce = Math.ceil(x);\n"
+            "  ctx.json({ fl, ce });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "floorf");
+        ASSERT_CONTAINS(src, "ceilf");
+    });
+
+    TEST("Math.min/max — maps to fminf/fmaxf", {
+        auto src = codegen(
+            "app.get('/minmax', (ctx) => {\n"
+            "  const a = parseFloat(ctx.query.a ?? '0');\n"
+            "  const b = parseFloat(ctx.query.b ?? '1');\n"
+            "  const lo = Math.min(a, b);\n"
+            "  const hi = Math.max(a, b);\n"
+            "  ctx.json({ lo, hi });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fminf");
+        ASSERT_CONTAINS(src, "fmaxf");
+    });
+
+    TEST("prelude contains __device__ — NVRTC ready", {
+        auto src = codegen(
+            "app.get('/chk', (ctx) => { ctx.json({ ok: true }); });"
+        );
+        ASSERT_CONTAINS(src, "__device__");
+        ASSERT_CONTAINS(src, "__global__");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 11: Module and state management patterns
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testModulePatterns() {
+    std::cout << "\n=== Module Patterns ===\n";
+
+    TEST("top-level const shared across handlers", {
+        auto src = codegen(
+            "const CACHE_SIZE = 1000;\n"
+            "const MAX_RETRIES = 3;\n"
+            "app.get('/info', (ctx) => {\n"
+            "  ctx.json({ cache: CACHE_SIZE, retries: MAX_RETRIES });\n"
+            "});\n"
+            "app.post('/data', (ctx) => {\n"
+            "  ctx.json({ limit: CACHE_SIZE });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "CACHE_SIZE");
+        ASSERT_CONTAINS(src, "MAX_RETRIES");
+    });
+
+    TEST("function hoisting — call before definition", {
+        auto src = codegen(
+            "app.get('/sum', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '10');\n"
+            "  ctx.json({ result: sumTo(n) });\n"
+            "});\n"
+            "function sumTo(n) {\n"
+            "  let s = 0.0;\n"
+            "  for (let i = 1; i <= n; i++) s += i;\n"
+            "  return s;\n"
+            "}"
+        );
+        ASSERT_CONTAINS(src, "sumTo");
+    });
+
+    TEST("module-level helper class", {
+        auto src = codegen(
+            "class Cache {\n"
+            "  constructor() { this.size = 0; }\n"
+            "  put(k, v) { this.size++; }\n"
+            "  get(k) { return null; }\n"
+            "}\n"
+            "const cache = new Cache();\n"
+            "app.get('/cache', (ctx) => {\n"
+            "  cache.put('x', '1');\n"
+            "  ctx.json({ size: cache.size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Cache");
+        ASSERT_CONTAINS(src, "cache");
+    });
+
+    TEST("IIFE pattern — self-executing function", {
+        auto src = codegen(
+            "const result = (function() {\n"
+            "  const x = 42;\n"
+            "  return x * 2;\n"
+            "})();\n"
+            "app.get('/iife', (ctx) => {\n"
+            "  ctx.json({ r: result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "result");
+    });
+}
+
+static void testStatePatterns() {
+    std::cout << "\n=== State Patterns ===\n";
+
+    TEST("local state in closure", {
+        auto src = codegen(
+            "function makeCounter() {\n"
+            "  let count = 0;\n"
+            "  return function() { return ++count; };\n"
+            "}\n"
+            "app.get('/counter', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "makeCounter");
+    });
+
+    TEST("object with mutable state", {
+        auto src = codegen(
+            "const state = { x: 0.0, y: 0.0 };\n"
+            "app.post('/move', (ctx) => {\n"
+            "  const dx = parseFloat(ctx.query.dx ?? '0');\n"
+            "  const dy = parseFloat(ctx.query.dy ?? '0');\n"
+            "  state.x += dx;\n"
+            "  state.y += dy;\n"
+            "  ctx.json({ x: state.x, y: state.y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "state");
+        ASSERT_CONTAINS(src, "+=");
+    });
+
+    TEST("accumulator pattern", {
+        auto src = codegen(
+            "let totalRequests = 0;\n"
+            "app.use((ctx) => {\n"
+            "  totalRequests++;\n"
+            "});\n"
+            "app.get('/stats', (ctx) => {\n"
+            "  ctx.json({ total: totalRequests });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "totalRequests");
+    });
+
+    TEST("per-route state initialization", {
+        auto src = codegen(
+            "app.get('/session/:id', (ctx) => {\n"
+            "  const sessionId = ctx.query.id ?? 'unknown';\n"
+            "  const data = { id: sessionId, created: Date.now() };\n"
+            "  ctx.json(data);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sessionId");
+        ASSERT_CONTAINS(src, "Date::now");
+    });
+}
+
+static void testPerformancePatterns() {
+    std::cout << "\n=== Performance Patterns ===\n";
+
+    TEST("early return optimization", {
+        auto src = codegen(
+            "app.get('/validate', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  if (n < 0) return ctx.status(400).json({ error: 'negative' });\n"
+            "  if (n > 1000) return ctx.status(400).json({ error: 'too large' });\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("precomputed lookup table", {
+        auto src = codegen(
+            "const POWERS = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0];\n"
+            "app.get('/pow/:exp', (ctx) => {\n"
+            "  const e = parseInt(ctx.query.e ?? '0');\n"
+            "  ctx.json({ p: e >= 0 && e < 9 ? POWERS[e] : 0.0 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "POWERS");
+    });
+
+    TEST("constant folding — compile-time math", {
+        auto src = codegen(
+            "const PI = 3.14159265358979;\n"
+            "const TAU = PI * 2.0;\n"
+            "const SQRT2 = 1.41421356237;\n"
+            "app.get('/math', (ctx) => {\n"
+            "  ctx.json({ pi: PI, tau: TAU, sqrt2: SQRT2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "PI");
+        ASSERT_CONTAINS(src, "TAU");
+        ASSERT_CONTAINS(src, "SQRT2");
+    });
+
+    TEST("lazy computation in conditional", {
+        auto src = codegen(
+            "app.get('/expensive', (ctx) => {\n"
+            "  const mode = ctx.query.mode ?? 'fast';\n"
+            "  const result = mode === 'full' ? computeExpensive() : 0.0;\n"
+            "  ctx.json({ r: result });\n"
+            "});\n"
+            "function computeExpensive() { return Math.sqrt(999.0); }"
+        );
+        ASSERT_CONTAINS(src, "computeExpensive");
+    });
+}
+
+static void testErrorRecoveryPatterns() {
+    std::cout << "\n=== Error Recovery Patterns ===\n";
+
+    TEST("graceful fallback with default", {
+        auto src = codegen(
+            "app.get('/safe', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const safe = isNaN(n) ? 0 : n;\n"
+            "  ctx.json({ n: safe });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isNaN");
+    });
+
+    TEST("validation error codes", {
+        auto src = codegen(
+            "app.post('/validate', (ctx) => {\n"
+            "  const val = ctx.body;\n"
+            "  let code = 200;\n"
+            "  if (!val) code = 400;\n"
+            "  if (val.length === 0) code = 422;\n"
+            "  ctx.status(code).json({ ok: code === 200 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "400");
+        ASSERT_CONTAINS(src, "422");
+    });
+
+    TEST("exception boundary", {
+        auto src = codegen(
+            "app.get('/boundary', (ctx) => {\n"
+            "  try {\n"
+            "    const divisor = parseFloat(ctx.query.d ?? '0');\n"
+            "    if (divisor === 0) throw new Error('division by zero');\n"
+            "    ctx.json({ r: 1.0 / divisor });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400).json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "division by zero");
+    });
+
+    TEST("panic/unreachable code", {
+        auto src = codegen(
+            "function unreachable() {\n"
+            "  throw new Error('unreachable');\n"
+            "}\n"
+            "app.get('/check', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n ?? '0');\n"
+            "  if (n < 0) unreachable();\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "unreachable");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 12: Advanced language patterns and corner cases
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testAdvancedLanguagePatterns() {
+    std::cout << "\n=== Advanced Language Patterns ===\n";
+
+    TEST("ternary nesting — complex conditional", {
+        auto src = codegen(
+            "app.get('/grade', (ctx) => {\n"
+            "  const score = parseFloat(ctx.query.s ?? '0');\n"
+            "  const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : 'F';\n"
+            "  ctx.json({ grade });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("logical AND short-circuit", {
+        auto src = codegen(
+            "app.get('/and', (ctx) => {\n"
+            "  const x = parseInt(ctx.query.x ?? '0');\n"
+            "  const ok = x > 0 && x < 100 && x % 2 === 0;\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("logical OR short-circuit", {
+        auto src = codegen(
+            "app.get('/or', (ctx) => {\n"
+            "  const t = ctx.query.t ?? 'unknown';\n"
+            "  const valid = t === 'user' || t === 'admin' || t === 'guest';\n"
+            "  ctx.json({ valid });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("increment/decrement in expression", {
+        auto src = codegen(
+            "app.get('/inc', (ctx) => {\n"
+            "  let i = parseInt(ctx.query.i ?? '0');\n"
+            "  const val = i++;\n"
+            "  const val2 = ++i;\n"
+            "  ctx.json({ val, val2, i });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "++");
+    });
+
+    TEST("comparison chaining — not valid in JS but test parse", {
+        auto src = codegen(
+            "app.get('/cmp', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '0');\n"
+            "  const y = parseFloat(ctx.query.y ?? '0');\n"
+            "  const inRange = x > 0 && x < y && y < 100;\n"
+            "  ctx.json({ inRange });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testOperatorPrecedence() {
+    std::cout << "\n=== Operator Precedence ===\n";
+
+    TEST("arithmetic precedence — * before +", {
+        auto src = codegen(
+            "app.get('/prec', (ctx) => {\n"
+            "  const x = 2.0 + 3.0 * 4.0;\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("power before multiply", {
+        auto src = codegen(
+            "app.get('/pow', (ctx) => {\n"
+            "  const x = 2.0 ** 3.0 * 4.0;\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "powf");
+    });
+
+    TEST("unary minus vs binary minus", {
+        auto src = codegen(
+            "app.get('/unary', (ctx) => {\n"
+            "  const x = -5.0 - 3.0;\n"
+            "  const y = -(3.0 + 2.0);\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("bitwise precedence — & before |", {
+        auto src = codegen(
+            "app.get('/bits', (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a ?? '0');\n"
+            "  const b = parseInt(ctx.query.b ?? '0');\n"
+            "  const c = parseInt(ctx.query.c ?? '0');\n"
+            "  const r = a & b | c;\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "&");
+        ASSERT_CONTAINS(src, "|");
+    });
+
+    TEST("assignment is right-associative", {
+        auto src = codegen(
+            "app.get('/assign', (ctx) => {\n"
+            "  let a = 0, b = 0, c = 0;\n"
+            "  a = b = c = 5;\n"
+            "  ctx.json({ a, b, c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testComplexDataStructures() {
+    std::cout << "\n=== Complex Data Structures ===\n";
+
+    TEST("array of objects", {
+        auto src = codegen(
+            "app.get('/items', (ctx) => {\n"
+            "  const items = [\n"
+            "    { id: 1, name: 'item1', price: 10.0 },\n"
+            "    { id: 2, name: 'item2', price: 20.0 }\n"
+            "  ];\n"
+            "  ctx.json({ count: 2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("object with array field", {
+        auto src = codegen(
+            "app.get('/user', (ctx) => {\n"
+            "  const user = {\n"
+            "    id: 1,\n"
+            "    name: 'Alice',\n"
+            "    tags: ['admin', 'developer']\n"
+            "  };\n"
+            "  ctx.json(user);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("map with complex values", {
+        auto src = codegen(
+            "app.post('/config', (ctx) => {\n"
+            "  const config = {\n"
+            "    db: { host: 'localhost', port: 5432 },\n"
+            "    cache: { ttl: 3600, maxSize: 1000 }\n"
+            "  };\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("deeply nested structure", {
+        auto src = codegen(
+            "const data = {\n"
+            "  a: { b: { c: { d: { e: 'deep' } } } }\n"
+            "};\n"
+            "app.get('/deep', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testStringPatterns() {
+    std::cout << "\n=== String Patterns ===\n";
+
+    TEST("string escape sequences", {
+        auto src = codegen(
+            "app.get('/escape', (ctx) => {\n"
+            "  const s = 'line1\\nline2\\ttabbed';\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "line1");
+    });
+
+    TEST("unicode escape — handled as literal", {
+        auto src = codegen(
+            "app.get('/unicode', (ctx) => {\n"
+            "  const s = 'Hello \\u0041';\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("string indexing with charAt", {
+        auto src = codegen(
+            "app.get('/charAt', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'hello';\n"
+            "  const c = s.charAt(0);\n"
+            "  ctx.json({ c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_at");
+    });
+
+    TEST("string slice with defaults", {
+        auto src = codegen(
+            "app.get('/slice', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'hello';\n"
+            "  const sub = s.slice(1, 4);\n"
+            "  ctx.json({ sub });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_slice");
+    });
+
+    TEST("string includes substring", {
+        auto src = codegen(
+            "app.get('/includes', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'hello world';\n"
+            "  const ok = s.includes('world');\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_includes");
+    });
+}
+
+static void testArrayPatterns() {
+    std::cout << "\n=== Array Patterns ===\n";
+
+    TEST("array push with return value", {
+        auto src = codegen(
+            "app.post('/append', (ctx) => {\n"
+            "  const arr = [1.0, 2.0];\n"
+            "  const len = arr.push(3.0);\n"
+            "  ctx.json({ len });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array concat — should emit", {
+        auto src = codegen(
+            "app.get('/concat', (ctx) => {\n"
+            "  const a = [1.0, 2.0];\n"
+            "  const b = [3.0, 4.0];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array slice variations", {
+        auto src = codegen(
+            "app.get('/slice', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  const a = arr.slice(1);\n"
+            "  const b = arr.slice(0, 3);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_slice");
+    });
+
+    TEST("array splice — mutating slice", {
+        auto src = codegen(
+            "app.post('/splice', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  arr.splice(1, 2);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("array flat/flatMap", {
+        auto src = codegen(
+            "app.get('/flat', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testNumericPatterns() {
+    std::cout << "\n=== Numeric Patterns ===\n";
+
+    TEST("float operations with precision", {
+        auto src = codegen(
+            "app.get('/float', (ctx) => {\n"
+            "  const x = 0.1 + 0.2;\n"
+            "  const near = Math.abs(x - 0.3) < 0.0001;\n"
+            "  ctx.json({ near });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fabsf");
+    });
+
+    TEST("integer arithmetic with overflow", {
+        auto src = codegen(
+            "app.get('/int', (ctx) => {\n"
+            "  let x = parseInt(ctx.query.x ?? '2147483647');\n"
+            "  x++;\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("NaN and Infinity handling", {
+        auto src = codegen(
+            "app.get('/special', (ctx) => {\n"
+            "  const x = 0.0 / 0.0;\n"
+            "  const y = 1.0 / 0.0;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("modulo with negative numbers", {
+        auto src = codegen(
+            "app.get('/mod', (ctx) => {\n"
+            "  const a = parseInt(ctx.query.a ?? '-10');\n"
+            "  const b = parseInt(ctx.query.b ?? '3');\n"
+            "  const r = a % b;\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "%");
+    });
+
+    TEST("exponential notation", {
+        auto src = codegen(
+            "app.get('/exp', (ctx) => {\n"
+            "  const x = 1.23e-4;\n"
+            "  const y = 5.67e+2;\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 13: Integration and real-world scenarios
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testRealWorldScenarios() {
+    std::cout << "\n=== Real-World Scenarios ===\n";
+
+    TEST("REST API list endpoint with pagination", {
+        auto src = codegen(
+            "app.get('/api/users', (ctx) => {\n"
+            "  const page = parseInt(ctx.query.page ?? '1');\n"
+            "  const limit = parseInt(ctx.query.limit ?? '10');\n"
+            "  const skip = (page - 1) * limit;\n"
+            "  ctx.json({\n"
+            "    data: [],\n"
+            "    page,\n"
+            "    limit,\n"
+            "    total: 100\n"
+            "  });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "page");
+        ASSERT_CONTAINS(src, "limit");
+        ASSERT_CONTAINS(src, "skip");
+    });
+
+    TEST("REST API detail endpoint with error handling", {
+        auto src = codegen(
+            "app.get('/api/users/:id', (ctx) => {\n"
+            "  const id = parseInt(ctx.query.id ?? '-1');\n"
+            "  if (id <= 0) {\n"
+            "    ctx.status(400).json({ error: 'invalid_id' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ id, name: 'User' + id });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "invalid_id");
+    });
+
+    TEST("webhook receiver with validation", {
+        auto src = codegen(
+            "app.post('/webhook', (ctx) => {\n"
+            "  const event = ctx.query.event ?? 'unknown';\n"
+            "  const token = ctx.query.token ?? '';\n"
+            "  if (token !== 'secret123') {\n"
+            "    ctx.status(401).json({ error: 'unauthorized' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ received: event });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "secret123");
+    });
+
+    TEST("streaming data endpoint", {
+        auto src = codegen(
+            "app.get('/stream', (ctx) => {\n"
+            "  const format = ctx.query.fmt ?? 'json';\n"
+            "  if (format === 'csv') {\n"
+            "    ctx.type('text/csv').text('a,b,c\\n1,2,3');\n"
+            "  } else {\n"
+            "    ctx.json({ items: [1, 2, 3] });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "csv");
+    });
+
+    TEST("batch operation endpoint", {
+        auto src = codegen(
+            "app.post('/batch', (ctx) => {\n"
+            "  let processed = 0;\n"
+            "  let errors = 0;\n"
+            "  const n = parseInt(ctx.query.count ?? '0');\n"
+            "  for (let i = 0; i < n; i++) {\n"
+            "    if (i % 10 === 0) errors++;\n"
+            "    else processed++;\n"
+            "  }\n"
+            "  ctx.json({ processed, errors, total: n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "processed");
+        ASSERT_CONTAINS(src, "errors");
+    });
+}
+
+static void testConcurrencyPatterns() {
+    std::cout << "\n=== Concurrency Patterns ===\n";
+
+    TEST("handler scoped state isolation", {
+        auto src = codegen(
+            "app.post('/process', (ctx) => {\n"
+            "  let result = 0;\n"
+            "  const n = parseInt(ctx.query.n ?? '10');\n"
+            "  for (let i = 0; i < n; i++) {\n"
+            "    result += i;\n"
+            "  }\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "result");
+    });
+
+    TEST("read-only context fields", {
+        auto src = codegen(
+            "app.get('/info', (ctx) => {\n"
+            "  const method = ctx.method;\n"
+            "  const path = ctx.path;\n"
+            "  const query = ctx.query;\n"
+            "  ctx.json({ method, path, ok: query !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ctx->method");
+        ASSERT_CONTAINS(src, "ctx->path");
+    });
+
+    TEST("thread-safe counter access pattern", {
+        auto src = codegen(
+            "app.post('/increment', (ctx) => {\n"
+            "  const delta = parseInt(ctx.query.delta ?? '1');\n"
+            "  ctx.json({ delta });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("request isolation in parallel handlers", {
+        auto src = codegen(
+            "app.post('/task1', (ctx) => { ctx.json({ t: 1 }); });\n"
+            "app.post('/task2', (ctx) => { ctx.json({ t: 2 }); });\n"
+            "app.post('/task3', (ctx) => { ctx.json({ t: 3 }); });"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_2");
+    });
+
+    TEST("context reuse — same handler multiple calls", {
+        auto src = codegen(
+            "app.get('/mul', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '1');\n"
+            "  const y = parseFloat(ctx.query.y ?? '1');\n"
+            "  const z = parseFloat(ctx.query.z ?? '1');\n"
+            "  ctx.json({ result: x * y * z });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testMemoryAndBufferPatterns() {
+    std::cout << "\n=== Memory and Buffer Patterns ===\n";
+
+    TEST("request body buffering", {
+        auto src = codegen(
+            "app.post('/echo', (ctx) => {\n"
+            "  const len = ctx.body_len;\n"
+            "  ctx.json({ echoed_bytes: len });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "body_len");
+    });
+
+    TEST("response buffer management", {
+        auto src = codegen(
+            "app.get('/buf', (ctx) => {\n"
+            "  const size = 1024;\n"
+            "  ctx.json({ buffer_size: size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("string buffer for JSON building", {
+        auto src = codegen(
+            "app.get('/build', (ctx) => {\n"
+            "  const name = ctx.query.name ?? 'guest';\n"
+            "  const msg = 'Hello, ' + name;\n"
+            "  ctx.json({ greeting: msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("escape-safe string handling", {
+        auto src = codegen(
+            "app.post('/escape', (ctx) => {\n"
+            "  const input = ctx.body ?? '';\n"
+            "  const safe = input.replace(/[<>&\"']/g, '');\n"
+            "  ctx.json({ sanitized: safe });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("stack allocation patterns", {
+        auto src = codegen(
+            "app.get('/stack', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  const sum = arr[0] + arr[1] + arr[2];\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testInputValidationPatterns() {
+    std::cout << "\n=== Input Validation Patterns ===\n";
+
+    TEST("required parameter validation", {
+        auto src = codegen(
+            "app.post('/required', (ctx) => {\n"
+            "  const name = ctx.query.name;\n"
+            "  if (!name || name.length === 0) {\n"
+            "    ctx.status(400).json({ error: 'name required' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "name required");
+    });
+
+    TEST("type validation", {
+        auto src = codegen(
+            "app.post('/typed', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.num);\n"
+            "  if (isNaN(n)) {\n"
+            "    ctx.status(400).json({ error: 'not_a_number' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isNaN");
+    });
+
+    TEST("range validation", {
+        auto src = codegen(
+            "app.get('/range', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '0');\n"
+            "  if (x < -100 || x > 100) {\n"
+            "    ctx.status(422).json({ error: 'out_of_range' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "out_of_range");
+    });
+
+    TEST("enum/whitelist validation", {
+        auto src = codegen(
+            "app.post('/enum', (ctx) => {\n"
+            "  const mode = ctx.query.m ?? 'default';\n"
+            "  const valid = mode === 'fast' || mode === 'slow' || mode === 'default';\n"
+            "  if (!valid) {\n"
+            "    ctx.status(400).json({ error: 'invalid_mode' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ mode });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "invalid_mode");
+    });
+
+    TEST("composite validation — multi-field", {
+        auto src = codegen(
+            "app.post('/composite', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '0');\n"
+            "  const y = parseFloat(ctx.query.y ?? '0');\n"
+            "  const z = parseFloat(ctx.query.z ?? '0');\n"
+            "  if (x < 0 || y < 0 || z < 0) {\n"
+            "    ctx.status(400).json({ error: 'negative_values' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ sum: x + y + z });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "negative_values");
+    });
+}
+
+static void testOutputFormattingPatterns() {
+    std::cout << "\n=== Output Formatting Patterns ===\n";
+
+    TEST("JSON with nested structure", {
+        auto src = codegen(
+            "app.get('/nested', (ctx) => {\n"
+            "  ctx.json({\n"
+            "    status: 'ok',\n"
+            "    data: {\n"
+            "      items: [1, 2, 3],\n"
+            "      meta: { count: 3 }\n"
+            "    }\n"
+            "  });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON with array of objects", {
+        auto src = codegen(
+            "app.get('/objects', (ctx) => {\n"
+            "  ctx.json({\n"
+            "    items: [\n"
+            "      { id: 1, name: 'a' },\n"
+            "      { id: 2, name: 'b' }\n"
+            "    ]\n"
+            "  });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("plain text response", {
+        auto src = codegen(
+            "app.get('/text', (ctx) => {\n"
+            "  ctx.type('text/plain').text('Hello, World!');\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "text/plain");
+    });
+
+    TEST("CSV response", {
+        auto src = codegen(
+            "app.get('/csv', (ctx) => {\n"
+            "  ctx.type('text/csv').text('a,b,c\\n1,2,3\\n4,5,6');\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "text/csv");
+    });
+
+    TEST("custom header in response", {
+        auto src = codegen(
+            "app.get('/header', (ctx) => {\n"
+            "  ctx.header('X-Custom', 'value').json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testMathAndPhysicsPatterns() {
+    std::cout << "\n=== Math and Physics Patterns ===\n";
+
+    TEST("vector magnitude", {
+        auto src = codegen(
+            "app.get('/magnitude', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '0');\n"
+            "  const y = parseFloat(ctx.query.y ?? '0');\n"
+            "  const z = parseFloat(ctx.query.z ?? '0');\n"
+            "  const mag = Math.sqrt(x*x + y*y + z*z);\n"
+            "  ctx.json({ mag });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sqrtf");
+    });
+
+    TEST("matrix transpose element access", {
+        auto src = codegen(
+            "app.get('/transpose', (ctx) => {\n"
+            "  const m = [[1.0, 2.0], [3.0, 4.0]];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("quaternion operations — stub", {
+        auto src = codegen(
+            "class Quat { constructor(x, y, z, w) { this.x = x; this.y = y; this.z = z; this.w = w; } }\n"
+            "app.get('/quat', (ctx) => {\n"
+            "  const q = new Quat(0.0, 0.0, 0.0, 1.0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct Quat");
+    });
+
+    TEST("interpolation patterns", {
+        auto src = codegen(
+            "function lerp(a, b, t) { return a + (b - a) * t; }\n"
+            "app.get('/lerp', (ctx) => {\n"
+            "  const t = parseFloat(ctx.query.t ?? '0.5');\n"
+            "  const v = lerp(0.0, 10.0, t);\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "lerp");
+    });
+
+    TEST("statistics functions", {
+        auto src = codegen(
+            "app.post('/stats', (ctx) => {\n"
+            "  const data = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  const mean = data.reduce((a, x) => a + x, 0.0) / 5.0;\n"
+            "  ctx.json({ mean });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testGameAndGraphicsPatterns() {
+    std::cout << "\n=== Game and Graphics Patterns ===\n";
+
+    TEST("color RGB to hex conversion", {
+        auto src = codegen(
+            "function rgbToHex(r, g, b) {\n"
+            "  const ri = parseInt(r * 255);\n"
+            "  const gi = parseInt(g * 255);\n"
+            "  const bi = parseInt(b * 255);\n"
+            "  return (ri << 16) | (gi << 8) | bi;\n"
+            "}\n"
+            "app.get('/color', (ctx) => { ctx.json({ ok: true }); });"
+        );
+        ASSERT_CONTAINS(src, "rgbToHex");
+    });
+
+    TEST("collision detection — AABB overlap", {
+        auto src = codegen(
+            "function overlaps(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {\n"
+            "  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;\n"
+            "}\n"
+            "app.get('/collide', (ctx) => { ctx.json({ ok: true }); });"
+        );
+        ASSERT_CONTAINS(src, "overlaps");
+    });
+
+    TEST("sprite animation frame selection", {
+        auto src = codegen(
+            "app.get('/sprite', (ctx) => {\n"
+            "  const time = parseFloat(ctx.query.t ?? '0');\n"
+            "  const fps = 24.0;\n"
+            "  const frame = parseInt(time * fps) % 8;\n"
+            "  ctx.json({ frame });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("3D rotation — pitch/yaw/roll", {
+        auto src = codegen(
+            "app.post('/rotate', (ctx) => {\n"
+            "  const pitch = parseFloat(ctx.query.p ?? '0');\n"
+            "  const yaw = parseFloat(ctx.query.y ?? '0');\n"
+            "  const roll = parseFloat(ctx.query.r ?? '0');\n"
+            "  ctx.json({ pitch, yaw, roll });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("viewport transform", {
+        auto src = codegen(
+            "app.get('/viewport', (ctx) => {\n"
+            "  const width = parseInt(ctx.query.w ?? '800');\n"
+            "  const height = parseInt(ctx.query.h ?? '600');\n"
+            "  const aspect = width / height;\n"
+            "  ctx.json({ aspect });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 14: Exception handling and error management
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void testExceptionHandling() {
+    std::cout << "\n=== Exception Handling (Phase 14) ===\n";
+
+    TEST("try/catch with Error object", {
+        auto src = codegen(
+            "app.post('/handle', (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    if (n < 0) throw new Error('negative number');\n"
+            "    ctx.json({ n });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400).json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_thrown_err");
+        ASSERT_CONTAINS(src, "negative number");
+    });
+
+    TEST("try/catch/finally — all three blocks", {
+        auto src = codegen(
+            "app.get('/cleanup', (ctx) => {\n"
+            "  let result = 0;\n"
+            "  try {\n"
+            "    result = parseInt(ctx.query.r ?? '0');\n"
+            "    if (result === 0) throw new Error('zero');\n"
+            "  } catch (e) {\n"
+            "    result = -1;\n"
+            "  } finally {\n"
+            "    result++;\n"
+            "  }\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_thrown_err");
+        ASSERT_CONTAINS(src, "finally");
+        ASSERT_CONTAINS(src, "zero");
+    });
+
+    TEST("TypeError thrown explicitly", {
+        auto src = codegen(
+            "app.post('/type-check', (ctx) => {\n"
+            "  try {\n"
+            "    const x = ctx.query.x;\n"
+            "    if (typeof x !== 'string') throw new TypeError('must be string');\n"
+            "    ctx.json({ x });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400).json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TypeError");
+        ASSERT_CONTAINS(src, "must be string");
+    });
+
+    TEST("RangeError boundary check", {
+        auto src = codegen(
+            "app.get('/range', (ctx) => {\n"
+            "  try {\n"
+            "    const n = parseInt(ctx.query.n);\n"
+            "    if (n > 1000000) throw new RangeError('out of bounds');\n"
+            "    ctx.json({ n });\n"
+            "  } catch (err) {\n"
+            "    ctx.status(422).json({ error: err.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+        ASSERT_CONTAINS(src, "out of bounds");
+    });
+
+    TEST("nested try/catch blocks", {
+        auto src = codegen(
+            "app.post('/nested', (ctx) => {\n"
+            "  try {\n"
+            "    try {\n"
+            "      const x = parseInt(ctx.query.x);\n"
+            "      if (x === 0) throw new Error('inner error');\n"
+            "      ctx.json({ x });\n"
+            "    } catch (inner) {\n"
+            "      ctx.status(400).json({ inner: inner.message });\n"
+            "    }\n"
+            "  } catch (outer) {\n"
+            "    ctx.status(500).json({ outer: outer.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_thrown_err");
+        ASSERT_CONTAINS(src, "inner error");
+    });
+
+    TEST("finally without catch", {
+        auto src = codegen(
+            "app.get('/finally-only', (ctx) => {\n"
+            "  let count = 0;\n"
+            "  try {\n"
+            "    count = parseInt(ctx.query.c ?? '0');\n"
+            "  } finally {\n"
+            "    count++;\n"
+            "  }\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "finally");
+    });
+
+    TEST("error message preservation", {
+        auto src = codegen(
+            "app.post('/error-msg', (ctx) => {\n"
+            "  try {\n"
+            "    const val = ctx.body ?? '';\n"
+            "    if (val.length === 0) throw new Error('empty input');\n"
+            "    ctx.json({ ok: true });\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.message, code: 'EMPTY' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "empty input");
+    });
+
+    TEST("throw in conditional", {
+        auto src = codegen(
+            "app.get('/conditional-throw', (ctx) => {\n"
+            "  const mode = ctx.query.mode ?? 'safe';\n"
+            "  try {\n"
+            "    if (mode === 'strict') throw new Error('strict mode');\n"
+            "    ctx.json({ mode });\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: true });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_thrown_err");
+    });
+
+    TEST("SyntaxError for invalid format", {
+        auto src = codegen(
+            "app.post('/parse', (ctx) => {\n"
+            "  try {\n"
+            "    const data = ctx.body;\n"
+            "    if (!data.includes('{')) throw new SyntaxError('invalid JSON');\n"
+            "    ctx.json({ ok: true });\n"
+            "  } catch (e) {\n"
+            "    ctx.status(400).json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "SyntaxError");
+        ASSERT_CONTAINS(src, "invalid JSON");
+    });
+
+    TEST("error recovery pattern", {
+        auto src = codegen(
+            "app.get('/recovery', (ctx) => {\n"
+            "  let result = null;\n"
+            "  try {\n"
+            "    const x = parseInt(ctx.query.x);\n"
+            "    result = x * 2;\n"
+            "  } catch (e) {\n"
+            "    result = 0;\n"
+            "  }\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testAdvancedFeatures() {
+    std::cout << "\n=== Advanced Features (Phase 14) ===\n";
+
+    TEST("in operator — property check", {
+        auto src = codegen(
+            "app.get('/in-check', (ctx) => {\n"
+            "  const obj = { name: 'test', value: 42 };\n"
+            "  const hasName = 'name' in obj;\n"
+            "  ctx.json({ hasName });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("instanceof type checking", {
+        auto src = codegen(
+            "class Animal { constructor(n) { this.name = n; } }\n"
+            "app.get('/instanceof', (ctx) => {\n"
+            "  const a = new Animal('dog');\n"
+            "  const isAnimal = a instanceof Animal;\n"
+            "  ctx.json({ isAnimal });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "instanceof");
+    });
+
+    TEST("delete operator — property removal", {
+        auto src = codegen(
+            "app.post('/delete', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2, c: 3 };\n"
+            "  delete obj.b;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array.of() — static method", {
+        auto src = codegen(
+            "app.get('/array-of', (ctx) => {\n"
+            "  const arr = Array.of(1, 2, 3, 4, 5);\n"
+            "  ctx.json({ length: arr.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object.create() — prototype creation", {
+        auto src = codegen(
+            "app.get('/create', (ctx) => {\n"
+            "  const proto = { method: () => 42 };\n"
+            "  const obj = Object.create(proto);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array.prototype.at() — negative indexing", {
+        auto src = codegen(
+            "app.get('/at', (ctx) => {\n"
+            "  const arr = [1, 2, 3, 4, 5];\n"
+            "  const last = arr.at(-1);\n"
+            "  const secondLast = arr.at(-2);\n"
+            "  ctx.json({ last, secondLast });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array.prototype.toReversed() — immutable", {
+        auto src = codegen(
+            "app.get('/to-reversed', (ctx) => {\n"
+            "  const arr = [1, 2, 3];\n"
+            "  const rev = arr.toReversed();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("String.prototype.at() — negative index", {
+        auto src = codegen(
+            "app.get('/str-at', (ctx) => {\n"
+            "  const s = 'hello';\n"
+            "  const last = s.at(-1);\n"
+            "  ctx.json({ last });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object.freeze() — immutability", {
+        auto src = codegen(
+            "app.post('/freeze', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  const frozen = Object.freeze(obj);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "freeze");
+    });
+
+    TEST("Array.prototype.flat() — flatten nested arrays", {
+        auto src = codegen(
+            "app.get('/flatten', (ctx) => {\n"
+            "  const nested = [[1, 2], [3, 4], [5, 6]];\n"
+            "  const flat = nested.flat();\n"
+            "  ctx.json({ length: flat.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array.prototype.findLast() — search from end", {
+        auto src = codegen(
+            "app.get('/find-last', (ctx) => {\n"
+            "  const arr = [1, 2, 3, 4, 5];\n"
+            "  const last = arr.findLast((x) => x > 2);\n"
+            "  ctx.json({ last });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testNumericMethods() {
+    std::cout << "\n=== Numeric Methods (Phase 14) ===\n";
+
+    TEST("Number.isInteger() — type predicate", {
+        auto src = codegen(
+            "app.get('/is-integer', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n ?? '3.14');\n"
+            "  const isInt = Number.isInteger(n);\n"
+            "  ctx.json({ isInt });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isInteger");
+    });
+
+    TEST("Number.isNaN() — strict NaN check", {
+        auto src = codegen(
+            "app.get('/is-nan', (ctx) => {\n"
+            "  const x = parseInt(ctx.query.x);\n"
+            "  const isNaN = Number.isNaN(x);\n"
+            "  ctx.json({ isNaN });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isNaN");
+    });
+
+    TEST("Number.isFinite() — finite check", {
+        auto src = codegen(
+            "app.get('/is-finite', (ctx) => {\n"
+            "  const n = parseFloat(ctx.query.n ?? '0');\n"
+            "  const fin = Number.isFinite(n);\n"
+            "  ctx.json({ fin });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isFinite");
+    });
+
+    TEST("Number.isSafeInteger() — JS safe range", {
+        auto src = codegen(
+            "app.get('/safe-int', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n);\n"
+            "  const safe = Number.isSafeInteger(n);\n"
+            "  ctx.json({ safe });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isSafeInteger");
+    });
+
+    TEST("Number.prototype.toFixed() — decimal places", {
+        auto src = codegen(
+            "app.get('/to-fixed', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '3.14159');\n"
+            "  const fixed = x.toFixed(2);\n"
+            "  ctx.json({ fixed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toFixed");
+    });
+
+    TEST("Number.prototype.toPrecision() — significant digits", {
+        auto src = codegen(
+            "app.get('/to-precision', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '123.456');\n"
+            "  const prec = x.toPrecision(4);\n"
+            "  ctx.json({ prec });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toPrecision");
+    });
+
+    TEST("Number.prototype.toExponential() — scientific notation", {
+        auto src = codegen(
+            "app.get('/to-exp', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '1234.5');\n"
+            "  const exp = x.toExponential(2);\n"
+            "  ctx.json({ exp });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toExponential");
+    });
+
+    TEST("parseInt with radix — various bases", {
+        auto src = codegen(
+            "app.get('/parse-radix', (ctx) => {\n"
+            "  const hex = parseInt(ctx.query.h ?? 'FF', 16);\n"
+            "  const bin = parseInt(ctx.query.b ?? '101', 2);\n"
+            "  const oct = parseInt(ctx.query.o ?? '77', 8);\n"
+            "  ctx.json({ hex, bin, oct });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Math.trunc() — truncate to integer", {
+        auto src = codegen(
+            "app.get('/trunc', (ctx) => {\n"
+            "  const x = parseFloat(ctx.query.x ?? '3.99');\n"
+            "  const t = Math.trunc(x);\n"
+            "  ctx.json({ t });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "truncf");
+    });
+}
+
+static void testBigInt() {
+    std::cout << "\n=== BigInt Literals (Phase 15) ===\n";
+
+    TEST("BigInt literal — basic 123n", {
+        auto src = codegen(
+            "app.get('/big', (ctx) => {\n"
+            "  const b = 123n;\n"
+            "  ctx.json({ b: b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "123ull");
+    });
+
+    TEST("BigInt literal — large number", {
+        auto src = codegen(
+            "app.get('/large', (ctx) => {\n"
+            "  const big = 999999999999n;\n"
+            "  ctx.json({ big });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "999999999999ull");
+    });
+
+    TEST("BigInt literal — in expression", {
+        auto src = codegen(
+            "app.get('/expr', (ctx) => {\n"
+            "  const result = 100n + 50n;\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+        ASSERT_CONTAINS(src, "50ull");
+    });
+
+    TEST("BigInt literal — arithmetic operations", {
+        auto src = codegen(
+            "app.get('/math', (ctx) => {\n"
+            "  const a = 1000n;\n"
+            "  const b = 2n;\n"
+            "  const mul = a * b;\n"
+            "  ctx.json({ mul });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1000ull");
+        ASSERT_CONTAINS(src, "2ull");
+    });
+
+    TEST("BigInt literal — zero", {
+        auto src = codegen(
+            "app.get('/zero', (ctx) => {\n"
+            "  const z = 0n;\n"
+            "  ctx.json({ z });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "0ull");
+    });
+
+    TEST("BigInt literal — in array", {
+        auto src = codegen(
+            "app.get('/array', (ctx) => {\n"
+            "  const arr = [1n, 2n, 3n];\n"
+            "  ctx.json({ len: arr.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1ull");
+        ASSERT_CONTAINS(src, "2ull");
+    });
+
+    TEST("BigInt literal — in object", {
+        auto src = codegen(
+            "app.get('/obj', (ctx) => {\n"
+            "  const obj = { a: 10n, b: 20n };\n"
+            "  ctx.json(obj);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "10ull");
+        ASSERT_CONTAINS(src, "20ull");
+    });
+
+    TEST("BigInt literal — mixed with regular numbers", {
+        auto src = codegen(
+            "app.get('/mixed', (ctx) => {\n"
+            "  const int_val = 42;\n"
+            "  const big_val = 42n;\n"
+            "  ctx.json({ int_val, big_val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42");
+        ASSERT_CONTAINS(src, "42ull");
+    });
+
+    TEST("BigInt literal — bitwise operations", {
+        auto src = codegen(
+            "app.get('/bitwise', (ctx) => {\n"
+            "  const a = 5n;\n"
+            "  const b = 3n;\n"
+            "  const and = a & b;\n"
+            "  ctx.json({ and });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "5ull");
+        ASSERT_CONTAINS(src, "3ull");
+    });
+}
+
+static void testPhase15Extended() {
+    std::cout << "\n=== Phase 15 Extended Features ===\n";
+
+    TEST("Array methods — map with BigInt", {
+        auto src = codegen(
+            "app.get('/arr-big', (ctx) => {\n"
+            "  const arr = [1n, 2n, 3n];\n"
+            "  const sum = arr.length;\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1ull");
+    });
+
+    TEST("String methods — substring with BigInt index", {
+        auto src = codegen(
+            "app.get('/substr', (ctx) => {\n"
+            "  const s = 'hello';\n"
+            "  const idx = 1;\n"
+            "  const sub = s.substring(idx, 3);\n"
+            "  ctx.json({ sub });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object destructuring with BigInt", {
+        auto src = codegen(
+            "app.get('/destruct', (ctx) => {\n"
+            "  const { x, y } = { x: 10n, y: 20n };\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "10ull");
+        ASSERT_CONTAINS(src, "20ull");
+    });
+
+    TEST("Array destructuring with BigInt", {
+        auto src = codegen(
+            "app.get('/arr-destruct', (ctx) => {\n"
+            "  const [a, b, c] = [100n, 200n, 300n];\n"
+            "  ctx.json({ a, b, c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+        ASSERT_CONTAINS(src, "200ull");
+        ASSERT_CONTAINS(src, "300ull");
+    });
+
+    TEST("BigInt in conditional logic", {
+        auto src = codegen(
+            "app.get('/big-cond', (ctx) => {\n"
+            "  const threshold = 1000n;\n"
+            "  const val = 999n;\n"
+            "  const exceeds = val > threshold;\n"
+            "  ctx.json({ exceeds });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1000ull");
+        ASSERT_CONTAINS(src, "999ull");
+    });
+
+    TEST("BigInt in loop iterations", {
+        auto src = codegen(
+            "app.get('/big-loop', (ctx) => {\n"
+            "  let total = 0;\n"
+            "  const limit = 5n;\n"
+            "  for (let i = 0n; i < limit; i++) { total++; }\n"
+            "  ctx.json({ total });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "5ull");
+    });
+
+    TEST("Multiple Map instances with value keys", {
+        auto src = codegen(
+            "app.get('/maps', (ctx) => {\n"
+            "  const m1 = new Map();\n"
+            "  const m2 = new Map();\n"
+            "  m1.set('key', 10.0);\n"
+            "  m2.set('key', 20.0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set operations with duplicate value keys", {
+        auto src = codegen(
+            "app.get('/set-dup', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('value');\n"
+            "  s.add('value');\n"
+            "  s.add('other');\n"
+            "  ctx.json({ size: s.size() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Nested arrays with mixed types", {
+        auto src = codegen(
+            "app.get('/mixed-arr', (ctx) => {\n"
+            "  const mixed = [1, 2.5, 'str', true, 10n];\n"
+            "  ctx.json({ len: mixed.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Complex object with BigInt values", {
+        auto src = codegen(
+            "app.get('/complex', (ctx) => {\n"
+            "  const obj = {\n"
+            "    id: 42n,\n"
+            "    name: 'test',\n"
+            "    count: 100n,\n"
+            "    active: true\n"
+            "  };\n"
+            "  ctx.json(obj);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42ull");
+        ASSERT_CONTAINS(src, "100ull");
+    });
+}
+
+static void testPhase15LanguageFeatures() {
+    std::cout << "\n=== Phase 15 Language Features ===\n";
+
+    TEST("Ternary with BigInt", {
+        auto src = codegen(
+            "app.get('/ternary', (ctx) => {\n"
+            "  const b = true;\n"
+            "  const result = b ? 1000n : 2000n;\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1000ull");
+        ASSERT_CONTAINS(src, "2000ull");
+    });
+
+    TEST("Logical AND with BigInt expressions", {
+        auto src = codegen(
+            "app.get('/and', (ctx) => {\n"
+            "  const a = 50n;\n"
+            "  const b = 100n;\n"
+            "  const result = a && b;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "50ull");
+        ASSERT_CONTAINS(src, "100ull");
+    });
+
+    TEST("Logical OR with BigInt expressions", {
+        auto src = codegen(
+            "app.get('/or', (ctx) => {\n"
+            "  const a = 0n;\n"
+            "  const b = 500n;\n"
+            "  const result = a || b;\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "0ull");
+        ASSERT_CONTAINS(src, "500ull");
+    });
+
+    TEST("Comparison operators with BigInt", {
+        auto src = codegen(
+            "app.get('/compare', (ctx) => {\n"
+            "  const x = 100n;\n"
+            "  const y = 50n;\n"
+            "  const greater = x > y;\n"
+            "  const less = x < y;\n"
+            "  const equal = x === y;\n"
+            "  ctx.json({ greater, less, equal });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+        ASSERT_CONTAINS(src, "50ull");
+    });
+
+    TEST("Compound assignment with BigInt", {
+        auto src = codegen(
+            "app.get('/compound', (ctx) => {\n"
+            "  let total = 100n;\n"
+            "  total += 50n;\n"
+            "  total *= 2n;\n"
+            "  ctx.json({ total });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+        ASSERT_CONTAINS(src, "50ull");
+        ASSERT_CONTAINS(src, "2ull");
+    });
+
+    TEST("Unary plus and minus with BigInt", {
+        auto src = codegen(
+            "app.get('/unary', (ctx) => {\n"
+            "  const pos = +42n;\n"
+            "  const neg = -42n;\n"
+            "  ctx.json({ pos, neg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42ull");
+    });
+
+    TEST("Increment/decrement with BigInt assignment", {
+        auto src = codegen(
+            "app.get('/inc-dec', (ctx) => {\n"
+            "  let x = 10n;\n"
+            "  x++;\n"
+            "  let y = 20n;\n"
+            "  y--;\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "10ull");
+        ASSERT_CONTAINS(src, "20ull");
+    });
+
+    TEST("BigInt in ternary nested", {
+        auto src = codegen(
+            "app.get('/nested-ternary', (ctx) => {\n"
+            "  const val = 5n;\n"
+            "  const result = val > 10n ? 1000n : val > 2n ? 100n : 10n;\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "5ull");
+        ASSERT_CONTAINS(src, "10ull");
+        ASSERT_CONTAINS(src, "1000ull");
+    });
+
+    TEST("BigInt function parameters", {
+        auto src = codegen(
+            "const f = (a, b) => {\n"
+            "  return a + b;\n"
+            "};\n"
+            "app.get('/func', (ctx) => {\n"
+            "  const r = f(100n, 200n);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+        ASSERT_CONTAINS(src, "200ull");
+    });
+
+    TEST("BigInt return from arrow function", {
+        auto src = codegen(
+            "const getBigValue = () => 999999n;\n"
+            "app.get('/arrow-ret', (ctx) => {\n"
+            "  const val = getBigValue();\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "999999ull");
+    });
+}
+
+static void testPhase15MapSetExtended() {
+    std::cout << "\n=== Phase 15 Map/Set Extended ===\n";
+
+    TEST("Map with multiple set operations", {
+        auto src = codegen(
+            "app.get('/multi-set', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('a', 1.0);\n"
+            "  m.set('b', 2.0);\n"
+            "  m.set('c', 3.0);\n"
+            "  m.set('a', 10.0);\n"
+            "  const size = m.size();\n"
+            "  ctx.json({ size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set with duplicate string values", {
+        auto src = codegen(
+            "app.get('/dup-set', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('x');\n"
+            "  s.add('y');\n"
+            "  s.add('x');\n"
+            "  s.add('z');\n"
+            "  s.add('x');\n"
+            "  ctx.json({ size: s.size() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Map get non-existent key", {
+        auto src = codegen(
+            "app.get('/missing', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('exists', 42.0);\n"
+            "  const v = m.get('missing');\n"
+            "  ctx.json({ v });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set.has() with string comparison", {
+        auto src = codegen(
+            "app.get('/set-has', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('needle');\n"
+            "  const found = s.has('needle');\n"
+            "  const notFound = s.has('haystack');\n"
+            "  ctx.json({ found, notFound });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Map with identical string keys", {
+        auto src = codegen(
+            "app.get('/same-keys', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  const key1 = 'shared';\n"
+            "  const key2 = 'shared';\n"
+            "  m.set(key1, 100.0);\n"
+            "  const val = m.get(key2);\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set add and check same string", {
+        auto src = codegen(
+            "app.get('/set-same', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('test');\n"
+            "  const exists = s.has('test');\n"
+            "  ctx.json({ exists });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Map.has() called before set", {
+        auto src = codegen(
+            "app.get('/before-set', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  const before = m.has('key');\n"
+            "  m.set('key', 50.0);\n"
+            "  const after = m.has('key');\n"
+            "  ctx.json({ before, after });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set with empty add then has", {
+        auto src = codegen(
+            "app.get('/empty-check', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  const hasEmpty = s.has('anything');\n"
+            "  s.add('something');\n"
+            "  const hasAfter = s.has('something');\n"
+            "  ctx.json({ hasEmpty, hasAfter });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Map overwrite and get new value", {
+        auto src = codegen(
+            "app.get('/overwrite', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('counter', 1.0);\n"
+            "  const v1 = m.get('counter');\n"
+            "  m.set('counter', 99.0);\n"
+            "  const v2 = m.get('counter');\n"
+            "  ctx.json({ v1, v2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set multiple additions with has checks", {
+        auto src = codegen(
+            "app.get('/multi-add', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('first');\n"
+            "  const c1 = s.has('first');\n"
+            "  s.add('second');\n"
+            "  const c2 = s.has('second');\n"
+            "  ctx.json({ c1, c2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+}
+
+static void testPhase15Mixed() {
+    std::cout << "\n=== Phase 15 Mixed Scenarios ===\n";
+
+    TEST("Array containing Map instances", {
+        auto src = codegen(
+            "app.get('/arr-maps', (ctx) => {\n"
+            "  const maps = [new Map(), new Map()];\n"
+            "  ctx.json({ count: maps.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Map storing array values", {
+        auto src = codegen(
+            "app.get('/map-arrays', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('list', 10.0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Set with array iteration", {
+        auto src = codegen(
+            "app.get('/set-array', (ctx) => {\n"
+            "  const arr = ['a', 'b', 'c'];\n"
+            "  const s = new Set();\n"
+            "  for (let i = 0; i < arr.length; i++) {\n"
+            "    s.add(arr[i]);\n"
+            "  }\n"
+            "  ctx.json({ size: s.size() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("BigInt in Map values", {
+        auto src = codegen(
+            "app.get('/map-big', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('big', 1000000.0);\n"
+            "  const val = m.get('big');\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strcmp");
+    });
+
+    TEST("Array.at() with Map operations", {
+        auto src = codegen(
+            "app.get('/at-map', (ctx) => {\n"
+            "  const keys = ['a', 'b', 'c'];\n"
+            "  const m = new Map();\n"
+            "  m.set(keys[0], 10.0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Nested try-catch with BigInt", {
+        auto src = codegen(
+            "app.get('/try-big', (ctx) => {\n"
+            "  try {\n"
+            "    const b = 100n;\n"
+            "    throw new Error('test');\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+    });
+
+    TEST("Switch with BigInt cases", {
+        auto src = codegen(
+            "app.get('/switch-big', (ctx) => {\n"
+            "  const x = 2n;\n"
+            "  switch (x) {\n"
+            "    case 1n: ctx.json({ n: 1 }); break;\n"
+            "    case 2n: ctx.json({ n: 2 }); break;\n"
+            "    default: ctx.json({ n: 0 }); break;\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "2ull");
+    });
+
+    TEST("Class with BigInt property", {
+        auto src = codegen(
+            "class Counter {\n"
+            "  constructor() { this.count = 0n; }\n"
+            "}\n"
+            "app.get('/class-big', (ctx) => {\n"
+            "  const c = new Counter();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "0ull");
+    });
+
+    TEST("Template literal with BigInt", {
+        auto src = codegen(
+            "app.get('/template', (ctx) => {\n"
+            "  const b = 42n;\n"
+            "  const s = `Value: ${b}`;\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42ull");
+    });
+
+    TEST("Spread operator with BigInt array", {
+        auto src = codegen(
+            "app.get('/spread', (ctx) => {\n"
+            "  const arr1 = [1n, 2n];\n"
+            "  const arr2 = [3n, 4n];\n"
+            "  const combined = [...arr1, ...arr2];\n"
+            "  ctx.json({ len: combined.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1ull");
+    });
+}
+
+static void testPhase15Comprehensive() {
+    std::cout << "\n=== Phase 15 Comprehensive ===\n";
+
+    TEST("Numeric operations with mixed types", {
+        auto src = codegen(
+            "app.get('/mixed-ops', (ctx) => {\n"
+            "  const i = 42;\n"
+            "  const f = 3.14;\n"
+            "  const b = 1000n;\n"
+            "  ctx.json({ i, f, b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "1000ull");
+    });
+
+    TEST("String operations with different methods", {
+        auto src = codegen(
+            "app.get('/string-ops', (ctx) => {\n"
+            "  const s = 'hello world';\n"
+            "  const upper = s.toUpperCase();\n"
+            "  const lower = s.toLowerCase();\n"
+            "  const sub = s.substring(0, 5);\n"
+            "  ctx.json({ upper, lower, sub });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array operations with map filter reduce", {
+        auto src = codegen(
+            "app.get('/array-ops', (ctx) => {\n"
+            "  const arr = [1, 2, 3, 4, 5];\n"
+            "  const len = arr.length;\n"
+            "  const first = arr[0];\n"
+            "  const last = arr[4];\n"
+            "  ctx.json({ len, first, last });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object property access patterns", {
+        auto src = codegen(
+            "app.get('/obj-access', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2, c: 3 };\n"
+            "  const x = obj.a;\n"
+            "  const y = obj['b'];\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Conditional logic with multiple paths", {
+        auto src = codegen(
+            "app.get('/cond', (ctx) => {\n"
+            "  const val = parseInt(ctx.query.v ?? '5');\n"
+            "  if (val > 10) ctx.json({ result: 'big' });\n"
+            "  else if (val > 5) ctx.json({ result: 'medium' });\n"
+            "  else ctx.json({ result: 'small' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Loop with accumulator pattern", {
+        auto src = codegen(
+            "app.get('/loop', (ctx) => {\n"
+            "  let sum = 0;\n"
+            "  for (let i = 0; i < 10; i++) {\n"
+            "    sum += i;\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Function composition patterns", {
+        auto src = codegen(
+            "const add = (a, b) => a + b;\n"
+            "const mul = (a, b) => a * b;\n"
+            "app.get('/compose', (ctx) => {\n"
+            "  const r1 = add(2, 3);\n"
+            "  const r2 = mul(r1, 4);\n"
+            "  ctx.json({ r2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Promise/async pattern simulation", {
+        auto src = codegen(
+            "app.get('/async', async (ctx) => {\n"
+            "  const val = 42;\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Error handling in nested blocks", {
+        auto src = codegen(
+            "app.post('/error-nested', (ctx) => {\n"
+            "  try {\n"
+            "    const val = parseInt(ctx.body ?? '0');\n"
+            "    if (val < 0) throw new Error('negative');\n"
+            "    ctx.json({ val });\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.message });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Complex request/response handling", {
+        auto src = codegen(
+            "app.post('/complex-req', (ctx) => {\n"
+            "  const method = ctx.method;\n"
+            "  const path = ctx.path;\n"
+            "  const query = ctx.query;\n"
+            "  const body = ctx.body;\n"
+            "  ctx.json({ method, path, ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ctx->method");
+    });
+
+    TEST("Chained method calls", {
+        auto src = codegen(
+            "app.get('/chain', (ctx) => {\n"
+            "  const s = 'hello world';\n"
+            "  const result = s.toUpperCase().replace('O', '0').substring(0, 3);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Type checking with typeof", {
+        auto src = codegen(
+            "app.get('/typeof', (ctx) => {\n"
+            "  const str = 'test';\n"
+            "  const num = 42;\n"
+            "  const bool = true;\n"
+            "  const t1 = typeof str;\n"
+            "  const t2 = typeof num;\n"
+            "  const t3 = typeof bool;\n"
+            "  ctx.json({ t1, t2, t3 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object.keys and object iteration", {
+        auto src = codegen(
+            "app.get('/keys', (ctx) => {\n"
+            "  const obj = { x: 1, y: 2, z: 3 };\n"
+            "  let sum = 0;\n"
+            "  for (const key in obj) {\n"
+            "    sum += obj[key];\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array destructuring in loops", {
+        auto src = codegen(
+            "app.get('/destruct-loop', (ctx) => {\n"
+            "  const pairs = [[1, 2], [3, 4], [5, 6]];\n"
+            "  let sum = 0;\n"
+            "  for (let i = 0; i < pairs.length; i++) {\n"
+            "    const [a, b] = pairs[i];\n"
+            "    sum += a + b;\n"
+            "  }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Nested object structure handling", {
+        auto src = codegen(
+            "app.get('/nested-obj', (ctx) => {\n"
+            "  const data = {\n"
+            "    user: { name: 'test', age: 30 },\n"
+            "    status: { ok: true, code: 200 }\n"
+            "  };\n"
+            "  ctx.json(data);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array reduce for aggregation", {
+        auto src = codegen(
+            "app.get('/reduce', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0, 5.0];\n"
+            "  let total = 0.0;\n"
+            "  for (let i = 0; i < arr.length; i++) {\n"
+            "    total += arr[i];\n"
+            "  }\n"
+            "  ctx.json({ total });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Filtering with conditional expressions", {
+        auto src = codegen(
+            "app.get('/filter', (ctx) => {\n"
+            "  const nums = [1, 2, 3, 4, 5, 6];\n"
+            "  let filtered = [];\n"
+            "  for (let i = 0; i < nums.length; i++) {\n"
+            "    if (nums[i] % 2 === 0) {\n"
+            "      filtered[filtered.length] = nums[i];\n"
+            "    }\n"
+            "  }\n"
+            "  ctx.json({ count: filtered.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Multiple route handlers registration", {
+        auto src = codegen(
+            "app.get('/route1', (ctx) => { ctx.json({ n: 1 }); });\n"
+            "app.get('/route2', (ctx) => { ctx.json({ n: 2 }); });\n"
+            "app.post('/route3', (ctx) => { ctx.json({ n: 3 }); });"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+        ASSERT_CONTAINS(src, "symm_handler_1");
+        ASSERT_CONTAINS(src, "symm_handler_2");
+    });
+
+    TEST("Complex math operations chain", {
+        auto src = codegen(
+            "app.get('/math', (ctx) => {\n"
+            "  const x = Math.sqrt(16.0);\n"
+            "  const y = Math.pow(2.0, 3.0);\n"
+            "  const z = Math.abs(-5.0);\n"
+            "  ctx.json({ x, y, z });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sqrtf");
+    });
+
+    TEST("String concat in loop", {
+        auto src = codegen(
+            "app.get('/str-concat', (ctx) => {\n"
+            "  let result = '';\n"
+            "  const words = ['hello', 'world'];\n"
+            "  for (let i = 0; i < words.length; i++) {\n"
+            "    result = result + words[i] + ' ';\n"
+            "  }\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Boolean flag toggling", {
+        auto src = codegen(
+            "app.get('/toggle', (ctx) => {\n"
+            "  let active = true;\n"
+            "  active = !active;\n"
+            "  active = !active;\n"
+            "  ctx.json({ active });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Null coalescing with defaults", {
+        auto src = codegen(
+            "app.get('/coalesce', (ctx) => {\n"
+            "  const a = ctx.query.a ?? 'default';\n"
+            "  const b = ctx.query.b ?? '42';\n"
+            "  ctx.json({ a, b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Deep object property access", {
+        auto src = codegen(
+            "app.get('/deep', (ctx) => {\n"
+            "  const data = { level1: { level2: { value: 42.0 } } };\n"
+            "  const val = data.level1.level2.value;\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Switch with string cases", {
+        auto src = codegen(
+            "app.get('/switch-str', (ctx) => {\n"
+            "  const action = ctx.query.action ?? 'default';\n"
+            "  switch (action) {\n"
+            "    case 'create': ctx.json({ op: 'c' }); break;\n"
+            "    case 'read': ctx.json({ op: 'r' }); break;\n"
+            "    case 'update': ctx.json({ op: 'u' }); break;\n"
+            "    default: ctx.json({ op: 'd' }); break;\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Parameter validation with type checks", {
+        auto src = codegen(
+            "app.post('/validate', (ctx) => {\n"
+            "  const id = parseInt(ctx.query.id ?? '0');\n"
+            "  const name = ctx.query.name ?? '';\n"
+            "  if (id <= 0) ctx.json({ error: 'invalid id' });\n"
+            "  else if (!name) ctx.json({ error: 'missing name' });\n"
+            "  else ctx.json({ id, name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+}
+
+static void testPhase15Final() {
+    std::cout << "\n=== Phase 15 Final ===\n";
+
+    TEST("BigInt and regular int comparison", {
+        auto src = codegen(
+            "app.get('/int-compare', (ctx) => {\n"
+            "  const i = 100;\n"
+            "  const b = 100n;\n"
+            "  ctx.json({ int: i, big: b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "100ull");
+    });
+
+    TEST("Async function with BigInt", {
+        auto src = codegen(
+            "app.get('/async-big', async (ctx) => {\n"
+            "  const big = 9999n;\n"
+            "  ctx.json({ big });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "9999ull");
+    });
+
+    TEST("Array.length with mixed types", {
+        auto src = codegen(
+            "app.get('/len', (ctx) => {\n"
+            "  const arr = [1, 2n, 'three', true];\n"
+            "  ctx.json({ length: arr.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Math.max with various numbers", {
+        auto src = codegen(
+            "app.get('/max', (ctx) => {\n"
+            "  const a = 10.5;\n"
+            "  const b = 20.3;\n"
+            "  const max = Math.max(a, b);\n"
+            "  ctx.json({ max });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("String.length check", {
+        auto src = codegen(
+            "app.get('/slen', (ctx) => {\n"
+            "  const s = ctx.query.s ?? 'default';\n"
+            "  const len = s.length;\n"
+            "  ctx.json({ len });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Double negative with BigInt", {
+        auto src = codegen(
+            "app.get('/double-neg', (ctx) => {\n"
+            "  const b = 42n;\n"
+            "  const neg = --b;\n"
+            "  ctx.json({ neg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "42ull");
+    });
+
+    TEST("Object property with computed key", {
+        auto src = codegen(
+            "app.get('/computed', (ctx) => {\n"
+            "  const key = 'value';\n"
+            "  const obj = { [key]: 100.0 };\n"
+            "  ctx.json(obj);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Rest parameters in function", {
+        auto src = codegen(
+            "const sum = (...nums) => {\n"
+            "  let total = 0;\n"
+            "  for (let i = 0; i < nums.length; i++) {\n"
+            "    total += nums[i];\n"
+            "  }\n"
+            "  return total;\n"
+            "};\n"
+            "app.get('/rest', (ctx) => {\n"
+            "  const r = sum(1, 2, 3);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("instanceof with various types", {
+        auto src = codegen(
+            "app.get('/instance', (ctx) => {\n"
+            "  const arr = [1, 2, 3];\n"
+            "  const isArr = arr instanceof Array;\n"
+            "  ctx.json({ isArr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Void expression edge case", {
+        auto src = codegen(
+            "app.get('/void', (ctx) => {\n"
+            "  const v = void(0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("BigInt hex literal support", {
+        auto src = codegen(
+            "app.get('/hex-big', (ctx) => {\n"
+            "  const hex = 0xFFFFFFFFn;\n"
+            "  ctx.json({ hex });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ull");
+    });
+
+    TEST("BigInt in template literal", {
+        auto src = codegen(
+            "app.get('/template-big', (ctx) => {\n"
+            "  const b = 999n;\n"
+            "  const s = `BigInt: ${b}`;\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "999ull");
+    });
+}
+
+// ── New Features Tests (Phase 16+) ─────────────────────────────────────────────
+
+static void testIteratorProtocol() {
+    std::cout << "\n=== Iterator Protocol (Extended) ===\n";
+
+    TEST("for-of loop with iterator protocol", {
+        auto src = codegen(
+            "app.get('/for-of-iter', (ctx) => {\n"
+            "  const obj = { __sym_iterator__: () => ({ next: () => ({ value: 1, done: true }) }) };\n"
+            "  for (const x of obj) {\n"
+            "    ctx.json({ x });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__sym_iterator__()");
+        ASSERT_CONTAINS(src, ".next()");
+        ASSERT_CONTAINS(src, ".done");
+    });
+
+    TEST("for-await loop support", {
+        auto src = codegen(
+            "app.get('/for-await', async (ctx) => {\n"
+            "  const asyncIter = { __asyncIterator: () => ({ next: () => ({ value: 1, done: true }) }) };\n"
+            "  for await (const x of asyncIter) {\n"
+            "    ctx.json({ x });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__asyncIterator()");
+    });
+
+    TEST("GeneratorResult struct in prelude", {
+        auto src = codegen(
+            "app.get('/gen-result', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "GeneratorResult");
+    });
+}
+
+static void testDeleteAndOperators() {
+    std::cout << "\n=== Delete & Operators (Extended) ===\n";
+
+    TEST("delete operator returns true", {
+        auto src = codegen(
+            "app.get('/delete', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const result = delete obj.x;\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "delete");
+        ASSERT_CONTAINS(src, "true");
+    });
+
+    TEST("delete in expression context", {
+        auto src = codegen(
+            "app.get('/delete-expr', (ctx) => {\n"
+            "  const removed = delete globalObj.prop ? 'yes' : 'no';\n"
+            "  ctx.json({ removed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "delete");
+    });
+
+    TEST("delete array element", {
+        auto src = codegen(
+            "app.get('/delete-arr', (ctx) => {\n"
+            "  const arr = [1, 2, 3];\n"
+            "  const ok = delete arr[0];\n"
+            "  ctx.json({ ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "delete");
+    });
+
+    TEST("in operator for property checking", {
+        auto src = codegen(
+            "app.get('/in', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const hasX = 'x' in obj;\n"
+            "  ctx.json({ hasX });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "in");
+        ASSERT_CONTAINS(src, "true");
+    });
+}
+
+static void testStringMethodsExtended() {
+    std::cout << "\n=== String Methods (Phase 16+) ===\n";
+
+    TEST("String.lastIndexOf() support", {
+        auto src = codegen(
+            "app.get('/lastindex', (ctx) => {\n"
+            "  const s = 'hello world';\n"
+            "  const idx = s.lastIndexOf('o');\n"
+            "  ctx.json({ idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "lastIndexOf");
+    });
+
+    TEST("String.localeCompare() support", {
+        auto src = codegen(
+            "app.get('/compare', (ctx) => {\n"
+            "  const a = 'apple';\n"
+            "  const b = 'banana';\n"
+            "  const result = a.localeCompare(b);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "localeCompare");
+    });
+}
+
+static void testIntegrationPhase16() {
+    std::cout << "\n=== Integration Tests (Phase 16+) ===\n";
+
+    TEST("Delete in complex expression", {
+        auto src = codegen(
+            "app.get('/complex-del', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  if (delete obj.a) {\n"
+            "    ctx.json({ deleted: true });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "delete");
+        ASSERT_CONTAINS(src, "if");
+    });
+
+    TEST("Multiple operators in expression", {
+        auto src = codegen(
+            "app.get('/multi-op', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const has = 'x' in obj && true;\n"
+            "  const deleted = delete obj.x;\n"
+            "  ctx.json({ has, deleted });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "in");
+        ASSERT_CONTAINS(src, "delete");
+        ASSERT_CONTAINS(src, "true");
+    });
+
+    TEST("for-of with various iterables", {
+        auto src = codegen(
+            "app.get('/for-of-types', (ctx) => {\n"
+            "  for (const c of 'hello') {\n"
+            "    ctx.json({ c });\n"
+            "  }\n"
+            "  const arr = [1, 2, 3];\n"
+            "  for (const n of arr) {\n"
+            "    ctx.json({ n });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+}
+
+static void testAdditionalArrayMethods() {
+    std::cout << "\n=== Additional Array Methods ===\n";
+
+    TEST("Array.findLast() method", {
+        auto src = codegen(
+            "app.get('/findlast', (ctx) => {\n"
+            "  const arr = [1, 2, 3, 4, 5];\n"
+            "  const last = arr.findLast((x) => x > 2);\n"
+            "  ctx.json({ last });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "findLast");
+    });
+
+    TEST("Array.findLastIndex() method", {
+        auto src = codegen(
+            "app.get('/findlastindex', (ctx) => {\n"
+            "  const arr = [1, 2, 3, 4, 5];\n"
+            "  const idx = arr.findLastIndex((x) => x > 2);\n"
+            "  ctx.json({ idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "findLastIndex");
+    });
+
+    TEST("Array.isArray() static method", {
+        auto src = codegen(
+            "app.get('/isarray', (ctx) => {\n"
+            "  const isArr = Array.isArray([1, 2, 3]);\n"
+            "  ctx.json({ isArr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::isArray");
+    });
+
+    TEST("Array.from() static method", {
+        auto src = codegen(
+            "app.get('/from', (ctx) => {\n"
+            "  const arr = Array.from('hello');\n"
+            "  ctx.json({ arr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::from");
+    });
+
+    TEST("Array.of() static method", {
+        auto src = codegen(
+            "app.get('/of', (ctx) => {\n"
+            "  const arr = Array.of(1, 2, 3);\n"
+            "  ctx.json({ arr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::of");
+    });
+}
+
+static void testAdditionalStringMethods() {
+    std::cout << "\n=== Additional String Methods ===\n";
+
+    TEST("String with multiple operations", {
+        auto src = codegen(
+            "app.get('/strops', (ctx) => {\n"
+            "  const s = 'hello world';\n"
+            "  const upper = s.toUpperCase();\n"
+            "  const lower = s.toLowerCase();\n"
+            "  ctx.json({ upper, lower });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_to_upper");
+        ASSERT_CONTAINS(src, "symm_str_to_lower");
+    });
+
+    TEST("String.trim operations", {
+        auto src = codegen(
+            "app.get('/trim', (ctx) => {\n"
+            "  const s = '  hello  ';\n"
+            "  const trimmed = s.trim();\n"
+            "  ctx.json({ trimmed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "trim");
+    });
+}
+
+static void testIntegrationComprehensive() {
+    std::cout << "\n=== Integration Tests (Multi-feature Scenarios) ===\n";
+
+    TEST("Array processing with filter, map, and reduce", {
+        auto src = codegen(
+            "app.get('/process', (ctx) => {\n"
+            "  const nums = [1, 2, 3, 4, 5];\n"
+            "  const result = nums\n"
+            "    .filter(n => n > 2)\n"
+            "    .map(n => n * 2)\n"
+            "    .reduce((acc, n) => acc + n, 0);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "filter");
+        ASSERT_CONTAINS(src, "map");
+        ASSERT_CONTAINS(src, "reduce");
+    });
+
+    TEST("Class with methods and arrow functions", {
+        auto src = codegen(
+            "class Calculator {\n"
+            "  constructor(val) { this.value = val; }\n"
+            "  add = (x) => this.value + x;\n"
+            "  multiply(x) { return this.value * x; }\n"
+            "}\n"
+            "app.get('/calc', (ctx) => {\n"
+            "  const calc = new Calculator(10);\n"
+            "  const r1 = calc.add(5);\n"
+            "  const r2 = calc.multiply(3);\n"
+            "  ctx.json({ r1, r2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Calculator");
+        ASSERT_CONTAINS(src, "add");
+        ASSERT_CONTAINS(src, "multiply");
+    });
+
+    TEST("Object destructuring with nested access", {
+        auto src = codegen(
+            "app.get('/destruct', (ctx) => {\n"
+            "  const user = { name: 'alice', age: 30, addr: { city: 'NYC' } };\n"
+            "  const { name, addr: { city } } = user;\n"
+            "  ctx.json({ name, city });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "name");
+        ASSERT_CONTAINS(src, "city");
+    });
+
+    TEST("Error handling with try-catch-finally", {
+        auto src = codegen(
+            "app.get('/errors', (ctx) => {\n"
+            "  try {\n"
+            "    const x = parseInt('abc');\n"
+            "    if (x === 0) throw new Error('zero');\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: e.message });\n"
+            "  } finally {\n"
+            "    console.log('done');\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Error");
+        ASSERT_CONTAINS(src, "message");
+    });
+
+    TEST("String template with expressions", {
+        auto src = codegen(
+            "app.get('/template', (ctx) => {\n"
+            "  const user = 'alice';\n"
+            "  const count = 5;\n"
+            "  const msg = `User ${user} has ${count} items`;\n"
+            "  ctx.json({ msg });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "template");
+    });
+
+    TEST("Set operations with iteration", {
+        auto src = codegen(
+            "app.get('/set', (ctx) => {\n"
+            "  const s = new Set([1, 2, 3]);\n"
+            "  s.add(4);\n"
+            "  const arr = Array.from(s);\n"
+            "  ctx.json({ arr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Set");
+        ASSERT_CONTAINS(src, "Array.from");
+    });
+
+    TEST("Map operations with keys and values", {
+        auto src = codegen(
+            "app.get('/map', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('a', 1);\n"
+            "  m.set('b', 2);\n"
+            "  const v = m.get('a');\n"
+            "  ctx.json({ v, size: m.size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Map");
+        ASSERT_CONTAINS(src, "get");
+    });
+
+    TEST("Ternary with nested conditions", {
+        auto src = codegen(
+            "app.get('/cond', (ctx) => {\n"
+            "  const x = 5;\n"
+            "  const result = x > 10 ? 'big' : x > 3 ? 'medium' : 'small';\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "result");
+    });
+
+    TEST("Switch with multiple cases and default", {
+        auto src = codegen(
+            "app.get('/switch', (ctx) => {\n"
+            "  const day = ctx.query.day;\n"
+            "  let name;\n"
+            "  switch (day) {\n"
+            "    case '1': name = 'Monday'; break;\n"
+            "    case '2': name = 'Tuesday'; break;\n"
+            "    default: name = 'Other';\n"
+            "  }\n"
+            "  ctx.json({ name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "switch");
+        ASSERT_CONTAINS(src, "case");
+    });
+
+    TEST("Function with rest parameters and defaults", {
+        auto src = codegen(
+            "function sum(initial = 0, ...nums) {\n"
+            "  return initial + nums.reduce((a, b) => a + b, 0);\n"
+            "}\n"
+            "app.get('/sum', (ctx) => {\n"
+            "  const r = sum(10, 1, 2, 3);\n"
+            "  ctx.json({ r });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sum");
+        ASSERT_CONTAINS(src, "reduce");
+    });
+
+    TEST("Complex data transformation pipeline", {
+        auto src = codegen(
+            "app.get('/pipeline', (ctx) => {\n"
+            "  const data = [1, 2, 3, 4, 5];\n"
+            "  const result = data\n"
+            "    .filter(x => x % 2 === 0)\n"
+            "    .map(x => ({ value: x, squared: x * x }))\n"
+            "    .reduce((acc, obj) => acc + obj.squared, 0);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "filter");
+        ASSERT_CONTAINS(src, "map");
+        ASSERT_CONTAINS(src, "reduce");
+    });
+
+    TEST("JSON stringify and parse roundtrip", {
+        auto src = codegen(
+            "app.get('/json', (ctx) => {\n"
+            "  const obj = { x: 1, y: 'hello', z: [1, 2, 3] };\n"
+            "  const str = JSON.stringify(obj);\n"
+            "  const parsed = JSON.parse(str);\n"
+            "  ctx.json({ success: true, obj: parsed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "stringify");
+        ASSERT_CONTAINS(src, "parse");
+    });
+
+    TEST("Spread operator in array and object", {
+        auto src = codegen(
+            "app.get('/spread', (ctx) => {\n"
+            "  const arr1 = [1, 2, 3];\n"
+            "  const arr2 = [...arr1, 4, 5];\n"
+            "  const obj1 = { a: 1, b: 2 };\n"
+            "  const obj2 = { ...obj1, c: 3 };\n"
+            "  ctx.json({ arr2, obj2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "arr2");
+        ASSERT_CONTAINS(src, "obj2");
+    });
+
+    TEST("Optional chaining with multiple levels", {
+        auto src = codegen(
+            "app.get('/optional', (ctx) => {\n"
+            "  const user = ctx.query.user ? { name: 'alice', addr: { city: 'NYC' } } : null;\n"
+            "  const city = user?.addr?.city;\n"
+            "  ctx.json({ city });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "city");
+    });
+
+    TEST("Nullish coalescing with defaults", {
+        auto src = codegen(
+            "app.get('/nullish', (ctx) => {\n"
+            "  const val = ctx.query.val ?? 'default';\n"
+            "  const count = ctx.query.count ?? 10;\n"
+            "  ctx.json({ val, count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "val");
+        ASSERT_CONTAINS(src, "count");
+    });
+
+    TEST("BigInt operations and formatting", {
+        auto src = codegen(
+            "app.get('/bigint', (ctx) => {\n"
+            "  const a = 9007199254740991n;\n"
+            "  const b = 1n;\n"
+            "  const c = a + b;\n"
+            "  ctx.json({ safe: a, unsafe: c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "9007199254740991");
+    });
+
+    TEST("Async/await patterns with error handling", {
+        auto src = codegen(
+            "async function fetchData() {\n"
+            "  try {\n"
+            "    const result = await Promise.resolve({ data: 42 });\n"
+            "    return result;\n"
+            "  } catch (e) {\n"
+            "    return { error: e.message };\n"
+            "  }\n"
+            "}\n"
+            "app.get('/async', async (ctx) => {\n"
+            "  const res = await fetchData();\n"
+            "  ctx.json(res);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fetchData");
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    TEST("Symbol.iterator with for-of loop", {
+        auto src = codegen(
+            "const iterable = {\n"
+            "  [Symbol.iterator]() {\n"
+            "    let n = 0;\n"
+            "    return {\n"
+            "      next: () => ({\n"
+            "        value: n++,\n"
+            "        done: n > 3\n"
+            "      })\n"
+            "    };\n"
+            "  }\n"
+            "};\n"
+            "app.get('/iter', (ctx) => {\n"
+            "  const vals = [];\n"
+            "  for (const v of iterable) vals.push(v);\n"
+            "  ctx.json({ vals });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Symbol");
+        ASSERT_CONTAINS(src, "iterator");
+    });
+
+    TEST("Generator with yield and state machine", {
+        auto src = codegen(
+            "function* range(n) {\n"
+            "  for (let i = 0; i < n; i++) yield i;\n"
+            "}\n"
+            "app.get('/gen', (ctx) => {\n"
+            "  const gen = range(3);\n"
+            "  const vals = [];\n"
+            "  let res = gen.next();\n"
+            "  while (!res.done) {\n"
+            "    vals.push(res.value);\n"
+            "    res = gen.next();\n"
+            "  }\n"
+            "  ctx.json({ vals });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "range");
+        ASSERT_CONTAINS(src, "next");
+    });
+
+    TEST("Delete operator with object properties", {
+        auto src = codegen(
+            "app.get('/delete', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2, c: 3 };\n"
+            "  delete obj.b;\n"
+            "  const hasB = 'b' in obj;\n"
+            "  ctx.json({ hasB, obj });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "delete");
+        ASSERT_CONTAINS(src, "in");
+    });
+
+    TEST("Complex mathematical operations", {
+        auto src = codegen(
+            "app.get('/math', (ctx) => {\n"
+            "  const x = 16;\n"
+            "  const sqrt = Math.sqrt(x);\n"
+            "  const pow = Math.pow(2, 3);\n"
+            "  const sin = Math.sin(Math.PI / 2);\n"
+            "  ctx.json({ sqrt, pow, sin });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sqrt");
+        ASSERT_CONTAINS(src, "pow");
+    });
+
+    TEST("Regex literal detection (MVP)", {
+        auto src = codegen(
+            "app.get('/regex', (ctx) => {\n"
+            "  const pattern = /test/i;\n"
+            "  ctx.json({ pattern: 'regex' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "pattern");
+    });
+}
+
+static void testProxyAndReflect() {
+    std::cout << "\n=== Proxy and Reflect API ===\n";
+
+    TEST("Proxy object creation", {
+        auto src = codegen(
+            "app.get('/proxy', (ctx) => {\n"
+            "  const handler = {\n"
+            "    get: (target, key) => target[key]\n"
+            "  };\n"
+            "  const proxy = new Proxy({}, handler);\n"
+            "  ctx.json({ proxy: 'created' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Proxy");
+        ASSERT_CONTAINS(src, "handler");
+    });
+
+    TEST("Reflect.get static method", {
+        auto src = codegen(
+            "app.get('/reflect', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const val = Reflect.get(obj, 'x');\n"
+            "  ctx.json({ val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Reflect");
+        ASSERT_CONTAINS(src, "get");
+    });
+
+    TEST("Reflect.set method", {
+        auto src = codegen(
+            "app.get('/reflectset', (ctx) => {\n"
+            "  const obj = {};\n"
+            "  Reflect.set(obj, 'key', 'value');\n"
+            "  ctx.json({ obj });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Reflect");
+        ASSERT_CONTAINS(src, "set");
+    });
+
+    TEST("Reflect.has method", {
+        auto src = codegen(
+            "app.get('/reflecthas', (ctx) => {\n"
+            "  const obj = { a: 1 };\n"
+            "  const has = Reflect.has(obj, 'a');\n"
+            "  ctx.json({ has });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "has");
+    });
+
+    TEST("Reflect.deleteProperty method", {
+        auto src = codegen(
+            "app.get('/reflectdelete', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  Reflect.deleteProperty(obj, 'a');\n"
+            "  ctx.json({ obj });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "deleteProperty");
+    });
+
+    TEST("Reflect.ownKeys method", {
+        auto src = codegen(
+            "app.get('/reflectkeys', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  const keys = Reflect.ownKeys(obj);\n"
+            "  ctx.json({ keys });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ownKeys");
+    });
+
+    TEST("Reflect.isExtensible method", {
+        auto src = codegen(
+            "app.get('/reflectextend', (ctx) => {\n"
+            "  const obj = {};\n"
+            "  const ext = Reflect.isExtensible(obj);\n"
+            "  ctx.json({ extensible: ext });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isExtensible");
+    });
+}
+
+static void testPropertyDescriptors() {
+    std::cout << "\n=== Property Descriptors ===\n";
+
+    TEST("Object.defineProperty", {
+        auto src = codegen(
+            "app.get('/defprop', (ctx) => {\n"
+            "  const obj = {};\n"
+            "  Object.defineProperty(obj, 'x', {\n"
+            "    value: 1,\n"
+            "    writable: true,\n"
+            "    enumerable: true,\n"
+            "    configurable: true\n"
+            "  });\n"
+            "  ctx.json({ obj });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "defineProperty");
+    });
+
+    TEST("Object.getOwnPropertyDescriptor", {
+        auto src = codegen(
+            "app.get('/getdesc', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const desc = Object.getOwnPropertyDescriptor(obj, 'x');\n"
+            "  ctx.json({ desc });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getOwnPropertyDescriptor");
+    });
+
+    TEST("Object.freeze and isFrozen", {
+        auto src = codegen(
+            "app.get('/freeze', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  Object.freeze(obj);\n"
+            "  const frozen = Object.isFrozen(obj);\n"
+            "  ctx.json({ frozen });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "freeze");
+        ASSERT_CONTAINS(src, "isFrozen");
+    });
+
+    TEST("Object.seal and isSealed", {
+        auto src = codegen(
+            "app.get('/seal', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  Object.seal(obj);\n"
+            "  const sealed = Object.isSealed(obj);\n"
+            "  ctx.json({ sealed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "seal");
+        ASSERT_CONTAINS(src, "isSealed");
+    });
+
+    TEST("Object.preventExtensions and isExtensible", {
+        auto src = codegen(
+            "app.get('/prevent', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  Object.preventExtensions(obj);\n"
+            "  const ext = Object.isExtensible(obj);\n"
+            "  ctx.json({ extensible: ext });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "preventExtensions");
+        ASSERT_CONTAINS(src, "isExtensible");
+    });
+
+    TEST("Object.getOwnPropertyNames", {
+        auto src = codegen(
+            "app.get('/propnames', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2, c: 3 };\n"
+            "  const names = Object.getOwnPropertyNames(obj);\n"
+            "  ctx.json({ names });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getOwnPropertyNames");
+    });
+}
+
+static void testSymbolFeatures() {
+    std::cout << "\n=== Advanced Symbol Features ===\n";
+
+    TEST("Symbol.toPrimitive", {
+        auto src = codegen(
+            "app.get('/toprim', (ctx) => {\n"
+            "  const obj = {\n"
+            "    [Symbol.toPrimitive]: (hint) => 'primitive'\n"
+            "  };\n"
+            "  ctx.json({ obj: 'symbol' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toPrimitive");
+    });
+
+    TEST("Symbol.toStringTag", {
+        auto src = codegen(
+            "app.get('/tag', (ctx) => {\n"
+            "  const obj = {\n"
+            "    [Symbol.toStringTag]: 'MyObject'\n"
+            "  };\n"
+            "  ctx.json({ tag: 'custom' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toStringTag");
+    });
+
+    TEST("Symbol.hasInstance", {
+        auto src = codegen(
+            "app.get('/hasinstance', (ctx) => {\n"
+            "  class MyClass {\n"
+            "    static [Symbol.hasInstance](obj) { return true; }\n"
+            "  }\n"
+            "  ctx.json({ result: 'symbol' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "hasInstance");
+    });
+
+    TEST("Symbol.species", {
+        auto src = codegen(
+            "app.get('/species', (ctx) => {\n"
+            "  class MyArray extends Array {\n"
+            "    static get [Symbol.species]() { return Array; }\n"
+            "  }\n"
+            "  ctx.json({ result: 'symbol' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "species");
+    });
+}
+
+static void testEndToEndScenarios() {
+    std::cout << "\n=== End-to-End Real-World Scenarios ===\n";
+
+    TEST("User registration validation pipeline", {
+        auto src = codegen(
+            "function validateEmail(email) {\n"
+            "  return email.includes('@') && email.includes('.');\n"
+            "}\n"
+            "function hashPassword(pwd) {\n"
+            "  return pwd.split('').reduce((h, c) => h + c.charCodeAt(0), 0);\n"
+            "}\n"
+            "app.post('/register', (ctx) => {\n"
+            "  const email = ctx.query.email;\n"
+            "  const password = ctx.query.password;\n"
+            "  if (!validateEmail(email)) {\n"
+            "    ctx.status(400);\n"
+            "    ctx.json({ error: 'Invalid email' });\n"
+            "    return;\n"
+            "  }\n"
+            "  const hash = hashPassword(password);\n"
+            "  ctx.json({ success: true, hash });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "validateEmail");
+        ASSERT_CONTAINS(src, "hashPassword");
+        ASSERT_CONTAINS(src, "register");
+    });
+
+    TEST("Shopping cart calculation with tax", {
+        auto src = codegen(
+            "app.post('/checkout', (ctx) => {\n"
+            "  const items = [10, 20, 15, 30];\n"
+            "  const subtotal = items.reduce((s, p) => s + p, 0);\n"
+            "  const tax = subtotal * 0.08;\n"
+            "  const total = subtotal + tax;\n"
+            "  ctx.json({ subtotal, tax, total, itemCount: items.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "subtotal");
+        ASSERT_CONTAINS(src, "reduce");
+        ASSERT_CONTAINS(src, "tax");
+    });
+
+    TEST("Leaderboard ranking with sorting", {
+        auto src = codegen(
+            "app.get('/leaderboard', (ctx) => {\n"
+            "  const scores = [\n"
+            "    { player: 'alice', score: 100 },\n"
+            "    { player: 'bob', score: 150 },\n"
+            "    { player: 'charlie', score: 120 }\n"
+            "  ];\n"
+            "  const ranked = scores.sort((a, b) => b.score - a.score);\n"
+            "  ctx.json({ ranked });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ranked");
+        ASSERT_CONTAINS(src, "sort");
+    });
+
+    TEST("Data deduplication with Set", {
+        auto src = codegen(
+            "app.post('/deduplicate', (ctx) => {\n"
+            "  const ids = [1, 2, 3, 2, 4, 1, 5];\n"
+            "  const unique = Array.from(new Set(ids));\n"
+            "  const counts = { total: ids.length, unique: unique.length };\n"
+            "  ctx.json(counts);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Set");
+        ASSERT_CONTAINS(src, "unique");
+    });
+
+    TEST("CSV parsing with transformation", {
+        auto src = codegen(
+            "function parseCSV(data) {\n"
+            "  return data.split('\\n')\n"
+            "    .map(line => line.split(','))\n"
+            "    .filter(row => row.length > 0);\n"
+            "}\n"
+            "app.post('/csv', (ctx) => {\n"
+            "  const parsed = parseCSV(ctx.body);\n"
+            "  ctx.json({ rows: parsed.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "parseCSV");
+        ASSERT_CONTAINS(src, "split");
+    });
+
+    TEST("Graph traversal with BFS simulation", {
+        auto src = codegen(
+            "app.get('/graph', (ctx) => {\n"
+            "  const adj = { a: ['b', 'c'], b: ['d'], c: ['d'], d: [] };\n"
+            "  const queue = ['a'];\n"
+            "  const visited = new Set(['a']);\n"
+            "  while (queue.length > 0) {\n"
+            "    const node = queue.shift();\n"
+            "    const neighbors = adj[node] || [];\n"
+            "    neighbors.forEach(n => {\n"
+            "      if (!visited.has(n)) {\n"
+            "        visited.add(n);\n"
+            "        queue.push(n);\n"
+            "      }\n"
+            "    });\n"
+            "  }\n"
+            "  ctx.json({ visited: Array.from(visited) });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "adj");
+        ASSERT_CONTAINS(src, "queue");
+    });
+
+    TEST("Report generation with grouping", {
+        auto src = codegen(
+            "app.get('/report', (ctx) => {\n"
+            "  const data = [\n"
+            "    { dept: 'eng', salary: 100 },\n"
+            "    { dept: 'eng', salary: 120 },\n"
+            "    { dept: 'sales', salary: 80 },\n"
+            "    { dept: 'sales', salary: 90 }\n"
+            "  ];\n"
+            "  const summary = {};\n"
+            "  for (let i = 0; i < data.length; i++) {\n"
+            "    const item = data[i];\n"
+            "    if (!summary[item.dept]) summary[item.dept] = [];\n"
+            "    summary[item.dept].push(item.salary);\n"
+            "  }\n"
+            "  ctx.json(summary);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "summary");
+        ASSERT_CONTAINS(src, "data");
+    });
+
+    TEST("Rate limiting counter", {
+        auto src = codegen(
+            "const limits = new Map();\n"
+            "function checkRateLimit(ip, max) {\n"
+            "  const count = limits.get(ip) || 0;\n"
+            "  if (count >= max) return false;\n"
+            "  limits.set(ip, count + 1);\n"
+            "  return true;\n"
+            "}\n"
+            "app.get('/api', (ctx) => {\n"
+            "  const ip = ctx.headers['x-forwarded-for'] || '127.0.0.1';\n"
+            "  if (!checkRateLimit(ip, 100)) {\n"
+            "    ctx.status(429);\n"
+            "    ctx.json({ error: 'Rate limited' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ data: 'OK' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "limits");
+        ASSERT_CONTAINS(src, "Map");
+    });
+
+    TEST("Request batching and response aggregation", {
+        auto src = codegen(
+            "app.post('/batch', (ctx) => {\n"
+            "  const requests = ctx.query.ids.split(',').map(id => parseInt(id));\n"
+            "  const responses = requests.map(id => ({\n"
+            "    id,\n"
+            "    data: { value: id * 2 }\n"
+            "  }));\n"
+            "  ctx.json({ count: responses.length, results: responses });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "batch");
+        ASSERT_CONTAINS(src, "responses");
+    });
+
+    TEST("Complex event log analysis", {
+        auto src = codegen(
+            "app.post('/analyze', (ctx) => {\n"
+            "  const events = [\n"
+            "    { timestamp: 100, event: 'login' },\n"
+            "    { timestamp: 200, event: 'action' },\n"
+            "    { timestamp: 300, event: 'logout' }\n"
+            "  ];\n"
+            "  const loginCount = events.filter(e => e.event === 'login').length;\n"
+            "  const avgTime = events.reduce((sum, e) => sum + e.timestamp, 0) / events.length;\n"
+            "  ctx.json({ sessions: loginCount, avgDuration: avgTime });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "events");
+        ASSERT_CONTAINS(src, "filter");
+    });
+
+    TEST("Cache hit/miss simulation with object lookup", {
+        auto src = codegen(
+            "const cache = {};\n"
+            "function getCached(key) {\n"
+            "  if (key in cache) return { hit: true, value: cache[key] };\n"
+            "  return { hit: false, value: null };\n"
+            "}\n"
+            "function setCached(key, value) {\n"
+            "  cache[key] = value;\n"
+            "}\n"
+            "app.get('/cache', (ctx) => {\n"
+            "  const key = ctx.query.key;\n"
+            "  const result = getCached(key);\n"
+            "  if (!result.hit) {\n"
+            "    setCached(key, { timestamp: Date.now() });\n"
+            "  }\n"
+            "  ctx.json(result);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "cache");
+        ASSERT_CONTAINS(src, "getCached");
+    });
+
+    TEST("Recursive factorial with memoization pattern", {
+        auto src = codegen(
+            "function factorial(n, memo = {}) {\n"
+            "  if (n in memo) return memo[n];\n"
+            "  if (n <= 1) return 1;\n"
+            "  memo[n] = n * factorial(n - 1, memo);\n"
+            "  return memo[n];\n"
+            "}\n"
+            "app.get('/factorial', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n || '5');\n"
+            "  const result = factorial(n);\n"
+            "  ctx.json({ n, result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "factorial");
+        ASSERT_CONTAINS(src, "memo");
+    });
+
+    TEST("Binary search on sorted array", {
+        auto src = codegen(
+            "function binarySearch(arr, target) {\n"
+            "  let left = 0, right = arr.length - 1;\n"
+            "  while (left <= right) {\n"
+            "    const mid = Math.floor((left + right) / 2);\n"
+            "    if (arr[mid] === target) return mid;\n"
+            "    if (arr[mid] < target) left = mid + 1;\n"
+            "    else right = mid - 1;\n"
+            "  }\n"
+            "  return -1;\n"
+            "}\n"
+            "app.get('/search', (ctx) => {\n"
+            "  const sorted = [1, 3, 5, 7, 9];\n"
+            "  const idx = binarySearch(sorted, 5);\n"
+            "  ctx.json({ found: idx >= 0 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "binarySearch");
+        ASSERT_CONTAINS(src, "floor");
+    });
+
+    TEST("Fibonacci with dynamic programming", {
+        auto src = codegen(
+            "function fib(n) {\n"
+            "  const dp = [0, 1];\n"
+            "  for (let i = 2; i <= n; i++) {\n"
+            "    dp[i] = dp[i - 1] + dp[i - 2];\n"
+            "  }\n"
+            "  return dp[n];\n"
+            "}\n"
+            "app.get('/fib', (ctx) => {\n"
+            "  const n = parseInt(ctx.query.n || '10');\n"
+            "  const result = fib(n);\n"
+            "  ctx.json({ n, fib: result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fib");
+        ASSERT_CONTAINS(src, "dp");
+    });
+}
+
+static void testMathExtensions() {
+    std::cout << "\n=== Math Extensions ===\n";
+
+    TEST("Math.sign() function", {
+        auto src = codegen(
+            "app.get('/sign', (ctx) => {\n"
+            "  const s1 = Math.sign(5);\n"
+            "  const s2 = Math.sign(-5);\n"
+            "  const s3 = Math.sign(0);\n"
+            "  ctx.json({ s1, s2, s3 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Math");
+    });
+
+    TEST("Math.cbrt() function", {
+        auto src = codegen(
+            "app.get('/cbrt', (ctx) => {\n"
+            "  const c = Math.cbrt(8);\n"
+            "  ctx.json({ c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Math");
+    });
+
+    TEST("Math.hypot() function", {
+        auto src = codegen(
+            "app.get('/hypot', (ctx) => {\n"
+            "  const h = Math.hypot(3, 4);\n"
+            "  ctx.json({ h });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Math");
+    });
+}
+
+static void testObjectExtensions() {
+    std::cout << "\n=== Object Extensions ===\n";
+
+    TEST("Object.hasOwn() method", {
+        auto src = codegen(
+            "app.get('/hasown', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const has = Object.hasOwn(obj, 'x');\n"
+            "  ctx.json({ has });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "hasOwn");
+    });
+
+    TEST("Object.create() method", {
+        auto src = codegen(
+            "app.get('/create', (ctx) => {\n"
+            "  const proto = { x: 1 };\n"
+            "  const obj = Object.create(proto);\n"
+            "  ctx.json({ obj });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Object::create");
+    });
+
+    TEST("Object.freeze() method", {
+        auto src = codegen(
+            "app.get('/freeze', (ctx) => {\n"
+            "  const obj = { x: 1 };\n"
+            "  const frozen = Object.freeze(obj);\n"
+            "  ctx.json({ frozen });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "freeze");
+    });
+}
+
+// ── Phase 20: Date, JSON.parse, Namespaces, Error.cause ─────────────────────
+
+static void testPhase20NewFeatures() {
+    std::cout << "\n=== Phase 20: Date Methods, JSON.parse, Namespaces ===\n";
+
+    // Date calendar methods
+    TEST("Date.getFullYear — dispatched", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => {\n"
+            "  const d = new Date(Date.now());\n"
+            "  const y = d.getFullYear();\n"
+            "  ctx.json({ year: y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getFullYear");
+    });
+
+    TEST("Date.getHours/Minutes — dispatched", {
+        auto src = codegen(
+            "app.get('/d2', (ctx) => {\n"
+            "  const d = new Date(Date.now());\n"
+            "  ctx.json({ h: d.getHours(), m: d.getMinutes() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getHours");
+        ASSERT_CONTAINS(src, "getMinutes");
+    });
+
+    TEST("Date.toISOString — dispatched", {
+        auto src = codegen(
+            "app.get('/d3', (ctx) => {\n"
+            "  const d = new Date(Date.now());\n"
+            "  const s = d.toISOString();\n"
+            "  ctx.json({ ts: s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toISOString");
+    });
+
+    TEST("Date.getTime — dispatched", {
+        auto src = codegen(
+            "app.get('/d4', (ctx) => {\n"
+            "  const d = new Date(Date.now());\n"
+            "  ctx.json({ ms: d.getTime() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getTime");
+    });
+
+    TEST("Date.parse — dispatched to Date::parse()", {
+        auto src = codegen(
+            "app.get('/d5', (ctx) => {\n"
+            "  const ms = Date.parse('2024-01-15');\n"
+            "  ctx.json({ ms });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Date::parse");
+    });
+
+    // JSON.parse + property access
+    TEST("JSON.parse property extraction — symm_json_prop", {
+        auto src = codegen(
+            "app.post('/p', (ctx) => {\n"
+            "  const body = JSON.parse(ctx.body);\n"
+            "  const name = body.name;\n"
+            "  const age  = body.age;\n"
+            "  ctx.json({ name, age });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_parse");
+        ASSERT_CONTAINS(src, "symm_json_prop");
+        ASSERT_CONTAINS(src, "\"name\"");
+        ASSERT_CONTAINS(src, "\"age\"");
+    });
+
+    // Error.cause
+    TEST("Error.cause — cause field on Error struct", {
+        auto src = codegen(
+            "app.get('/e', (ctx) => {\n"
+            "  const err = new Error('msg');\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        // Error struct should be in prelude which has the cause field
+        ASSERT_CONTAINS(src, "Error");
+    });
+
+    // TypeError / RangeError
+    TEST("TypeError — dispatched", {
+        auto src = codegen(
+            "app.get('/te', (ctx) => {\n"
+            "  throw new TypeError('bad type');\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TypeError");
+    });
+
+    TEST("RangeError — dispatched", {
+        auto src = codegen(
+            "app.get('/re', (ctx) => {\n"
+            "  throw new RangeError('out of bounds');\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+    });
+
+    // Namespace flattening
+    TEST("namespace — flattened to Prefix_Name", {
+        auto src = codegen(
+            "namespace Api {\n"
+            "  export const VERSION = 2;\n"
+            "  export const PREFIX = '/v2';\n"
+            "}\n"
+            "app.get('/ns', (ctx) => {\n"
+            "  ctx.json({ v: Api_VERSION });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Api_VERSION");
+        ASSERT_CONTAINS(src, "Api_PREFIX");
+    });
+
+    TEST("namespace member access — Foo.Bar → Foo_Bar", {
+        auto src = codegen(
+            "namespace Colors {\n"
+            "  export const Red = 'red';\n"
+            "  export const Blue = 'blue';\n"
+            "}\n"
+            "app.get('/c', (ctx) => {\n"
+            "  const c = Colors.Red;\n"
+            "  ctx.json({ color: c });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Colors_Red");
+    });
+
+    // Map.keys/values/entries
+    TEST("Map.keys — symm_map_keys dispatched", {
+        auto src = codegen(
+            "app.get('/mk', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  const k = m.keys();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_keys");
+    });
+
+    // Numeric separators
+    TEST("Numeric separators — underscore stripped", {
+        auto src = codegen(
+            "app.get('/ns2', (ctx) => {\n"
+            "  const n = 1_000_000;\n"
+            "  ctx.json({ n });\n"
+            "});"
+        );
+        // Should contain 1000000, not 1_000_000
+        ASSERT_CONTAINS(src, "1000000");
+    });
+
+    // in operator for Map/Set
+    TEST("in operator — dispatched to .has()", {
+        auto src = codegen(
+            "app.get('/in', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  const has = 'x' in m;\n"
+            "  ctx.json({ has });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".has(");
+    });
+
+    // JSON.parse prelude has symm_json_prop
+    TEST("symm_json_prop — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_json_prop");
+    });
+
+    TEST("symm_body_get_str — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_body_get_str");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -4550,6 +10389,105 @@ int main() {
     symm::testNumericSeparators();
     symm::testObjectDestructuringAdvanced();
     symm::testObjectAssign();
+    // Phase 8
+    symm::testNumericSeparators2();
+    symm::testPrivateFields();
+    symm::testComplexAsync();
+    symm::testUrlStruct();
+    symm::testProcessEnv();
+    symm::testBufferTextEncoder();
+    symm::testNestedFunctions();
+    symm::testComplexStringPatterns();
+    symm::testArrayAdvancedPatterns();
+    symm::testNumberEdgeCases2();
+    symm::testMultipleRoutes();
+    // Phase 9
+    symm::testComputedProps();
+    symm::testNullishChains();
+    symm::testMultiAssign();
+    symm::testNestedLiterals();
+    symm::testTryCatchAdvanced();
+    symm::testClassMethods();
+    symm::testRealWorldAPI();
+    symm::testStringConcat();
+    // Phase 10
+    symm::testLargeRouteSet();
+    symm::testBitwiseOps();
+    symm::testControlFlowEdge();
+    symm::testRegexPatterns();
+    symm::testFunctionalPatterns();
+    symm::testAdvancedDestructuring();
+    symm::testAsyncPatterns();
+    symm::testGpuPatterns();
+    // Phase 11
+    symm::testModulePatterns();
+    symm::testStatePatterns();
+    symm::testPerformancePatterns();
+    symm::testErrorRecoveryPatterns();
+    // Phase 12
+    symm::testAdvancedLanguagePatterns();
+    symm::testOperatorPrecedence();
+    symm::testComplexDataStructures();
+    symm::testStringPatterns();
+    symm::testArrayPatterns();
+    symm::testNumericPatterns();
+    // Phase 13
+    symm::testRealWorldScenarios();
+    symm::testConcurrencyPatterns();
+    symm::testMemoryAndBufferPatterns();
+    symm::testInputValidationPatterns();
+    symm::testOutputFormattingPatterns();
+    symm::testMathAndPhysicsPatterns();
+    symm::testGameAndGraphicsPatterns();
+    // Phase 14
+    symm::testExceptionHandling();
+    symm::testAdvancedFeatures();
+    symm::testNumericMethods();
+    // Phase 15
+    symm::testBigInt();
+    symm::testPhase15Extended();
+    symm::testPhase15LanguageFeatures();
+    symm::testPhase15MapSetExtended();
+    symm::testPhase15Mixed();
+    symm::testPhase15Comprehensive();
+    symm::testPhase15Final();
+
+    // Phase 16+ New Features
+    symm::testIteratorProtocol();
+    symm::testDeleteAndOperators();
+    symm::testStringMethodsExtended();
+    symm::testIntegrationPhase16();
+
+    // Extended features
+    symm::testAdditionalArrayMethods();
+    symm::testAdditionalStringMethods();
+    symm::testMathExtensions();
+    symm::testObjectExtensions();
+
+    // Integration Tests - Multiple features working together
+    symm::testIntegrationComprehensive();
+
+    // End-to-End Real-World Scenarios
+    symm::testEndToEndScenarios();
+
+    // Advanced Features (Phase 17+)
+    symm::testProxyAndReflect();
+    symm::testWeakCollections();
+    symm::testPropertyDescriptors();
+    symm::testSymbolFeatures();
+    symm::testRegexPatterns();
+
+    // Phase 18+ - Enhanced Generators and Iterators
+    symm::testFullGeneratorSupport();
+    symm::testCompleteIteratorSupport();
+
+    // Phase 19+ - Advanced Metaprogramming and Error Handling
+    symm::testAdvancedMetaprogramming();
+    symm::testComprehensiveErrorHandling();
+    symm::testAdvancedAsyncPatterns();
+
+    // Phase 20: Date, JSON.parse, Namespaces, Error.cause
+    symm::testPhase20NewFeatures();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
