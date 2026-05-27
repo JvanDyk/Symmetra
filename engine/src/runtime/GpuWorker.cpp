@@ -49,6 +49,10 @@ void GpuWorkerPort::close() {
 // ── GpuWorker ─────────────────────────────────────────────────────────────────
 
 GpuWorker::GpuWorker(const std::string& scriptPath,
+                     NvrtcCompiler& compiler)
+    : GpuWorker(scriptPath, compiler, Options{}) {}
+
+GpuWorker::GpuWorker(const std::string& scriptPath,
                      NvrtcCompiler& compiler,
                      const Options& opts)
     : compiler_(compiler), opts_(opts), scriptPath_(scriptPath)

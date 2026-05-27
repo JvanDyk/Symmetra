@@ -1,5 +1,6 @@
 #include "UrlParser.h"
 #include <cctype>
+#include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>

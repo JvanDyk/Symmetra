@@ -78,7 +78,11 @@ public:
     // Returns immediately — worker starts in background.
     GpuWorker(const std::string& scriptPath,
               NvrtcCompiler& compiler,
-              const Options& opts = {});
+              const Options& opts);
+
+    // Overload with default options
+    GpuWorker(const std::string& scriptPath,
+              NvrtcCompiler& compiler);
 
     ~GpuWorker();
 

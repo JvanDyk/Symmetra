@@ -281,6 +281,12 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
     switch (node->kind) {
         case NodeKind::ReturnStmt: {
             auto& r = std::get<ReturnStmt>(node->data);
+            if (_inGeneratorBody) {
+                // Inside generator _init(): set return value and stop
+                if (r.expr) _out += ind + "_return_val = (float)(" + emitExpr(r.expr) + "); return;\n";
+                else        _out += ind + "return;\n";
+                break;
+            }
             if (r.expr) {
                 _out += ind + "return " + emitExpr(r.expr) + ";\n";
             } else {
@@ -554,6 +560,13 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                     }
                 }
             }
+            // Inside a generator _init(): yield expr → buffer append
+            if (_inGeneratorBody && es.expr && es.expr->kind == NodeKind::AwaitExpr) {
+                auto& aw = std::get<AwaitExpr>(es.expr->data);
+                _out += ind + "if (_count < _MAX) _values[_count++] = (float)("
+                     + emitExpr(aw.expr) + ");\n";
+                break;
+            }
             _out += ind + emitExpr(es.expr) + ";\n";
             break;
         }
@@ -806,43 +819,73 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
             auto& fn = std::get<FuncDecl>(node->data);
             if (fn.name.empty()) break;  // anonymous — emitted inline as lambda
 
-            // Generator functions: emit state machine with next() method
+            // Generator functions: buffering state machine
+            // All yield values are collected into a fixed-size array on the first next() call.
+            // Supports yields inside loops, conditionals, and arbitrary control flow.
             if (fn.isGenerator && fn.body) {
-                // For generators, we need to implement a state machine.
-                // For now, emit a simplified generator that immediately returns done.
-                // Full implementation would split function body into state cases.
-
-                // Emit generator state machine struct
+                // ── Struct definition ──
                 _out += ind + "struct " + fn.name + "_Gen {\n";
-                _out += indent(depth+1) + "int _state = 0;\n";
-                _out += indent(depth+1) + "bool _done = false;\n";
-                _out += indent(depth+1) + "float _return_val = 0;\n";
 
-                // Emit next() method — simplified state machine
+                // Captured params as struct members (original names → accessible in _init())
+                for (auto& p : fn.params)
+                    _out += indent(depth+1) + "float _arg_" + p + " = 0;\n";
+
+                // Buffer and bookkeeping
+                _out += indent(depth+1) + "static constexpr int _MAX = 256;\n";
+                _out += indent(depth+1) + "float _values[_MAX]{};\n";
+                _out += indent(depth+1) + "int   _count = 0;\n";
+                _out += indent(depth+1) + "int   _pos   = 0;\n";
+                _out += indent(depth+1) + "float _return_val = 0;\n";
+                _out += indent(depth+1) + "bool  _initialized = false;\n";
+
+                // ── _init(): run the generator body once, buffering yields ──
+                _out += indent(depth+1) + "__device__ void _init() {\n";
+                // Re-bind captured params to local names so the body compiles as-is
+                for (auto& p : fn.params)
+                    _out += indent(depth+2) + "float " + p + " = _arg_" + p + ";\n";
+                // Emit body — yield → buffer append, return → set _return_val
+                _inGeneratorBody = true;
+                if (fn.body->kind == NodeKind::Block)
+                    emitBlock(std::get<Block>(fn.body->data), depth + 2);
+                _inGeneratorBody = false;
+                _out += indent(depth+1) + "}\n";
+
+                // ── next() ──
                 _out += indent(depth+1) + "__device__ GeneratorResult<float> next() {\n";
-                _out += indent(depth+2) + "if (_done) return GeneratorResult<float>(_return_val, true);\n";
-                _out += indent(depth+2) + "if (_state == 0) { _state = 1; return GeneratorResult<float>(0, false); }\n";
-                _out += indent(depth+2) + "_done = true; return GeneratorResult<float>(_return_val, true);\n";
+                _out += indent(depth+2) + "if (!_initialized) { _init(); _initialized = true; }\n";
+                _out += indent(depth+2) + "if (_pos < _count) return GeneratorResult<float>{ _values[_pos++], false };\n";
+                _out += indent(depth+2) + "return GeneratorResult<float>{ _return_val, true };\n";
                 _out += indent(depth+1) + "}\n";
-                // return(val) — forces generator done with a value
+
+                // ── return_(val) — force done ──
                 _out += indent(depth+1) + "__device__ GeneratorResult<float> return_(float v = 0) {\n";
-                _out += indent(depth+2) + "_done = true; _return_val = v;\n";
-                _out += indent(depth+2) + "return GeneratorResult<float>(v, true);\n";
+                _out += indent(depth+2) + "_pos = _count; _return_val = v;\n";
+                _out += indent(depth+2) + "return GeneratorResult<float>{ v, true };\n";
                 _out += indent(depth+1) + "}\n";
-                // throw(err) — marks done and propagates error
+
+                // ── throw_(err) — mark done ──
                 _out += indent(depth+1) + "template<typename E> __device__ GeneratorResult<float> throw_(E) {\n";
-                _out += indent(depth+2) + "_done = true;\n";
-                _out += indent(depth+2) + "return GeneratorResult<float>(0, true);\n";
+                _out += indent(depth+2) + "_pos = _count;\n";
+                _out += indent(depth+2) + "return GeneratorResult<float>{ 0, true };\n";
                 _out += indent(depth+1) + "}\n";
+
+                // ── __sym_iterator__() so for-of works on generator objects ──
+                _out += indent(depth+1) + "__device__ " + fn.name + "_Gen& __sym_iterator__() { return *this; }\n";
+
                 _out += ind + "};\n";
 
-                // Emit factory function that returns generator
+                // ── Factory function: captures params into struct ──
                 _out += ind + "__device__ " + fn.name + "_Gen " + fn.name + "(";
                 for (int i = 0; i < (int)fn.params.size(); i++) {
                     if (i) _out += ", ";
-                    _out += "auto " + fn.params[i];
+                    _out += "float " + fn.params[i];
                 }
-                _out += ") { return " + fn.name + "_Gen{}; }\n";
+                _out += ") {\n";
+                _out += indent(depth+1) + fn.name + "_Gen _g;\n";
+                for (auto& p : fn.params)
+                    _out += indent(depth+1) + "_g._arg_" + p + " = " + p + ";\n";
+                _out += indent(depth+1) + "return _g;\n";
+                _out += ind + "}\n";
                 break;
             }
 

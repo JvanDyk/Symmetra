@@ -130,6 +130,8 @@ CompiledModule NvrtcCompiler::compile(const std::string& cudaSrc,
                     std::chrono::system_clock::now().time_since_epoch()).count());
             cuMemcpyHtoD(mod.d_startMs, &t, sizeof(uint64_t));
         }
+        // Locate debug ring buffer global (will be set by GpuServer::ctor)
+        cuModuleGetGlobal(&mod.d_debugRingPtr, &sz, cuMod, "_debug_ring_ptr");
     }
 
     // mod.ptx intentionally NOT stored — already zeroed above

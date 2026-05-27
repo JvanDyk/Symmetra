@@ -5894,11 +5894,14 @@ static void testFullGeneratorSupport() {
             "  ctx.json({ done: r3.done });\n"
             "});"
         );
-        ASSERT_CONTAINS(src, "gen");
-        ASSERT_CONTAINS(src, "next");
+        ASSERT_CONTAINS(src, "gen_Gen");               // struct emitted
+        ASSERT_CONTAINS(src, "_values[_count++]");     // buffering yield
+        ASSERT_CONTAINS(src, "_return_val");            // return value captured
+        ASSERT_CONTAINS(src, "next()");                 // next() method
+        ASSERT_CONTAINS(src, "_initialized");           // lazy init
     });
 
-    TEST("Generator with multiple yields", {
+    TEST("Generator with multiple yields — loop buffering", {
         auto src = codegen(
             "function* count() {\n"
             "  for (let i = 0; i < 5; i++) yield i;\n"
@@ -5908,8 +5911,10 @@ static void testFullGeneratorSupport() {
             "  ctx.json({ ok: true });\n"
             "});"
         );
-        ASSERT_CONTAINS(src, "count");
-        ASSERT_CONTAINS(src, "for");
+        ASSERT_CONTAINS(src, "count_Gen");             // struct emitted
+        ASSERT_CONTAINS(src, "_MAX");                  // buffer constant
+        ASSERT_CONTAINS(src, "_values[_count++]");     // yield inside loop buffered
+        ASSERT_CONTAINS(src, "for");                   // loop emitted in _init()
     });
 
     TEST("Nested generators with yield*", {

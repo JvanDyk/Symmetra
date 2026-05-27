@@ -34,10 +34,16 @@ constexpr uint8_t obfKeyByte(size_t p) {
 template<size_t N>
 struct ObfStr {
     std::array<char, N> data;
-    constexpr ObfStr(const char (&s)[N]) {
+
+    // Helper: produce encrypted array (constexpr-safe member initializer)
+    static constexpr std::array<char, N> makeEncrypted(const char (&s)[N]) {
+        std::array<char, N> result{};
         for (size_t i = 0; i < N; i++)
-            data[i] = s[i] ^ obfKeyByte(i);
+            result[i] = static_cast<char>(s[i] ^ obfKeyByte(i));
+        return result;
     }
+
+    constexpr ObfStr(const char (&s)[N]) : data(makeEncrypted(s)) {}
     // Decrypt into a stack buffer at runtime
     void decrypt(char* out) const {
         for (size_t i = 0; i < N; i++)

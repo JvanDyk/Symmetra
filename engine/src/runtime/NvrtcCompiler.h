@@ -17,6 +17,7 @@ struct CompiledModule {
     // Populated by NvrtcCompiler::compile(); updated before each kernel launch.
     CUdeviceptr d_nowMs   = 0;   // _symm_now_ms  — refreshed each dispatch
     CUdeviceptr d_startMs = 0;   // _symm_start_ms — set once at load time
+    CUdeviceptr d_debugRingPtr = 0;  // _debug_ring_ptr — debug buffer address
 };
 
 class NvrtcCompiler {
