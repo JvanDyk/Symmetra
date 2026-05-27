@@ -164,14 +164,20 @@ void Codegen::emitDispatch(const std::vector<RouteReg>& routes) {
     _out += "    const char* body,\n";
     _out += "    int body_len,\n";
     _out += "    char* resp_buf,\n";
-    _out += "    unsigned int* resp_len_out\n";
+    _out += "    unsigned int* resp_len_out,\n";
+    _out += "    const char* authorization,    // request Authorization header\n";
+    _out += "    const char* content_type,     // request Content-Type header\n";
+    _out += "    const char* user_agent        // request User-Agent header\n";
     _out += ") {\n";
     _out += "    SymmCtx ctx{};\n";
-    _out += "    ctx.body        = body;\n";
-    _out += "    ctx.body_len    = body_len;\n";
-    _out += "    ctx.resp_buf    = resp_buf;\n";
-    _out += "    ctx.resp_len    = 0;\n";
-    _out += "    ctx.resp_status = 200;\n";
+    _out += "    ctx.body          = body;\n";
+    _out += "    ctx.body_len      = body_len;\n";
+    _out += "    ctx.resp_buf      = resp_buf;\n";
+    _out += "    ctx.resp_len      = 0;\n";
+    _out += "    ctx.resp_status   = 200;\n";
+    _out += "    ctx.authorization = authorization ? authorization : \"\";\n";
+    _out += "    ctx.content_type  = content_type  ? content_type  : \"\";\n";
+    _out += "    ctx.user_agent    = user_agent     ? user_agent    : \"\";\n";
     _out += "    switch (route_id) {\n";
     for (int i = 0; i < (int)routes.size(); i++) {
         _out += "        case " + std::to_string(i) + ": symm_handler_" + std::to_string(i) + "(&ctx); break;\n";
@@ -179,6 +185,12 @@ void Codegen::emitDispatch(const std::vector<RouteReg>& routes) {
     _out += "        default:\n";
     _out += "            symm_json_obj_str(&ctx, \"error\", \"404 Not Found\");\n";
     _out += "            ctx.resp_status = 404;\n";
+    _out += "    }\n";
+    _out += "    // Pack response headers into last 256 bytes of resp_buf for host pickup\n";
+    _out += "    if (resp_buf && ctx.resp_headers_len > 0) {\n";
+    _out += "        char* hdr_dst = resp_buf + (65536 - 256);\n";
+    _out += "        for (int _hi = 0; _hi <= ctx.resp_headers_len && _hi < 256; _hi++)\n";
+    _out += "            hdr_dst[_hi] = ctx.resp_headers[_hi];\n";
     _out += "    }\n";
     _out += "    if (resp_len_out) *resp_len_out = (unsigned int)ctx.resp_len;\n";
     _out += "}\n\n";
@@ -200,15 +212,18 @@ void Codegen::emitDispatch(const std::vector<RouteReg>& routes) {
     _out += "// Launch config: <<<1, batch_size>>>  where batch_size % 32 == 0.\n";
     _out += "extern \"C\" __global__ void symm_dispatch_batch(\n";
     _out += "    int            route_id,\n";
-    _out += "    const char**   d_bodies,      // [batch_size] device pointers\n";
-    _out += "    const int*     d_body_lens,   // [batch_size]\n";
-    _out += "    const char**   d_paths,       // [batch_size]\n";
-    _out += "    const char**   d_methods,     // [batch_size]\n";
-    _out += "    char**         d_resp_bufs,   // [batch_size]\n";
-    _out += "    unsigned int*  d_resp_lens,   // [batch_size] output\n";
-    _out += "    int*           d_statuses,    // [batch_size] output\n";
-    _out += "    const uint32_t* d_active,     // 256-bit bitmask (8 × uint32)\n";
-    _out += "    int            batch_size\n";
+    _out += "    const char**   d_bodies,        // [batch_size] device pointers\n";
+    _out += "    const int*     d_body_lens,     // [batch_size]\n";
+    _out += "    const char**   d_paths,         // [batch_size]\n";
+    _out += "    const char**   d_methods,       // [batch_size]\n";
+    _out += "    char**         d_resp_bufs,     // [batch_size]\n";
+    _out += "    unsigned int*  d_resp_lens,     // [batch_size] output\n";
+    _out += "    int*           d_statuses,      // [batch_size] output\n";
+    _out += "    const uint32_t* d_active,       // 256-bit bitmask (8 × uint32)\n";
+    _out += "    int            batch_size,\n";
+    _out += "    const char**   d_authorizations, // [batch_size] Authorization headers\n";
+    _out += "    const char**   d_content_types,  // [batch_size] Content-Type headers\n";
+    _out += "    const char**   d_user_agents     // [batch_size] User-Agent headers\n";
     _out += ") {\n";
     _out += "    int tid = threadIdx.x;\n";
     _out += "    // Mask check: is this thread slot active?\n";
@@ -218,13 +233,16 @@ void Codegen::emitDispatch(const std::vector<RouteReg>& routes) {
     _out += "\n";
     _out += "    // Each thread builds its own SymmCtx from its slot in the batch.\n";
     _out += "    SymmCtx ctx{};\n";
-    _out += "    ctx.body        = d_bodies[tid];\n";
-    _out += "    ctx.body_len    = d_body_lens[tid];\n";
-    _out += "    ctx.path        = d_paths[tid];\n";
-    _out += "    ctx.method      = d_methods[tid];\n";
-    _out += "    ctx.resp_buf    = d_resp_bufs[tid];\n";
-    _out += "    ctx.resp_len    = 0;\n";
-    _out += "    ctx.resp_status = 200;\n";
+    _out += "    ctx.body          = d_bodies[tid];\n";
+    _out += "    ctx.body_len      = d_body_lens[tid];\n";
+    _out += "    ctx.path          = d_paths[tid];\n";
+    _out += "    ctx.method        = d_methods[tid];\n";
+    _out += "    ctx.resp_buf      = d_resp_bufs[tid];\n";
+    _out += "    ctx.resp_len      = 0;\n";
+    _out += "    ctx.resp_status   = 200;\n";
+    _out += "    ctx.authorization = (d_authorizations && d_authorizations[tid]) ? d_authorizations[tid] : \"\";\n";
+    _out += "    ctx.content_type  = (d_content_types  && d_content_types[tid])  ? d_content_types[tid]  : \"\";\n";
+    _out += "    ctx.user_agent    = (d_user_agents     && d_user_agents[tid])    ? d_user_agents[tid]    : \"\";\n";
     _out += "\n";
     _out += "    // All threads in the block execute the SAME case — no warp divergence\n";
     _out += "    // at this switch.  Divergence inside a handler is unavoidable but\n";
@@ -236,6 +254,13 @@ void Codegen::emitDispatch(const std::vector<RouteReg>& routes) {
     _out += "        default:\n";
     _out += "            symm_json_obj_str(&ctx, \"error\", \"404 Not Found\");\n";
     _out += "            ctx.resp_status = 404;\n";
+    _out += "    }\n";
+    _out += "\n";
+    _out += "    // Pack response headers into last 256 bytes of resp_buf for host pickup\n";
+    _out += "    if (d_resp_bufs[tid] && ctx.resp_headers_len > 0) {\n";
+    _out += "        char* hdr_dst = d_resp_bufs[tid] + (65536 - 256);\n";
+    _out += "        for (int _hi = 0; _hi <= ctx.resp_headers_len && _hi < 256; _hi++)\n";
+    _out += "            hdr_dst[_hi] = ctx.resp_headers[_hi];\n";
     _out += "    }\n";
     _out += "\n";
     _out += "    // Write per-thread outputs back to the batch arrays.\n";
@@ -1374,7 +1399,7 @@ std::string Codegen::emitMember(const MemberExpr& m) {
         if (m.prop == "body")   return "ctx->body";
         if (m.prop == "method") return "ctx->method";
         if (m.prop == "path")   return "ctx->path";
-        if (m.prop == "headers") return "ctx->_headers"; // sentinel (headers not yet supported)
+        if (m.prop == "headers") return "ctx";  // ctx.headers → returns ctx; .get() dispatched below
         // ctx.gpu — return sentinel for gpu.* dispatch in emitCall
         if (m.prop == "gpu")    return "ctx->_gpu";
         if (m.prop == "json")   return "symm_json_str";
@@ -1529,14 +1554,22 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "ctx->resp_status";
         }
 
-        // ctx.header(name, val) → set response header (stub: no-op on GPU)
+        // ctx.header(name, val) → set response header, returns ctx for chaining
         if (obj == "ctx" && prop == "header") {
-            return "/* ctx.header */";
+            std::string name = c.args.size() > 0 ? emitExpr(c.args[0]) : "\"\"";
+            std::string val  = c.args.size() > 1 ? emitExpr(c.args[1]) : "\"\"";
+            return "symm_set_header(ctx, " + name + ", " + val + ")";
         }
 
         // ctx.body<Float32Array>() → (float*)ctx->body, ctx->body_len
         if (obj == "ctx" && prop == "body") {
             return "(float*)ctx->body";
+        }
+
+        // ctx.headers.get(name) — obj is "ctx" (from ctx.headers→ctx), prop is "get"
+        if (obj == "ctx" && prop == "get") {
+            std::string name = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+            return "symm_get_header(ctx, " + name + ")";
         }
 
         // gpu.fingerprint(key) → symm_fingerprint(key, len)
@@ -1824,14 +1857,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "Symbol::keyFor(" + sym + ")";
         }
 
-        // ── encodeURIComponent / decodeURIComponent stubs ────────────────────
+        // ── encodeURIComponent / decodeURIComponent ───────────────────────────
         if (prop.empty() && obj == "encodeURIComponent") {
             std::string arg0 = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
-            return arg0; // stub: identity (real encoding requires significant kernel space)
+            return "symm_encode_uri_component(" + arg0 + ")";
         }
         if (prop.empty() && obj == "decodeURIComponent") {
             std::string arg0 = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
-            return arg0; // stub: identity
+            return "symm_decode_uri_component(" + arg0 + ")";
         }
 
         // ── Math.max / Math.min with more than 2 arguments ──────────────────

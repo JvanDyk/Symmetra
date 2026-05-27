@@ -34,6 +34,10 @@ struct BatchRequest {
     std::string path;               // URL path
     std::string body;               // raw request body (may be empty)
     int64_t     arrivalUs;          // monotonic arrival timestamp (µs)
+    // Request headers (populated from HTTP parse)
+    std::string authorization;      // Authorization header value
+    std::string contentType;        // Content-Type header value
+    std::string userAgent;          // User-Agent header value
 };
 
 // ── Tuneable policy ──────────────────────────────────────────────────────────
@@ -61,8 +65,9 @@ struct BatchPolicy {
 // ── Result of a batch launch, returned to the caller ─────────────────────────
 
 struct BatchResult {
-    std::vector<std::string> responses;   // one response body per request
-    std::vector<int>         statuses;    // one HTTP status per request
+    std::vector<std::string> responses;     // one response body per request
+    std::vector<int>         statuses;      // one HTTP status per request
+    std::vector<std::string> respHeaders;   // one custom header block per request (may be empty)
 };
 
 // ── Launch callback type ─────────────────────────────────────────────────────

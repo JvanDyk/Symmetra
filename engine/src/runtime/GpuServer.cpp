@@ -403,7 +403,13 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
         CUdeviceptr d_resp    = alloc.requestAlloc(slot.idx, RESP_SIZE);
         CUdeviceptr d_respLen = alloc.requestAlloc(slot.idx, sizeof(uint32_t));
 
-        // ── 4. Upload body + zero response buffer ─────────────────────────
+        // Allocate VRAM for request header strings (small, use slab)
+        static constexpr size_t HDR_BUF = 512;
+        CUdeviceptr d_auth  = alloc.requestAlloc(slot.idx, HDR_BUF);
+        CUdeviceptr d_ctype = alloc.requestAlloc(slot.idx, HDR_BUF);
+        CUdeviceptr d_ua    = alloc.requestAlloc(slot.idx, HDR_BUF);
+
+        // ── 4. Upload body + zero response buffer + upload header strings ─
         if (d_body && req.bodyStart) {
             CUDA_CHECK(cudaMemcpyAsync(
                 reinterpret_cast<void*>(d_body),
@@ -412,6 +418,17 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
         }
         CUDA_CHECK(cudaMemsetAsync(reinterpret_cast<void*>(d_resp),    0, RESP_SIZE,        slot.stream));
         CUDA_CHECK(cudaMemsetAsync(reinterpret_cast<void*>(d_respLen), 0, sizeof(uint32_t), slot.stream));
+
+        // Upload header strings (zero-terminated, capped at HDR_BUF-1)
+        auto uploadHdrStr = [&](CUdeviceptr dst, const std::string& s) {
+            if (!dst) return;
+            size_t n = std::min(s.size(), HDR_BUF - 1);
+            CUDA_CHECK(cudaMemcpyAsync(reinterpret_cast<void*>(dst),
+                s.c_str(), n + 1, cudaMemcpyHostToDevice, slot.stream));
+        };
+        uploadHdrStr(d_auth,  req.authorization);
+        uploadHdrStr(d_ctype, req.contentType);
+        uploadHdrStr(d_ua,    req.userAgent);
 
         // ── 5. Launch handler kernel ──────────────────────────────────────
         // Refresh GPU timestamp before launch (10 ms accuracy)
@@ -423,7 +440,8 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
         }
         int respStatus = 404;
         if (routeId >= 0 && _mod.dispatch) {
-            void* args[] = { &routeId, &d_body, &req.bodyLen, &d_resp, &d_respLen };
+            void* args[] = { &routeId, &d_body, &req.bodyLen, &d_resp, &d_respLen,
+                             &d_auth, &d_ctype, &d_ua };
             CUresult kr = cuLaunchKernel(
                 _mod.dispatch,
                 1, 1, 1,
@@ -497,6 +515,8 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
         // ── 7. Build and send HTTP response ──────────────────────────────
         const char* notFound = "{\"error\":\"Not Found\"}";
 
+        // Response headers written by kernel to last 256 bytes of resp_buf
+        const char* respExtraHeaders = nullptr;
         if (routeId < 0) {
             body    = notFound;
             bodyLen = static_cast<int>(strlen(notFound));
@@ -505,13 +525,16 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
             body    = static_cast<const char*>(h_resp);
             // h_respLen written by the kernel; fall back to strlen only if zero
             // (indicates the kernel didn't set it — older compiled modules).
-            bodyLen = (h_respLen > 0 && h_respLen < RESP_SIZE)
+            bodyLen = (h_respLen > 0 && h_respLen < RESP_SIZE - 256)
                     ? static_cast<int>(h_respLen)
-                    : static_cast<int>(strnlen(body, RESP_SIZE));
+                    : static_cast<int>(strnlen(body, RESP_SIZE - 256));
+            // Custom response headers are packed at resp_buf[RESP_SIZE-256..RESP_SIZE-1]
+            const char* hdrTail = static_cast<const char*>(h_resp) + (RESP_SIZE - 256);
+            if (hdrTail[0] != '\0') respExtraHeaders = hdrTail;
         }
 
         bool keepAlive = wantsKeepAlive(req);
-        std::string resp = buildResponse(respStatus, body, bodyLen, keepAlive);
+        std::string resp = buildResponse(respStatus, body, bodyLen, keepAlive, respExtraHeaders);
 
         // ── TLS encryption (if enabled) ──────────────────────────────────────
         if (tlsSess.tlsEnabled && tlsSess.handshakeDone) {
@@ -606,14 +629,17 @@ void GpuServer::acceptLoopBatch() {
         // Hand off to the batch scheduler.
         // IMPORTANT: do NOT close connFd here — it is now owned by the BatchRequest.
         BatchRequest br;
-        br.fd        = connFd;
-        br.routeId   = routeId;
-        br.method    = req.method;
-        br.path      = req.path;
-        br.body      = req.bodyStart
-                           ? std::string(req.bodyStart, req.bodyLen)
-                           : std::string{};
-        br.arrivalUs = nowUs();
+        br.fd            = connFd;
+        br.routeId       = routeId;
+        br.method        = req.method;
+        br.path          = req.path;
+        br.body          = req.bodyStart
+                               ? std::string(req.bodyStart, req.bodyLen)
+                               : std::string{};
+        br.arrivalUs     = nowUs();
+        br.authorization = req.authorization;
+        br.contentType   = req.contentType;
+        br.userAgent     = req.userAgent;
 
         _scheduler->submitRequest(std::move(br));
         // connFd is now owned by the BatchRequest — do NOT use it below
@@ -643,17 +669,24 @@ void GpuServer::batchLaunch(int routeId,
     std::vector<int>         h_lens(count);
     std::vector<const char*> h_paths(count);
     std::vector<const char*> h_methods(count);
+    std::vector<const char*> h_auths(count);
+    std::vector<const char*> h_ctypes(count);
+    std::vector<const char*> h_uas(count);
     for (int i = 0; i < count; i++) {
         h_bodies[i]  = requests[i].body.c_str();
         h_lens[i]    = static_cast<int>(requests[i].body.size());
         h_paths[i]   = requests[i].path.c_str();
         h_methods[i] = requests[i].method.c_str();
+        h_auths[i]   = requests[i].authorization.c_str();
+        h_ctypes[i]  = requests[i].contentType.c_str();
+        h_uas[i]     = requests[i].userAgent.c_str();
     }
 
     // Upload request data to VRAM (async — queued on slot.stream)
     CUresult ur = bctx.uploadBatch(
         h_bodies.data(), h_lens.data(),
-        h_paths.data(), h_methods.data(),
+        h_paths.data(),  h_methods.data(),
+        h_auths.data(),  h_ctypes.data(), h_uas.data(),
         count, slot.stream);
 
     if (ur != CUDA_SUCCESS) {
@@ -682,11 +715,12 @@ void GpuServer::batchLaunch(int routeId,
     //   Each thread handles one request slot; padding threads return early via d_active mask.
     void* args[] = {
         &routeId,
-        &bctx.d_bodies,   &bctx.d_body_lens,
-        &bctx.d_paths,    &bctx.d_methods,
-        &bctx.d_resp_bufs,&bctx.d_resp_lens, &bctx.d_statuses,
+        &bctx.d_bodies,         &bctx.d_body_lens,
+        &bctx.d_paths,          &bctx.d_methods,
+        &bctx.d_resp_bufs,      &bctx.d_resp_lens, &bctx.d_statuses,
         &bctx.d_active,
-        &padded
+        &padded,
+        &bctx.d_authorizations, &bctx.d_content_types, &bctx.d_user_agents
     };
     CUresult kr = cuLaunchKernel(
         _mod.dispatchBatch,
@@ -708,7 +742,7 @@ void GpuServer::batchLaunch(int routeId,
         // Download response lengths, status codes, and bodies.
         // downloadResults() synchronises slot.stream internally.
         std::vector<unsigned int> lens;
-        bctx.downloadResults(lens, result.statuses, result.responses, slot.stream);
+        bctx.downloadResults(lens, result.statuses, result.responses, result.respHeaders, slot.stream);
     }
 
     // Return stream to the pool.
@@ -746,9 +780,14 @@ void GpuServer::sendBatchResponses(const std::vector<BatchRequest>& requests,
             if (status == 200) status = 404;
         }
 
+        // Custom response headers packed by kernel into resp tail
+        const char* extraHdrs = nullptr;
+        if (i < result.respHeaders.size() && !result.respHeaders[i].empty())
+            extraHdrs = result.respHeaders[i].c_str();
+
         // Batch path always closes after the response — HTTP/1.1 keep-alive is
         // handled by the accept loop for persistent connections (future work).
-        std::string resp = buildResponse(status, body, bodyLen, /*keepAlive=*/false);
+        std::string resp = buildResponse(status, body, bodyLen, /*keepAlive=*/false, extraHdrs);
         ::send(fd, resp.c_str(), static_cast<int>(resp.size()), 0);
         CLOSE_SOCKET(fd);
     }
@@ -1046,25 +1085,60 @@ bool GpuServer::parseHttp(const char* buf, int len,
     req.bodyStart = view.body;
     req.bodyLen   = static_cast<int>(view.bodyLen);
 
+    // Extract common request headers
+    if (view.authorization && view.authorizationLen > 0)
+        req.authorization = std::string(view.authorization, view.authorizationLen);
+    if (view.contentType && view.contentTypeLen > 0) {
+        req.contentType = std::string(view.contentType, view.contentTypeLen);
+        req.headers["content-type"] = req.contentType;
+    }
+    if (view.userAgent && view.userAgentLen > 0)
+        req.userAgent = std::string(view.userAgent, view.userAgentLen);
+
     return true;
 }
 
 // ── Response builder ──────────────────────────────────────────────────────────
 
 std::string GpuServer::buildResponse(int status, const char* body, int bodyLen,
-                                      bool keepAlive) const {
-    const char* text = (status == 200) ? "OK"        :
-                       (status == 404) ? "Not Found" : "Internal Server Error";
-    char hdr[256];
+                                      bool keepAlive, const char* extraHeaders) const {
+    const char* text = (status == 200) ? "OK"                    :
+                       (status == 201) ? "Created"               :
+                       (status == 204) ? "No Content"            :
+                       (status == 301) ? "Moved Permanently"     :
+                       (status == 302) ? "Found"                 :
+                       (status == 400) ? "Bad Request"           :
+                       (status == 401) ? "Unauthorized"          :
+                       (status == 403) ? "Forbidden"             :
+                       (status == 404) ? "Not Found"             :
+                       (status == 405) ? "Method Not Allowed"    :
+                       (status == 409) ? "Conflict"              :
+                       (status == 422) ? "Unprocessable Entity"  :
+                       (status == 429) ? "Too Many Requests"     :
+                       (status == 500) ? "Internal Server Error" :
+                       (status == 503) ? "Service Unavailable"   : "Unknown";
+
+    // Build base headers
+    char hdr[512];
     std::snprintf(hdr, sizeof(hdr),
                   "HTTP/1.1 %d %s\r\n"
                   "Content-Type: application/json\r\n"
                   "Content-Length: %d\r\n"
-                  "Connection: %s\r\n"
-                  "\r\n",
+                  "Connection: %s\r\n",
                   status, text, bodyLen,
                   keepAlive ? "keep-alive" : "close");
-    return std::string(hdr) + std::string(body, bodyLen);
+
+    std::string resp = hdr;
+
+    // Append any custom response headers set by ctx.header(name, val)
+    // These arrive as "Name: Value\r\n" pairs (already formatted by symm_set_header)
+    if (extraHeaders && extraHeaders[0] != '\0') {
+        resp += extraHeaders;
+    }
+
+    resp += "\r\n";  // end of headers
+    resp.append(body, bodyLen);
+    return resp;
 }
 
 } // namespace symm

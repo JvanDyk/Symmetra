@@ -589,6 +589,46 @@ static void testDispatch() {
         ASSERT_CONTAINS(src, "symm_dispatch_batch");
     });
 
+    TEST("dispatch kernel has authorization arg", {
+        auto src = codegen("app.get('/ping', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "authorization");
+    });
+
+    TEST("dispatch kernel has content_type arg", {
+        auto src = codegen("app.get('/ping', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "content_type");
+    });
+
+    TEST("dispatch kernel packs resp_headers into resp_buf tail", {
+        auto src = codegen("app.get('/ping', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "resp_headers_len");
+        ASSERT_CONTAINS(src, "65536 - 256");
+    });
+
+    TEST("ctx.header() emits symm_set_header", {
+        auto src = codegen(
+            "app.get('/h', (ctx) => { ctx.header('X-Custom', 'value'); ctx.json({ ok: 1 }); });");
+        ASSERT_CONTAINS(src, "symm_set_header");
+    });
+
+    TEST("ctx.headers.get() emits symm_get_header", {
+        auto src = codegen(
+            "app.get('/h', (ctx) => { const tok = ctx.headers.get('Authorization'); ctx.json({ tok }); });");
+        ASSERT_CONTAINS(src, "symm_get_header");
+    });
+
+    TEST("encodeURIComponent emits symm_encode_uri_component", {
+        auto src = codegen(
+            "app.get('/e', (ctx) => { const e = encodeURIComponent('hello world'); ctx.json({ e }); });");
+        ASSERT_CONTAINS(src, "symm_encode_uri_component");
+    });
+
+    TEST("decodeURIComponent emits symm_decode_uri_component", {
+        auto src = codegen(
+            "app.get('/d', (ctx) => { const d = decodeURIComponent('hello%20world'); ctx.json({ d }); });");
+        ASSERT_CONTAINS(src, "symm_decode_uri_component");
+    });
+
     TEST("route_count constant emitted", {
         auto src = codegen(
             "app.get('/a', (ctx) => { ctx.json({ a: 1 }); });\n"

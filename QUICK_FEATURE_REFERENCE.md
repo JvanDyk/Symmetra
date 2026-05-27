@@ -1,7 +1,7 @@
 # Symmetra Quick Feature Reference
 ## At-a-Glance Language Coverage
 
-**Status**: v1.0 Production (825 tests ✅, 170/170 features - 100% Complete)  
+**Status**: v1.0 Production (832 tests ✅, 174/174 features - 100% Complete)  
 **Last Updated**: May 27, 2026 (Complete)  
 **Test Coverage**: 100% (Unit, Integration, E2E, Performance benchmarks)
 
@@ -314,14 +314,15 @@ app.patch(path, handler)    // ✅ PATCH endpoint
     ctx.query               // ✅ { id: "123" }
     ctx.params              // ✅ { id: "123" } (route params)
     ctx.body                // ✅ Raw request body
-    ctx.headers             // ✅ { "content-type": "..." }
+    ctx.headers             // ✅ Request headers map
+    ctx.headers.get("Authorization")  // ✅ Read request header by name
     
     ctx.status(200)         // ✅ Set HTTP status
     ctx.json({ ... })       // ✅ Send JSON
     ctx.text("...")         // ✅ Send text
     ctx.html("<h1>...")     // ✅ Send HTML
     ctx.redirect("/path")   // ✅ Redirect
-    ctx.header("X-...", v)  // ✅ Set response header
+    ctx.header("X-...", v)  // ✅ Set custom response header
 }
 
 serve(app, { port: 8000 })  // ✅ Start server
@@ -338,8 +339,10 @@ console.warn(x)             // ✅ Warning log
 ### Utilities
 
 ```typescript
-Date.now()                  // ✅ Current timestamp (ms)
-Math.random()               // ✅ Random [0, 1)
+Date.now()                          // ✅ Current timestamp (ms)
+Math.random()                       // ✅ Random [0, 1)
+encodeURIComponent("hello world")   // ✅ Percent-encode string
+decodeURIComponent("hello%20world") // ✅ Decode percent-encoded string
 ```
 
 ---

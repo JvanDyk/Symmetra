@@ -42,9 +42,11 @@ struct BatchContext {
     static constexpr int WARP_WIDTH       = 32;
     static constexpr int BATCH_CAPACITY   = 256;       // 8 warps per block
     static constexpr int MAX_BODY_BYTES   = 65536;     // 64 KB per request body
-    static constexpr int MAX_RESP_BYTES   = 65536;     // 64 KB per response
+    static constexpr int MAX_RESP_BYTES   = 65536;     // 64 KB per response (last 256 = resp_headers)
+    static constexpr int RESP_HDR_OFFSET  = 65280;     // RESP_BYTES - 256 = header tail start
     static constexpr int MAX_PATH_BYTES   = 2048;
     static constexpr int MAX_METHOD_BYTES = 8;
+    static constexpr int MAX_HDR_BYTES    = 512;       // per request-header string (auth/ct/ua)
 
     // ── Device pointers (all allocated in a single cuMemAlloc call) ──────────
     // Input:
@@ -59,11 +61,19 @@ struct BatchContext {
     unsigned int*  d_resp_lens;  // [BATCH_CAPACITY]
     int*           d_statuses;   // [BATCH_CAPACITY]
 
+    // Request header arrays (uploaded per-slot):
+    char**        d_authorizations;  // [BATCH_CAPACITY] pointers into d_authBuf
+    char**        d_content_types;   // [BATCH_CAPACITY] pointers into d_ctBuf
+    char**        d_user_agents;     // [BATCH_CAPACITY] pointers into d_uaBuf
+
     // Data buffers (contiguous, indexed by slot):
     char*  d_bodyBuf;    // [BATCH_CAPACITY × MAX_BODY_BYTES]
     char*  d_pathBuf;    // [BATCH_CAPACITY × MAX_PATH_BYTES]
     char*  d_methodBuf;  // [BATCH_CAPACITY × MAX_METHOD_BYTES]
     char*  d_respBuf;    // [BATCH_CAPACITY × MAX_RESP_BYTES]
+    char*  d_authBuf;    // [BATCH_CAPACITY × MAX_HDR_BYTES]
+    char*  d_ctBuf;      // [BATCH_CAPACITY × MAX_HDR_BYTES]
+    char*  d_uaBuf;      // [BATCH_CAPACITY × MAX_HDR_BYTES]
 
     // ── Host-side metadata (CPU only) ────────────────────────────────────────
     int          actualCount = 0;   // real requests in this batch (≤ BATCH_CAPACITY)
@@ -85,13 +95,16 @@ struct BatchContext {
         size_t szPathBuf = (size_t)BATCH_CAPACITY * MAX_PATH_BYTES;
         size_t szMethBuf = (size_t)BATCH_CAPACITY * MAX_METHOD_BYTES;
         size_t szRespBuf = (size_t)BATCH_CAPACITY * MAX_RESP_BYTES;
+        size_t szHdrBuf  = (size_t)BATCH_CAPACITY * MAX_HDR_BYTES;
 
-        allocBytes = (szPtrArr * 4)   // d_bodies, d_paths, d_methods, d_resp_bufs
+        allocBytes = (szPtrArr * 7)   // d_bodies, d_paths, d_methods, d_resp_bufs,
+                                      // d_authorizations, d_content_types, d_user_agents
                    + (szIntArr * 1)   // d_body_lens
                    + (szUintArr * 1)  // d_resp_lens
                    + (szIntArr * 1)   // d_statuses
                    + szU32Arr         // d_active
-                   + szBodyBuf + szPathBuf + szMethBuf + szRespBuf;
+                   + szBodyBuf + szPathBuf + szMethBuf + szRespBuf
+                   + szHdrBuf * 3;    // auth + content-type + user-agent
 
         CUresult r = cuMemAlloc(&d_base, allocBytes);
         if (r != CUDA_SUCCESS) return r;
@@ -106,28 +119,36 @@ struct BatchContext {
             field = p; p += bytes;
         };
 
-        assign(reinterpret_cast<void*&>(d_bodies),    szPtrArr);
-        assign(reinterpret_cast<void*&>(d_body_lens), szIntArr);
-        assign(reinterpret_cast<void*&>(d_paths),     szPtrArr);
-        assign(reinterpret_cast<void*&>(d_methods),   szPtrArr);
-        assign(reinterpret_cast<void*&>(d_active),    szU32Arr);
-        assign(reinterpret_cast<void*&>(d_resp_bufs), szPtrArr);
-        assign(reinterpret_cast<void*&>(d_resp_lens), szUintArr);
-        assign(reinterpret_cast<void*&>(d_statuses),  szIntArr);
-        assign(reinterpret_cast<void*&>(d_bodyBuf),   szBodyBuf);
-        assign(reinterpret_cast<void*&>(d_pathBuf),   szPathBuf);
-        assign(reinterpret_cast<void*&>(d_methodBuf), szMethBuf);
-        assign(reinterpret_cast<void*&>(d_respBuf),   szRespBuf);
+        assign(reinterpret_cast<void*&>(d_bodies),         szPtrArr);
+        assign(reinterpret_cast<void*&>(d_body_lens),      szIntArr);
+        assign(reinterpret_cast<void*&>(d_paths),          szPtrArr);
+        assign(reinterpret_cast<void*&>(d_methods),        szPtrArr);
+        assign(reinterpret_cast<void*&>(d_active),         szU32Arr);
+        assign(reinterpret_cast<void*&>(d_resp_bufs),      szPtrArr);
+        assign(reinterpret_cast<void*&>(d_resp_lens),      szUintArr);
+        assign(reinterpret_cast<void*&>(d_statuses),       szIntArr);
+        assign(reinterpret_cast<void*&>(d_authorizations), szPtrArr);
+        assign(reinterpret_cast<void*&>(d_content_types),  szPtrArr);
+        assign(reinterpret_cast<void*&>(d_user_agents),    szPtrArr);
+        assign(reinterpret_cast<void*&>(d_bodyBuf),        szBodyBuf);
+        assign(reinterpret_cast<void*&>(d_pathBuf),        szPathBuf);
+        assign(reinterpret_cast<void*&>(d_methodBuf),      szMethBuf);
+        assign(reinterpret_cast<void*&>(d_respBuf),        szRespBuf);
+        assign(reinterpret_cast<void*&>(d_authBuf),        szHdrBuf);
+        assign(reinterpret_cast<void*&>(d_ctBuf),          szHdrBuf);
+        assign(reinterpret_cast<void*&>(d_uaBuf),          szHdrBuf);
 
         return CUDA_SUCCESS;
     }
 
     // Upload one batch of CPU requests into VRAM.
-    // bodies[i], paths[i], methods[i] are host pointers.
+    // bodies[i], paths[i], methods[i], and header arrays are host pointers.
     // count is the actual number of requests (≤ BATCH_CAPACITY).
     CUresult uploadBatch(
-        const char** h_bodies,     const int* h_body_lens,
-        const char** h_paths,      const char** h_methods,
+        const char** h_bodies,        const int*  h_body_lens,
+        const char** h_paths,         const char** h_methods,
+        const char** h_auths,         const char** h_ctypes,
+        const char** h_uas,
         int count, CUstream stream
     ) {
         actualCount = count;
@@ -145,7 +166,18 @@ struct BatchContext {
         std::vector<const char*> h_pathPtrs(BATCH_CAPACITY, nullptr);
         std::vector<const char*> h_methPtrs(BATCH_CAPACITY, nullptr);
         std::vector<char*>       h_respPtrs(BATCH_CAPACITY, nullptr);
+        std::vector<const char*> h_authPtrs(BATCH_CAPACITY, nullptr);
+        std::vector<const char*> h_ctPtrs(BATCH_CAPACITY, nullptr);
+        std::vector<const char*> h_uaPtrs(BATCH_CAPACITY, nullptr);
         std::vector<int>         h_lens(BATCH_CAPACITY, 0);
+
+        // Helper to upload a header string and return the device pointer
+        auto uploadHdr = [&](char* dstBuf, const char* src) -> const char* {
+            if (!src) { dstBuf[0] = '\0'; return dstBuf; }
+            int n = (int)strnlen(src, MAX_HDR_BYTES - 1);
+            cuMemcpyHtoDAsync((CUdeviceptr)dstBuf, src, (size_t)(n + 1), stream);
+            return dstBuf;
+        };
 
         for (int i = 0; i < count; i++) {
             h_bodyPtrs[i] = d_bodyBuf + (size_t)i * MAX_BODY_BYTES;
@@ -165,6 +197,11 @@ struct BatchContext {
                               (size_t)(mlen + 1), stream);
             h_methPtrs[i] = dst_meth;
 
+            // Upload header strings
+            h_authPtrs[i] = uploadHdr(d_authBuf + (size_t)i * MAX_HDR_BYTES, h_auths ? h_auths[i] : nullptr);
+            h_ctPtrs[i]   = uploadHdr(d_ctBuf   + (size_t)i * MAX_HDR_BYTES, h_ctypes ? h_ctypes[i] : nullptr);
+            h_uaPtrs[i]   = uploadHdr(d_uaBuf   + (size_t)i * MAX_HDR_BYTES, h_uas ? h_uas[i] : nullptr);
+
             h_lens[i] = h_body_lens[i];
         }
 
@@ -179,6 +216,12 @@ struct BatchContext {
                           h_methPtrs.data(), BATCH_CAPACITY * sizeof(void*), stream);
         cuMemcpyHtoDAsync((CUdeviceptr)d_resp_bufs,
                           h_respPtrs.data(), BATCH_CAPACITY * sizeof(void*), stream);
+        cuMemcpyHtoDAsync((CUdeviceptr)d_authorizations,
+                          h_authPtrs.data(), BATCH_CAPACITY * sizeof(void*), stream);
+        cuMemcpyHtoDAsync((CUdeviceptr)d_content_types,
+                          h_ctPtrs.data(),   BATCH_CAPACITY * sizeof(void*), stream);
+        cuMemcpyHtoDAsync((CUdeviceptr)d_user_agents,
+                          h_uaPtrs.data(),   BATCH_CAPACITY * sizeof(void*), stream);
 
         // Active bitmask: bits 0..(count-1) set
         uint32_t h_active[8] = {0};
@@ -190,17 +233,19 @@ struct BatchContext {
         return CUDA_SUCCESS;
     }
 
-    // Download response lengths and status codes after kernel completion.
+    // Download response lengths, status codes, bodies, and custom headers after kernel.
     CUresult downloadResults(
         std::vector<unsigned int>& out_lens,
         std::vector<int>&          out_statuses,
         std::vector<std::string>&  out_bodies,
+        std::vector<std::string>&  out_resp_headers,
         CUstream stream
     ) {
         int n = actualCount;
         out_lens.resize(n);
         out_statuses.resize(n);
         out_bodies.resize(n);
+        out_resp_headers.resize(n);
 
         // Download lengths and statuses (small — sync is OK)
         std::vector<unsigned int> h_lens(n);
@@ -215,13 +260,22 @@ struct BatchContext {
             out_lens[i]     = h_lens[i];
             out_statuses[i] = h_stat[i];
 
-            // Download response body
-            int len = (int)std::min((unsigned int)MAX_RESP_BYTES, h_lens[i]);
-            if (len > 0) {
-                out_bodies[i].resize(len);
+            // Response body: capped at RESP_HDR_OFFSET (last 256 bytes reserved for headers)
+            unsigned int bodyLen = std::min(h_lens[i], (unsigned int)RESP_HDR_OFFSET);
+            if (bodyLen > 0) {
+                out_bodies[i].resize(bodyLen);
                 cuMemcpyDtoH(out_bodies[i].data(),
                              (CUdeviceptr)(d_respBuf + (size_t)i * MAX_RESP_BYTES),
-                             len);
+                             bodyLen);
+            }
+
+            // Custom response headers: packed at tail of resp_buf (last 256 bytes)
+            char h_hdrs[256] = {};
+            cuMemcpyDtoH(h_hdrs,
+                         (CUdeviceptr)(d_respBuf + (size_t)i * MAX_RESP_BYTES + RESP_HDR_OFFSET),
+                         256);
+            if (h_hdrs[0] != '\0') {
+                out_resp_headers[i] = h_hdrs;
             }
         }
         return CUDA_SUCCESS;
