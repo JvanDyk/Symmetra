@@ -1,0 +1,5 @@
+PackageIdentifier: symmetra.sym
+PackageVersion: 1.0.0
+DefaultLocale: en-US
+ManifestType: defaultLocale
+ManifestVersion: 1.4.0

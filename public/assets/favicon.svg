@@ -1,0 +1,19 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c6fff"/>
+      <stop offset="100%" stop-color="#5af0c4"/>
+    </linearGradient>
+  </defs>
+  <!-- Dark background pill so it renders cleanly on any browser chrome -->
+  <rect width="32" height="32" rx="7" fill="#0a0a0f"/>
+  <!-- Hexagon -->
+  <polygon points="16,2 28,9 28,23 16,30 4,23 4,9"
+           fill="none" stroke="url(#g)" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Σ -->
+  <text x="16" y="23" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+        font-size="17" font-weight="700"
+        fill="url(#g)">Σ</text>
+</svg>

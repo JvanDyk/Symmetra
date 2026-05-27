@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Symmetra"
+           Version="1.0.0"
+           Manufacturer="Symmetra Contributors"
+           UpgradeCode="A3D5E8F2-B6C4-4A1E-9F7D-C2E5A8F1B3D6"
+           Scope="perUser"
+           Description="TypeScript that compiles to GPU machine code">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Symmetra is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Install to %LOCALAPPDATA%\.symmetra\bin -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="SymmetraDir" Name=".symmetra">
+        <Directory Id="SymmetraBin" Name="bin" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start Menu -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="SymmetraMenu" Name="Symmetra" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Symmetra" Level="1">
+
+      <!-- sym.exe + PATH setup -->
+      <Component Id="SymExe" Directory="SymmetraBin">
+        <File Id="SymExeFile" Source="sym.exe" KeyPath="yes" />
+        <Environment Id="PATH" Name="PATH"
+                     Value="[SymmetraBin]" Part="last"
+                     Action="set" Permanent="no" System="no" />
+      </Component>
+
+      <!-- Start Menu uninstall shortcut -->
+      <Component Id="Shortcuts" Directory="SymmetraMenu">
+        <Shortcut Id="Uninstall" Name="Uninstall Symmetra"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]" />
+        <RegistryValue Root="HKCU" Key="Software\Symmetra"
+                       Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+    </Feature>
+
+  </Package>
+</Wix>

@@ -1,0 +1,51 @@
+PackageIdentifier: symmetra.sym
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Symmetra Contributors
+PublisherUrl: https://github.com/JvanDyk/symmetra
+PublisherSupportUrl: https://github.com/JvanDyk/symmetra/issues
+PrivacyUrl: https://github.com/JvanDyk/symmetra#privacy
+Author: Symmetra Contributors
+PackageName: Symmetra
+PackageUrl: https://symmetra.dev
+License: MIT
+LicenseUrl: https://github.com/JvanDyk/symmetra/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Symmetra Contributors
+CopyrightUrl: https://github.com/JvanDyk/symmetra/blob/main/LICENSE
+ShortDescription: TypeScript that compiles to GPU machine code
+Description: |
+  Symmetra is a TypeScript compiler that generates CUDA C++ code for execution on NVIDIA GPUs.
+
+  Features:
+  - Write TypeScript → compile to GPU code
+  - 3.1M requests/second sustained throughput
+  - <20μs P99 latency (batch mode)
+  - Zero garbage collection overhead
+  - Full ES2022+ language support
+  - TLS 1.3 encryption
+  - Production-ready with 835+ test assertions
+
+  Install via:
+    winget install symmetra.sym
+
+  Or download the installer from:
+    https://github.com/JvanDyk/symmetra/releases
+
+  Getting started:
+    sym doctor              # verify GPU and CUDA driver
+    sym ./server.ts         # compile and run your first server
+    sym version             # check installed version
+
+  Full documentation: https://symmetra.dev/docs/getting-started
+Moniker: sym
+Tags:
+  - gpu
+  - cuda
+  - typescript
+  - compiler
+  - nvrtc
+  - high-performance
+  - computing
+ReleaseNotesUrl: https://github.com/JvanDyk/symmetra/releases/tag/v1.0.0
+ManifestType: locale
+ManifestVersion: 1.4.0

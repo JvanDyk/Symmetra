@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Symmetra GPU architectural constraints and workarounds. Understand trade-offs and how to work within them.">
+<title>Constraints & Trade-offs — Symmetra Docs</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #04070b;
+  --bg-panel: rgba(7, 16, 24, 0.9);
+  --text: #eef4ff;
+  --muted: #99abc4;
+  --accent-a: #7c6fff;
+  --accent-b: #5af0c4;
+  --accent-d: #ff8b61;
+  --success: #b8ff76;
+  --danger: #ff7e7e;
+  --radius: 16px;
+  --mono: "IBM Plex Mono", monospace;
+  --body: "Exo 2", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 60px 40px;
+  background: linear-gradient(135deg, var(--bg) 0%, #0a1620 100%);
+  color: var(--text);
+  font-family: var(--body);
+  line-height: 1.8;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+h1 { font-size: 2.8em; margin: 0 0 20px 0; color: var(--accent-b); }
+h2 { font-size: 1.8em; margin: 50px 0 20px 0; color: var(--accent-a); border-bottom: 2px solid rgba(124,111,255,0.2); padding-bottom: 10px; }
+h3 { font-size: 1.3em; margin: 30px 0 15px 0; color: var(--accent-c, #8bc6ff); }
+
+p { margin: 15px 0; }
+code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: var(--mono); color: var(--accent-b); }
+pre { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 8px; overflow-x: auto; border-left: 3px solid var(--accent-a); }
+
+.constraint-box {
+  background: var(--bg-panel);
+  padding: 25px;
+  border-radius: var(--radius);
+  margin: 25px 0;
+  border-left: 4px solid var(--accent-d);
+}
+
+.workaround-box {
+  background: rgba(90, 240, 196, 0.05);
+  padding: 20px;
+  border-radius: 12px;
+  margin: 15px 0;
+  border-left: 4px solid var(--accent-b);
+}
+
+.impact-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.impact-high {
+  background: rgba(255, 127, 126, 0.2);
+  color: var(--danger);
+}
+
+.impact-medium {
+  background: rgba(255, 139, 97, 0.2);
+  color: var(--accent-d);
+}
+
+.impact-low {
+  background: rgba(184, 255, 118, 0.2);
+  color: var(--success);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+}
+
+th, td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(116, 152, 255, 0.18);
+}
+
+th {
+  background: rgba(124, 111, 255, 0.1);
+  font-weight: 600;
+  color: var(--accent-a);
+}
+
+tr:hover {
+  background: rgba(124, 111, 255, 0.05);
+}
+
+.nav-back {
+  display: inline-block;
+  margin-bottom: 40px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.nav-back:hover {
+  color: var(--accent-b);
+}
+
+.toc {
+  background: var(--bg-panel);
+  padding: 25px;
+  border-radius: var(--radius);
+  margin: 30px 0;
+}
+
+.toc h3 { margin-top: 0; }
+.toc ul { list-style: none; padding: 0; }
+.toc li { margin: 10px 0; }
+.toc a { color: var(--accent-b); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  margin: 25px 0;
+}
+
+@media (max-width: 768px) {
+  body { padding: 40px 20px; }
+  h1 { font-size: 2em; }
+  h2 { font-size: 1.4em; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<a href="/docs/getting-started.html" class="nav-back">← Documentation</a>
+
+<h1>🔧 Constraints & Trade-offs</h1>
+
+<p style="color: var(--muted); font-size: 1.1em; margin: 20px 0 40px 0;">
+Symmetra is optimized for high-performance GPU execution. This page documents architectural constraints and how to work within them.
+</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#synchronous-execution">Synchronous Execution (No Event Loop)</a></li>
+    <li><a href="#static-memory">Static Memory Allocation</a></li>
+    <li><a href="#unicode">No Unicode Support</a></li>
+    <li><a href="#regex">Simplified Regex Engine</a></li>
+    <li><a href="#dynamic-code">No Runtime Code Generation</a></li>
+    <li><a href="#stack-traces">Simplified Stack Traces</a></li>
+    <li><a href="#reflection">Limited Metaprogramming</a></li>
+    <li><a href="#summary">Summary Table</a></li>
+  </ul>
+</div>
+
+---
+
+<h2 id="synchronous-execution">⚙️ Synchronous Execution (No Event Loop)</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-low">Impact: Low</span>
+    <span class="impact-badge impact-low">Common: Rare</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    All code on the GPU executes <strong>synchronously and sequentially</strong>. There is no event loop, no scheduler, and no true asynchronous execution.
+  </p>
+  <p>
+    <code>async/await</code> syntax is parsed and compiles, but <code>await</code> does not actually suspend execution—it simply passes through the expression value.
+  </p>
+  <pre>// This compiles and runs, but synchronously:
+async function fetchData() {
+  const result = await somePromise;  // ← await is stripped; synchronous
+  return result;
+}
+
+// GPU execution:
+// 1. Call somePromise (synchronously)
+// 2. Immediately use result
+// No suspension, no context switching</pre>
+
+  <h3>Why?</h3>
+  <p>
+    GPUs have no OS-level threading, no preemption, and no I/O subsystem. All work happens on a fixed schedule: load data, compute, store results. Adding true async would require cooperative multitasking (coroutines), which adds code size and memory overhead.
+  </p>
+
+  <h3>When It Matters</h3>
+  <p>
+    <strong>Almost never in HTTP servers.</strong> Typical workload:
+  </p>
+  <ul>
+    <li>✅ Synchronous request processing (read input, compute, write output)</li>
+    <li>✅ Batched parallel requests (256+ at once)</li>
+    <li>❌ Awaiting I/O on GPU (network, disk) — GPU can't do I/O</li>
+    <li>❌ Coordination between async tasks — use external message queue instead</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+    <p><strong>Option 1: Synchronous APIs</strong></p>
+    <pre>// Instead of:
+async function compute(x) {
+  const y = await transform(x);
+  return y * 2;
+}
+
+// Use:
+function compute(x) {
+  const y = transform(x);  // Direct call
+  return y * 2;
+}</pre>
+
+    <p><strong>Option 2: Batch Pre-processing (CPU)</strong></p>
+    <pre>// Pre-fetch all required data on CPU, pass to GPU
+const results = symmetra.compute({
+  input: data,
+  metadata: precomputedMetadata  // Load this on CPU first
+});
+</pre>
+
+    <p><strong>Option 3: Use Node.js for I/O</strong></p>
+    <pre>// Node.js (with async)     GPU (synchronous)
+app.post('/compute', async (req) => {
+  const data = await req.json();      // I/O on CPU
+  const result = gpu.compute(data);   // Pure compute on GPU
+  res.json(result);
+});</pre>
+  </div>
+</div>
+
+---
+
+<h2 id="static-memory">💾 Static Memory Allocation</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-medium">Impact: Medium</span>
+    <span class="impact-badge impact-medium">Common: Sometimes</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    GPU memory is <strong>stack-based and fixed-size</strong>. Arrays must be pre-sized; you cannot dynamically grow them at runtime like in JavaScript.
+  </p>
+  <pre>// This works — fixed size:
+const arr = [1.0, 2.0, 3.0];
+arr[1] = 99;
+
+// This doesn't work as expected:
+arr.push(4.0);  // ← No dynamic allocation; array stays size 3
+arr.from(someIterable);  // ← Returns input as-is; no new array created</pre>
+
+  <h3>Why?</h3>
+  <p>
+    GPU kernels are compiled with a fixed memory footprint. NVIDIA CUDA allocates registers and local memory at kernel launch time. Dynamically resizing arrays would require:
+  </p>
+  <ul>
+    <li>Memory pools and fragmentation management</li>
+    <li>Serialization back to CPU</li>
+    <li>CPU-GPU round-trip (adds 100µs+ latency)</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Pre-size Arrays</strong></p>
+    <pre>// Know max size upfront:
+const MAX_RESULTS = 256;
+const results = new Array(MAX_RESULTS);
+let resultCount = 0;
+
+for (const item of items) {
+  if (resultCount < MAX_RESULTS) {
+    results[resultCount++] = process(item);
+  }
+}</pre>
+
+    <p><strong>Option 2: Variable-Length Data (CPU Pre-processing)</strong></p>
+    <pre>// Node.js server
+app.post('/transform', async (req) => {
+  const items = await req.json();
+
+  // GPU constraint: must know size upfront
+  const results = symmetra.transform({
+    items,
+    maxResults: 256
+  });
+
+  return res.json(results.slice(0, results.actualCount));
+});</pre>
+
+    <p><strong>Option 3: Schema-Based Memory Layout</strong></p>
+    <pre>// Define structure upfront
+const schema = {
+  users: 1000,        // Max 1000 users
+  requestsPerUser: 10, // Max 10 reqs/user
+};
+
+const batch = {
+  userIds: new Array(schema.users),
+  requests: new Array(schema.users * schema.requestsPerUser)
+};
+
+// GPU processes fixed structure
+gpu.process(batch);</pre>
+  </div>
+
+  <h3>Best Practice</h3>
+  <p>
+    <strong>Think of GPU as a deterministic state machine, not a dynamic runtime.</strong> Allocate once at startup, fill with data per request, compute, return results.
+  </p>
+</div>
+
+---
+
+<h2 id="unicode">🌍 No Unicode Support</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-low">Impact: Low</span>
+    <span class="impact-badge impact-low">Common: Rare</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    String handling is <strong>ASCII/UTF-8 bytes only</strong>. No Unicode normalization, no grapheme clusters, no case-folding.
+  </p>
+  <pre>// ASCII/UTF-8 works:
+const name = "Alice";
+name.toUpperCase();  // ✓ "ALICE"
+
+// Unicode operations don't work:
+const emoji = "👍";
+emoji.toUpperCase();  // ✗ No Unicode lib
+emoji.normalize();    // ✗ No-op (returns input)</pre>
+
+  <h3>Why?</h3>
+  <p>
+    Full Unicode support requires the ICU (International Components for Unicode) library, which is 20+ MB and unsuitable for GPU kernels. Symmetra uses simple byte-level operations instead.
+  </p>
+
+  <h3>When It Matters</h3>
+  <ul>
+    <li>✅ ASCII text (names, IDs, domains, tokens)</li>
+    <li>✅ UTF-8 byte sequences (stored/transmitted as-is)</li>
+    <li>❌ Case conversion on non-Latin scripts (Cyrillic, Arabic, etc.)</li>
+    <li>❌ Grapheme-aware string slicing</li>
+    <li>❌ NFKC normalization for comparison</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Pre-process on CPU</strong></p>
+    <pre>// Node.js (has full Unicode support)
+const normalized = str.normalize('NFKC').toLowerCase();
+const result = gpu.process({
+  input: normalized  // Send pre-processed data
+});</pre>
+
+    <p><strong>Option 2: Use ASCII Equivalents</strong></p>
+    <pre>// Instead of relying on Unicode case folding:
+function normalize(s) {
+  // Simple ASCII-only normalization
+  let result = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 97 && c <= 122) result += String.fromCharCode(c - 32);  // a→A
+    else result += s[i];
+  }
+  return result;
+}</pre>
+
+    <p><strong>Option 3: Skip Unicode Operations on GPU</strong></p>
+    <pre>// Only do string matching, not normalization, on GPU:
+const query = 'Alice';                  // Pre-normalized on CPU
+const matches = gpu.findMatches({
+  items,
+  query,
+  options: { caseSensitive: false }
+});</pre>
+  </div>
+
+  <h3>Workaround Overhead</h3>
+  <p>
+    Pre-processing on CPU costs ~1–5µs per request. Negligible compared to GPU computation (typically 50–500µs).
+  </p>
+</div>
+
+---
+
+<h2 id="regex">🔍 Simplified Regex Engine</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-low">Impact: Low</span>
+    <span class="impact-badge impact-low">Common: Rarely</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    Symmetra uses a <strong>non-backtracking NFA (Nondeterministic Finite Automaton)</strong> for regex. This covers 95% of real-world patterns but doesn't support:
+  </p>
+  <ul>
+    <li>Backreferences (<code>\1</code>, <code>\2</code>)</li>
+    <li>Possessive quantifiers (<code>++</code>, <code>*+</code>)</li>
+    <li>Atomic groups (<code>(?>...)</code>)</li>
+    <li>Lookahead/lookbehind (parsed but don't actually assert)</li>
+  </ul>
+  <pre>// These work:
+/\d{3}-\d{4}/.test("123-4567")         // ✓ Simple patterns
+/^[a-z]+$/.test("hello")               // ✓ Character classes
+/(cat|dog)s?/.test("dogs")             // ✓ Alternation + quantifiers
+/(?:http|https):\/\//.test("https://") // ✓ Non-capturing groups
+
+// These don't:
+/(\\w+) \\1/.test("hello hello")       // ✗ Backreference
+/(?<=@)\\w+/.test("user@domain")       // ✗ Lookbehind (ignored)</pre>
+
+  <h3>Why?</h3>
+  <p>
+    Backtracking requires a call stack and state machine, which is expensive on GPUs. NFAs are compiled to single-pass automata (~10 cycles/char) instead of exponential backtracking.
+  </p>
+
+  <h3>When It Matters</h3>
+  <p>
+    <strong>Rarely in production.</strong> Most HTTP workloads use simple patterns:
+  </p>
+  <ul>
+    <li>✅ Validation: email, phone, zip code, URL paths</li>
+    <li>✅ Extraction: numbers, IDs, quoted strings</li>
+    <li>❌ Complex nested matching (use a real parser instead)</li>
+    <li>❌ Recursive patterns (e.g., balanced parentheses — use a parser)</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Use Supported Patterns</strong></p>
+    <pre>// Instead of backreference:
+const match = /(\\w+)\\s(\\w+)/.exec("hello world");
+const isSame = match[1] === match[2];  // Check on CPU after</pre>
+
+    <p><strong>Option 2: Pre-validate on CPU</strong></p>
+    <pre>// Node.js has full regex support
+const isValid = /^(?!.*\\b(\\w+)\\s\\1\\b).*$/.test(str);  // Complex regex on CPU
+if (isValid) gpu.process(str);</pre>
+
+    <p><strong>Option 3: Explicit Parsing Logic</strong></p>
+    <pre>// Instead of recursive regex, write explicit parser:
+function parseJson(str) {
+  let pos = 0;
+  const parseValue = () => {
+    if (str[pos] === '{') return parseObject();
+    if (str[pos] === '[') return parseArray();
+    if (str[pos] === '"') return parseString();
+    return parseNumber();
+  };
+  // ... rest of parser
+}</pre>
+  </div>
+
+  <h3>Supported Operations</h3>
+  <table>
+    <tr>
+      <th>Feature</th>
+      <th>Status</th>
+      <th>Example</th>
+    </tr>
+    <tr>
+      <td>Literals</td>
+      <td>✅ Full</td>
+      <td><code>hello</code>, <code>abc</code></td>
+    </tr>
+    <tr>
+      <td>Character classes</td>
+      <td>✅ Full</td>
+      <td><code>[a-z]</code>, <code>\d</code>, <code>[^abc]</code></td>
+    </tr>
+    <tr>
+      <td>Quantifiers</td>
+      <td>✅ Full</td>
+      <td><code>+</code>, <code>*</code>, <code>?</code>, <code>{n,m}</code></td>
+    </tr>
+    <tr>
+      <td>Alternation</td>
+      <td>✅ Full</td>
+      <td><code>(cat|dog)</code></td>
+    </tr>
+    <tr>
+      <td>Anchors</td>
+      <td>✅ Full</td>
+      <td><code>^start</code>, <code>end$</code></td>
+    </tr>
+    <tr>
+      <td>Non-capturing groups</td>
+      <td>✅ Full</td>
+      <td><code>(?:...)</code></td>
+    </tr>
+    <tr>
+      <td>Backreferences</td>
+      <td>❌ No</td>
+      <td><code>\1</code>, <code>\2</code></td>
+    </tr>
+    <tr>
+      <td>Lookahead/Lookbehind</td>
+      <td>⚠️ Parsed, no-op</td>
+      <td><code>(?=...)</code>, <code>(?<=...)</code></td>
+    </tr>
+    <tr>
+      <td>Flags</td>
+      <td>✅ Full</td>
+      <td><code>i</code> (case-insensitive), <code>g</code> (global)</td>
+    </tr>
+  </table>
+</div>
+
+---
+
+<h2 id="dynamic-code">🚫 No Runtime Code Generation</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-medium">Impact: Medium</span>
+    <span class="impact-badge impact-low">Common: Rare</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    <code>eval()</code> and <code>new Function()</code> do not generate executable code at runtime. They are safe no-ops that return empty values.
+  </p>
+  <pre>// These compile but don't execute:
+const code = "2 + 2";
+const result = eval(code);        // ← Returns null
+const fn = new Function("return 42");  // ← Returns null</pre>
+
+  <h3>Why?</h3>
+  <p>
+    GPU code is compiled to machine code ahead-of-time by NVIDIA's NVRTC compiler. There is no JIT compiler on the GPU. Generating code at runtime would require shipping a compiler to the GPU, which is impractical.
+  </p>
+
+  <h3>When It Matters</h3>
+  <ul>
+    <li>✅ Static applications (known logic at compile time)</li>
+    <li>❌ Template engines with computed expressions</li>
+    <li>❌ Dynamic query builders</li>
+    <li>❌ Rule engines with user-provided logic</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Move Compilation to CPU</strong></p>
+    <pre>// Instead of on GPU:
+const expr = "(x * 2) + 1";
+const result = eval(expr);  // ✗ GPU can't eval
+
+// Do on CPU:
+const template = compile(expr);  // Compile once at startup
+const gpu = loadCompiledTemplate(template);
+const result = gpu.evaluate(x);  // GPU executes pre-compiled code</pre>
+
+    <p><strong>Option 2: Use Lookup Tables</strong></p>
+    <pre>// Instead of dynamic rules:
+const rules = {
+  'RULE_1': (x) => x * 2,
+  'RULE_2': (x) => x + 10,
+  'RULE_3': (x) => x ** 2
+};
+
+// GPU receives rule name + data
+const applyRule = (rule, x) => {
+  switch(rule) {
+    case 'RULE_1': return x * 2;
+    case 'RULE_2': return x + 10;
+    case 'RULE_3': return x * x;
+  }
+};</pre>
+
+    <p><strong>Option 3: Separate Compilation & Execution</strong></p>
+    <pre>// Two-phase model:
+// Phase 1 (CPU): Parse and compile user expressions
+const userExpr = "amount > 1000 && region == 'US'";
+const compiledFn = compile(userExpr);  // CPU-side compilation
+
+// Phase 2 (GPU): Execute pre-compiled logic
+const results = gpu.filter({
+  data,
+  predicate: compiledFn  // Send compiled form to GPU
+});</pre>
+  </div>
+
+  <h3>Why This Is Actually Good</h3>
+  <p>
+    Forcing pre-compilation prevents:
+  </p>
+  <ul>
+    <li>Code injection attacks</li>
+    <li>Unbounded memory usage (no parsing on GPU)</li>
+    <li>Silent failures (miscompiled expressions)</li>
+    <li>Non-deterministic performance (JIT variations)</li>
+  </ul>
+</div>
+
+---
+
+<h2 id="stack-traces">📍 Simplified Stack Traces</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-low">Impact: Low</span>
+    <span class="impact-badge impact-low">Common: Only during debugging</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    <code>Error.stack</code> does not include full unwinding. You get the error message and immediate call site, but not the full chain back to the handler.
+  </p>
+  <pre>// Full stack (Node.js):
+Error: Division by zero
+    at compute (server.ts:42:15)
+    at transform (server.ts:28:7)
+    at handler (server.ts:10:3)
+
+// GPU stack (simplified):
+Error: Division by zero
+    at compute (kernel:42)</pre>
+
+  <h3>Why?</h3>
+  <p>
+    GPU kernels execute in parallel with no call stack frame preservation. Unwinding requires tracking control flow across 256 parallel threads, which is expensive. Symmetra preserves only the immediate error context.
+  </p>
+
+  <h3>When It Matters</h3>
+  <ul>
+    <li>✅ Error logging (message + location is usually enough)</li>
+    <li>❌ Deep debugging (need full call chain)</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Explicit Error Context</strong></p>
+    <pre>// Add context to errors:
+try {
+  const result = gpu.compute(data);
+} catch (err) {
+  throw new Error(
+    `Failed during batch processing: ${err.message}`,
+    { cause: err }
+  );
+}</pre>
+
+    <p><strong>Option 2: Logging at Boundaries</strong></p>
+    <pre>// Log at CPU/GPU boundaries:
+const input = prepareData(req.body);
+console.log('→ GPU compute:', { input, timestamp: Date.now() });
+
+let result;
+try {
+  result = gpu.compute(input);
+  console.log('← GPU result:', { result });
+} catch (err) {
+  console.error('GPU error:', {
+    error: err.message,
+    input,
+    timestamp: Date.now()
+  });
+}</pre>
+
+    <p><strong>Option 3: Test Critical Paths on CPU</strong></p>
+    <pre>// Unit test with Node.js first (full debugging):
+test('compute handles edge cases', () => {
+  // Test with full stack traces before deploying to GPU
+  expect(() => compute(0)).toThrow();
+});</pre>
+  </div>
+</div>
+
+---
+
+<h2 id="reflection">🪞 Limited Metaprogramming</h2>
+
+<div class="constraint-box">
+  <div>
+    <span class="impact-badge impact-low">Impact: Low</span>
+    <span class="impact-badge impact-low">Common: Very rare</span>
+  </div>
+  <h3>The Constraint</h3>
+  <p>
+    <code>Proxy</code> and <code>Reflect</code> are parsed and compile, but have minimal semantics. Property interception doesn't work as expected.
+  </p>
+  <pre>// This parses but doesn't intercept:
+const handler = {
+  get: (target, prop) => {
+    console.log(`Getting ${prop}`);  // Never prints
+    return target[prop];
+  }
+};
+
+const proxy = new Proxy(data, handler);
+console.log(proxy.x);  // Reads directly; handler.get not called</pre>
+
+  <h3>Why?</h3>
+  <p>
+    Full proxy support would require:
+  </p>
+  <ul>
+    <li>Runtime trap invocation at property access</li>
+    <li>Type-erased method dispatch</li>
+    <li>Overhead on every property read/write</li>
+  </ul>
+  <p>
+    GPU code prioritizes performance and determinism over reflection.
+  </p>
+
+  <h3>When It Matters</h3>
+  <ul>
+    <li>✅ Reading/writing plain objects</li>
+    <li>❌ Validation through proxy traps</li>
+    <li>❌ Observable property changes</li>
+    <li>❌ Lazy loading of properties</li>
+  </ul>
+
+  <div class="workaround-box">
+    <h3>✓ How to Handle It</h3>
+
+    <p><strong>Option 1: Explicit Validation</strong></p>
+    <pre>// Instead of proxy validator:
+function process(data) {
+  // Validate upfront on CPU
+  if (typeof data.id !== 'number') throw new Error('Invalid id');
+  if (typeof data.name !== 'string') throw new Error('Invalid name');
+
+  // Pass validated data to GPU
+  return gpu.compute(data);
+}</pre>
+
+    <p><strong>Option 2: Schema-Based Approach</strong></p>
+    <pre>// Define schema once; use for validation:
+const schema = {
+  id: 'number',
+  name: 'string',
+  items: 'array'
+};
+
+const validate = (obj) => {
+  for (const [key, type] of Object.entries(schema)) {
+    if (typeof obj[key] !== type) throw new Error(`Invalid ${key}`);
+  }
+  return true;
+};</pre>
+
+    <p><strong>Option 3: Skip Reflection</strong></p>
+    <pre>// If you need dynamic behavior, implement on CPU:
+const result = gpu.process(staticData);  // GPU: static types
+const decorated = augmentWithMetadata(result);  // CPU: dynamic</pre>
+  </div>
+</div>
+
+---
+
+<h2 id="summary">📋 Summary Table</h2>
+
+<table>
+  <tr>
+    <th>Constraint</th>
+    <th>Impact</th>
+    <th>Workaround</th>
+    <th>Use Case</th>
+  </tr>
+  <tr>
+    <td><strong>Synchronous Execution</strong><br/>No await suspension</td>
+    <td>Low</td>
+    <td>Pre-load data on CPU<br/>Use sync APIs</td>
+    <td>HTTP handlers, batch processing</td>
+  </tr>
+  <tr>
+    <td><strong>Static Memory</strong><br/>No dynamic arrays</td>
+    <td>Medium</td>
+    <td>Pre-size arrays<br/>Fixed schema</td>
+    <td>Known request bounds</td>
+  </tr>
+  <tr>
+    <td><strong>No Unicode</strong><br/>ASCII/UTF-8 only</td>
+    <td>Low</td>
+    <td>Pre-normalize on CPU</td>
+    <td>Latin text, IDs, tokens</td>
+  </tr>
+  <tr>
+    <td><strong>Simple Regex</strong><br/>No backtracking</td>
+    <td>Low</td>
+    <td>Use supported patterns<br/>Parse on CPU</td>
+    <td>Validation, extraction</td>
+  </tr>
+  <tr>
+    <td><strong>No eval()</strong><br/>No JIT compilation</td>
+    <td>Medium</td>
+    <td>Pre-compile on CPU<br/>Use lookup tables</td>
+    <td>Static logic</td>
+  </tr>
+  <tr>
+    <td><strong>Simplified Stacks</strong><br/>Limited unwinding</td>
+    <td>Low</td>
+    <td>Log at boundaries<br/>Test on CPU first</td>
+    <td>Production monitoring</td>
+  </tr>
+  <tr>
+    <td><strong>Limited Proxies</strong><br/>No trap interception</td>
+    <td>Low</td>
+    <td>Validate upfront<br/>Schema validation</td>
+    <td>Plain object processing</td>
+  </tr>
+</table>
+
+---
+
+<h2>🎯 General Strategy</h2>
+
+<p>
+  The most effective approach to working within these constraints is to think of the GPU as a <strong>deterministic, data-parallel compute engine</strong> rather than a general-purpose runtime.
+</p>
+
+<h3>Do This:</h3>
+<ul>
+  <li><strong>CPU handles I/O, variability, and complexity:</strong> Request parsing, authentication, data fetching, dynamic logic</li>
+  <li><strong>GPU handles pure computation:</strong> Transformation, filtering, aggregation, math on fixed data</li>
+  <li><strong>Pre-allocate and pre-size:</strong> All memory and structures decided at request boundary</li>
+  <li><strong>Batch similar work:</strong> Send 256 requests at once, not 1 at a time</li>
+</ul>
+
+<h3>Don't Do This:</h3>
+<ul>
+  <li>Expect GPU to be a drop-in replacement for Node.js</li>
+  <li>Try to use advanced JS features (eval, Proxy, generators) that require runtime support</li>
+  <li>Handle I/O or wait for external events on GPU</li>
+  <li>Make architectural decisions based on missing features; design around the constraint instead</li>
+</ul>
+
+---
+
+<h2>📚 Further Reading</h2>
+
+<ul>
+  <li><a href="getting-started.html">Getting Started Guide</a> — Quick intro and examples</li>
+  <li><a href="../docs/engine-architecture.html">Engine Architecture</a> — Deep dive into GPU pipeline</li>
+  <li><a href="https://developer.nvidia.com/cuda-c-programming-guide">NVIDIA CUDA C Programming Guide</a> — GPU fundamentals</li>
+  <li><a href="https://developer.nvidia.com/blog/even-easier-gpu-computing-with-cuda-11-0/">CUDA Basics</a> — Kernel execution model</li>
+</ul>
+
+---
+
+<p style="text-align: center; color: var(--muted); margin-top: 60px;">
+  Last updated: May 28, 2026 · <a href="https://github.com/JvanDyk/symmetra" style="color: var(--accent-b);">GitHub</a>
+</p>
+
+</body>
+</html>

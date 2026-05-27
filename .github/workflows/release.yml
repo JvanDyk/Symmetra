@@ -1,19 +1,28 @@
-name: Build and publish release
-
-# Trigger: push a version tag to the PRIVATE repo, e.g.:
-#   git tag v1.0.0
-#   git push origin v1.0.0
-#
-# This workflow builds sym.exe (Windows) and sym (Linux), then creates a
-# release on the SEPARATE PUBLIC repo and uploads both binaries as assets.
-# The public repo URL is set via the PUBLIC_REPO secret (see RELEASE.md).
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  # Extract version from tag (v1.0.0 → 1.0.0)
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${{ github.ref }}"
+          VERSION="${VERSION#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
   # ── Windows build ────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-2022
@@ -38,6 +47,7 @@ jobs:
         with:
           name: sym-windows-x64
           path: engine\build\Release\sym.exe
+          retention-days: 1
 
   # ── Linux build ──────────────────────────────────────────────────────────────
   build-linux:
@@ -63,51 +73,232 @@ jobs:
         with:
           name: sym-linux-x64
           path: engine/build/sym
+          retention-days: 1
 
-  # ── Publish to PUBLIC repo ────────────────────────────────────────────────────
-  publish:
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-22.04
+  # ── Windows packaging (ZIP) ──────────────────────────────────────────────────
+  package-windows:
+    needs: [prepare, build-windows]
+    runs-on: windows-latest
     steps:
-      - name: Download Windows binary
+      - uses: actions/checkout@v4
+
+      - name: Download Windows executable
         uses: actions/download-artifact@v4
         with:
           name: sym-windows-x64
-          path: dist/
+          path: .
 
-      - name: Download Linux binary
+      - name: Verify download
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "sym.exe")) { throw "sym.exe not found after download" }
+          Write-Host "sym.exe size: $((Get-Item sym.exe).Length) bytes"
+
+      - name: Create distributions directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path dist -Force | Out-Null
+
+      - name: Build ZIP package
+        shell: pwsh
+        run: |
+          $Version = "${{ needs.prepare.outputs.version }}"
+          & packaging\windows\create-zip.ps1 `
+            -SymExePath "sym.exe" `
+            -OutputDir "dist" `
+            -Version $Version
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: dist/*
+          retention-days: 1
+
+  # ── Linux packaging (deb + rpm + snap) ──────────────────────────────────────
+  package-linux:
+    needs: [prepare, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux executable
         uses: actions/download-artifact@v4
         with:
           name: sym-linux-x64
-          path: dist/
+          path: .
 
-      - name: Rename binaries
+      - name: Make binary executable
         run: |
-          mv dist/sym.exe  dist/sym-windows-x64.exe
-          mv dist/sym      dist/sym-linux-x64
-          chmod +x         dist/sym-linux-x64
+          chmod +x ./sym
+          ls -lah ./sym
 
-      - name: Create release on public repo
-        uses: softprops/action-gh-release@v2
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            dpkg-dev \
+            rpm \
+            snapcraft
+
+      - name: Create distributions directory
+        run: mkdir -p dist
+
+      - name: Make scripts executable
+        run: chmod +x packaging/linux/create-*.sh
+
+      - name: Build .deb package
+        run: |
+          bash packaging/linux/create-deb.sh \
+            "./sym" \
+            "${{ needs.prepare.outputs.version }}" \
+            "x86_64" \
+            "dist"
+
+      - name: Build .rpm package
+        run: |
+          bash packaging/linux/create-rpm.sh \
+            "./sym" \
+            "${{ needs.prepare.outputs.version }}" \
+            "x86_64" \
+            "dist"
+
+      - name: Build .snap package
+        run: |
+          bash packaging/linux/create-snap.sh \
+            "./sym" \
+            "${{ needs.prepare.outputs.version }}" \
+            "dist"
+
+      - name: Copy raw binary to dist
+        run: |
+          cp ./sym "dist/sym-linux-x64"
+          sha256sum "dist/sym-linux-x64" | awk '{print $1 "  sym-linux-x64"}' \
+            > "dist/sym-linux-x64.sha256"
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
         with:
-          repository: ${{ secrets.PUBLIC_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_PAT }}
-          tag_name: ${{ github.ref_name }}
-          name: "Symmetra ${{ github.ref_name }}"
-          body: |
-            ## Symmetra ${{ github.ref_name }}
+          name: linux-packages
+          path: dist/*
+          retention-days: 1
 
-            **Install on Windows:**
-            ```powershell
-            iwr https://symmetra.dev/install.ps1 | iex
-            ```
+  # ── Create GitHub Release on public repo ─────────────────────────────────────
+  publish:
+    needs: [prepare, package-windows, package-linux]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
 
-            **Install on Linux:**
-            ```bash
-            curl -fsSL https://symmetra.dev/install.sh | bash
-            ```
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
 
-            See [getting started](https://symmetra.dev/docs/getting-started) for prerequisites.
-          files: |
-            dist/sym-windows-x64.exe
-            dist/sym-linux-x64
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          # Flatten all package artifacts into one directory
+          find release-artifacts/windows-packages -type f -exec cp {} release-files/ \;
+          find release-artifacts/linux-packages   -type f -exec cp {} release-files/ \;
+          echo "── Release files ──"
+          ls -lah release-files/
+
+      - name: Generate combined SHA256SUMS
+        run: |
+          cd release-files
+          sha256sum $(ls | grep -v SHA256SUMS) > SHA256SUMS.txt
+          echo "── SHA256SUMS.txt ──"
+          cat SHA256SUMS.txt
+
+      - name: Update public/version.json
+        run: |
+          WIN_SHA=$(grep "windows-x64.zip" release-files/SHA256SUMS.txt | awk '{print $1}' || echo "")
+          LIN_SHA=$(grep "sym-linux-x64 "  release-files/SHA256SUMS.txt | awk '{print $1}' || echo "")
+          BASE="https://github.com/JvanDyk/symmetra/releases/download/v${VERSION}"
+          cat > public/version.json << EOF
+          {
+            "version": "${VERSION}",
+            "released": "$(date -u +%Y-%m-%d)",
+            "windows_sha256": "${WIN_SHA}",
+            "linux_sha256": "${LIN_SHA}",
+            "downloads": {
+              "windows_zip": "${BASE}/symmetra-${VERSION}-windows-x64.zip",
+              "linux_deb":   "${BASE}/symmetra-${VERSION}-linux-x64.deb",
+              "linux_rpm":   "${BASE}/symmetra-${VERSION}-linux-x64.rpm",
+              "linux_snap":  "${BASE}/symmetra-${VERSION}-linux-x64.snap",
+              "linux_binary":"${BASE}/sym-linux-x64"
+            }
+          }
+          EOF
+          cat public/version.json
+
+      - name: Commit version.json back to repo
+        run: |
+          git config user.name  "Symmetra Release"
+          git config user.email "info@symmetra.dev"
+          git add public/version.json
+          if git diff --cached --quiet; then
+            echo "No version.json changes to commit"
+          else
+            git commit -m "chore: bump version.json to $VERSION [skip ci]"
+            git push origin HEAD:master
+          fi
+
+      - name: Build release notes
+        id: notes
+        run: |
+          cat > /tmp/release-notes.md << 'NOTES'
+          ## Quick Install
+
+          **Windows (PowerShell):**
+          ```powershell
+          iwr https://symmetra.dev/install.ps1 | iex
+          ```
+
+          **Linux (bash):**
+          ```bash
+          curl -fsSL https://symmetra.dev/install.sh | bash
+          ```
+
+          ## Downloads
+
+          | Platform | Format | Notes |
+          |----------|--------|-------|
+          | Windows  | ZIP (portable) | Extract and run install.ps1 |
+          | Linux    | .deb | Debian/Ubuntu 20.04+ |
+          | Linux    | .rpm | Fedora/RHEL 8+ |
+          | Linux    | .snap | Universal (classic confinement) |
+          | Linux    | Binary | Raw executable |
+
+          All files include a matching `.sha256` checksum. Download `SHA256SUMS.txt` to verify all at once:
+
+          ```bash
+          sha256sum -c SHA256SUMS.txt
+          ```
+
+          ## Requirements
+
+          - **NVIDIA GPU:** RTX 2070 or newer (sm_75+)
+          - **CUDA Driver:** Version 525 or later
+          - **OS:** Windows 10 build 19041+ or Ubuntu 20.04+ / Fedora 38+
+
+          ## Learn More
+
+          - [Getting Started](https://symmetra.dev/docs/getting-started)
+          - [API Reference](https://symmetra.dev/docs/api)
+          - [GitHub](https://github.com/JvanDyk/symmetra)
+          NOTES
+          echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release on public repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          # Create or overwrite the release on the public repo
+          gh release create "v${VERSION}" \
+            --repo "JvanDyk/symmetra" \
+            --title "Symmetra ${VERSION}" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            release-files/*

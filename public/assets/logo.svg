@@ -1,0 +1,23 @@
+<svg viewBox="0 0 220 60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c6fff"/>
+      <stop offset="100%" stop-color="#5af0c4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon: hexagon (60×60 viewport cell, centered at 30,30) -->
+  <polygon points="30,3 54,16 54,44 30,57 6,44 6,16"
+           fill="none" stroke="url(#g)" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="30" y="43" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="34" font-weight="700"
+        fill="url(#g)">Σ</text>
+
+  <!-- Wordmark: "Symmetra" -->
+  <text x="70" y="40" dominant-baseline="auto"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="26" font-weight="800" letter-spacing="-0.5"
+        fill="url(#g)">Symmetra</text>
+</svg>

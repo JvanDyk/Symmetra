@@ -21,6 +21,10 @@ struct SymmCtx {
     const char* query;         // Query string (after '?')
     const char* body;          // Raw request body bytes
     int         body_len;
+    // ── Request headers (common headers pre-extracted by host) ───────────────
+    const char* authorization; // "Bearer <token>" or "Basic <b64>" or ""
+    const char* content_type;  // "application/json", "text/plain", etc.
+    const char* user_agent;    // Browser / client identifier string
     // ── Routing ───────────────────────────────────────────────────────────────
     int         route_id;      // resolved route index (set by dispatch)
     int         batch_slot;    // thread index within the batch (0–255)
@@ -28,12 +32,12 @@ struct SymmCtx {
     char*       resp_buf;      // response body output buffer (in VRAM)
     int         resp_len;      // byte count written to resp_buf
     int         resp_status;   // HTTP status code (default 200)
+    // ── Response headers (written by handler via ctx.header()) ───────────────
+    char        resp_headers[256];  // "Name: Value\r\n" pairs, null-terminated
+    int         resp_headers_len;   // byte count written to resp_headers
     // ── GPU fingerprint (anti-tamper) ─────────────────────────────────────────
     uint64_t    fingerprint;
     // ── I/O stage marker (for split-kernel continuation) ─────────────────────
-    // When a handler hits a Tier-3 I/O boundary, it writes the stage index here
-    // and returns early.  The host re-launches with stage_resume pointing past
-    // the completed I/O.
     int         io_stage;      // 0 = no pending I/O, N > 0 = resume at stage N
 };
 
@@ -238,6 +242,89 @@ __device__ void symm_json_str(SymmCtx* ctx, const char* json) {
     ctx->resp_len    = len;
     ctx->resp_status = 200;
 }
+
+// Set a response header: ctx.header('Name', 'Value')
+// Appends "Name: Value\r\n" to resp_headers buffer; returns ctx for chaining.
+__device__ SymmCtx* symm_set_header(SymmCtx* ctx, const char* name, const char* val) {
+    if (!ctx || !name || !val) return ctx;
+    int pos = ctx->resp_headers_len;
+    int nl  = symm_strlen(name);
+    int vl  = symm_strlen(val);
+    if (pos + nl + vl + 4 >= 254) return ctx;  // guard overflow
+    for (int i = 0; i < nl; i++) ctx->resp_headers[pos++] = name[i];
+    ctx->resp_headers[pos++] = ':';
+    ctx->resp_headers[pos++] = ' ';
+    for (int i = 0; i < vl; i++) ctx->resp_headers[pos++] = val[i];
+    ctx->resp_headers[pos++] = '\r';
+    ctx->resp_headers[pos++] = '\n';
+    ctx->resp_headers[pos]   = '\0';
+    ctx->resp_headers_len    = pos;
+    return ctx;
+}
+
+// Get a request header by name (case-insensitive comparison)
+// Returns the header value or "" if not present.
+__device__ const char* symm_get_header(SymmCtx* ctx, const char* name) {
+    if (!ctx || !name) return "";
+    // Check pre-extracted common headers
+    auto ci_eq = [](const char* a, const char* b) -> bool {
+        while (*a && *b) {
+            char ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+            char cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+            if (ca != cb) return false;
+            a++; b++;
+        }
+        return *a == '\0' && *b == '\0';
+    };
+    if (ci_eq(name, "authorization"))  return ctx->authorization  ? ctx->authorization  : "";
+    if (ci_eq(name, "content-type"))   return ctx->content_type   ? ctx->content_type   : "";
+    if (ci_eq(name, "user-agent"))     return ctx->user_agent      ? ctx->user_agent      : "";
+    return "";
+}
+
+// Percent-encode a string (encodeURIComponent semantics)
+// Safe chars: A-Z a-z 0-9 - _ . ! ~ * ' ( )
+__device__ const char* symm_encode_uri_component(const char* s) {
+    static char buf[1536];
+    if (!s) return "";
+    static const char hex[] = "0123456789ABCDEF";
+    int pos = 0;
+    for (int i = 0; s[i] && pos < 1530; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+            || c == '-' || c == '_' || c == '.' || c == '!' || c == '~'
+            || c == '*' || c == '\'' || c == '(' || c == ')') {
+            buf[pos++] = (char)c;
+        } else {
+            buf[pos++] = '%';
+            buf[pos++] = hex[(c >> 4) & 0xF];
+            buf[pos++] = hex[c & 0xF];
+        }
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+
+// Decode a percent-encoded string (decodeURIComponent semantics)
+__device__ const char* symm_decode_uri_component(const char* s) {
+    static char buf[512];
+    if (!s) return "";
+    int pos = 0;
+    for (int i = 0; s[i] && pos < 510; i++) {
+        if (s[i] == '%' && s[i+1] && s[i+2]) {
+            char hi = s[++i], lo = s[++i];
+            int h = (hi>='0'&&hi<='9') ? hi-'0' : (hi>='A'&&hi<='F') ? hi-'A'+10 : (hi>='a'&&hi<='f') ? hi-'a'+10 : 0;
+            int l = (lo>='0'&&lo<='9') ? lo-'0' : (lo>='A'&&lo<='F') ? lo-'A'+10 : (lo>='a'&&lo<='f') ? lo-'a'+10 : 0;
+            buf[pos++] = (char)((h << 4) | l);
+        } else if (s[i] == '+') {
+            buf[pos++] = ' ';
+        } else {
+            buf[pos++] = s[i];
+        }
+    }
+    buf[pos] = '\0';
+    return buf;
+}
 )";
 
 // Fragment 2: JSON functions and standard structures
@@ -422,24 +509,74 @@ __device__ int symm_str_index_of(const char* s, const char* substr) {
     } return -1;
 }
 
-__device__ int symm_str_last_index_of(const char* s, const char* substr) {
-    // Stub: returns first occurrence
-    return symm_str_index_of(s, substr);
+__device__ int symm_str_last_index_of(const char* s, const char* sub) {
+    if (!s || !sub) return -1;
+    int slen = symm_strlen(s), sublen = symm_strlen(sub);
+    if (sublen == 0) return slen;
+    int last = -1;
+    for (int i = 0; i <= slen - sublen; i++) {
+        bool match = true;
+        for (int j = 0; j < sublen; j++) {
+            if (s[i+j] != sub[j]) { match = false; break; }
+        }
+        if (match) last = i;
+    }
+    return last;
+}
+
+// lastIndexOf with start position
+__device__ int symm_str_last_index_of_from(const char* s, const char* sub, int fromIdx) {
+    if (!s || !sub) return -1;
+    int slen = symm_strlen(s), sublen = symm_strlen(sub);
+    if (sublen == 0) return fromIdx < slen ? fromIdx : slen;
+    int last = -1;
+    for (int i = 0; i <= slen - sublen && i <= fromIdx; i++) {
+        bool match = true;
+        for (int j = 0; j < sublen; j++) {
+            if (s[i+j] != sub[j]) { match = false; break; }
+        }
+        if (match) last = i;
+    }
+    return last;
 }
 
 __device__ const char* symm_str_substring(const char* s, int start, int end) {
-    // Stub: just return substring starting from start
-    return s && start < symm_strlen(s) ? s + start : "";
+    if (!s) return "";
+    int slen = symm_strlen(s);
+    // Clamp start/end to [0, slen], swap if start > end
+    if (start < 0) start = 0;
+    if (end < 0)   end   = 0;
+    if (start > slen) start = slen;
+    if (end   > slen) end   = slen;
+    if (start > end) { int tmp = start; start = end; end = tmp; }
+    static char buf[512];
+    int len = end - start;
+    if (len > 511) len = 511;
+    for (int i = 0; i < len; i++) buf[i] = s[start + i];
+    buf[len] = '\0';
+    return buf;
 }
 
 __device__ const char* symm_str_substr(const char* s, int start, int len) {
-    // Stub: just return substring starting from start
-    return s && start < symm_strlen(s) ? s + start : "";
+    if (!s) return "";
+    int slen = symm_strlen(s);
+    if (start < 0) start = slen + start;
+    if (start < 0) start = 0;
+    if (start >= slen) return "";
+    int avail = slen - start;
+    if (len < 0 || len > avail) len = avail;  // -1 sentinel means "rest of string"
+    static char buf[512];
+    if (len > 511) len = 511;
+    for (int i = 0; i < len; i++) buf[i] = s[start + i];
+    buf[len] = '\0';
+    return buf;
 }
 
+// Forward declaration — full implementation is in FRAG7
+__device__ const char* symm_str_match_all_full(const char* pattern, const char* str);
+
 __device__ const char* symm_str_match_all(const char* s, const char* pattern) {
-    // Stub: regex not supported
-    return "";
+    return symm_str_match_all_full(pattern, s);
 }
 
 __device__ const char* symm_str_replace(const char* s, const char* from, const char* to) {
@@ -563,15 +700,97 @@ __device__ const char* symm_number_to_fixed(float v, int decimals) {
 }
 
 __device__ const char* symm_number_to_precision(float v, int precision) {
-    // Stub: simplified as fixed-point
-    return symm_number_to_fixed(v, precision > 0 ? precision : 6);
+    // toPrecision(n): n significant digits
+    if (precision <= 0) precision = 6;
+    static char buf[64];
+    if (v == 0.0f) {
+        buf[0] = '0'; int p = 1;
+        if (precision > 1) { buf[p++] = '.'; for (int i = 1; i < precision; i++) buf[p++] = '0'; }
+        buf[p] = '\0'; return buf;
+    }
+    bool neg = (v < 0);
+    if (neg) v = -v;
+    // Find magnitude
+    int exp = 0;
+    float tmp = v;
+    while (tmp >= 10.0f) { tmp /= 10.0f; exp++; }
+    while (tmp < 1.0f && tmp > 0.0f) { tmp *= 10.0f; exp--; }
+    // Decimal places needed: precision - 1 - exp (if exp in range)
+    int decimals = precision - 1 - exp;
+    if (decimals < 0) decimals = 0;
+    int p = 0;
+    if (neg) buf[p++] = '-';
+    // Integer part
+    long long iv = (long long)v;
+    if (iv == 0) { buf[p++] = '0'; }
+    else {
+        char tmp2[32]; int n = 0;
+        long long t = iv;
+        while (t > 0) { tmp2[n++] = '0' + (t % 10); t /= 10; }
+        for (int i = n - 1; i >= 0; i--) buf[p++] = tmp2[i];
+    }
+    if (decimals > 0) {
+        buf[p++] = '.';
+        float frac = v - (float)iv;
+        for (int d = 0; d < decimals && p < 62; d++) {
+            frac *= 10.0f;
+            int dig = (int)frac;
+            buf[p++] = '0' + dig;
+            frac -= dig;
+        }
+    }
+    buf[p] = '\0';
+    return buf;
 }
 
 __device__ const char* symm_number_to_exponential(float v, int digits) {
-    // Stub: simplified as fixed-point
-    return symm_number_to_fixed(v, digits >= 0 ? digits : 6);
+    // toExponential(n): scientific notation with n fractional digits
+    if (digits < 0) digits = 6;
+    static char buf[64];
+    bool neg = (v < 0);
+    if (neg) v = -v;
+    int exp = 0;
+    if (v == 0.0f) {
+        // 0 → "0e+0" or "0.000e+0"
+        int p = 0;
+        if (neg) buf[p++] = '-';
+        buf[p++] = '0';
+        if (digits > 0) { buf[p++] = '.'; for (int i = 0; i < digits; i++) buf[p++] = '0'; }
+        buf[p++] = 'e'; buf[p++] = '+'; buf[p++] = '0'; buf[p] = '\0';
+        return buf;
+    }
+    while (v >= 10.0f) { v /= 10.0f; exp++; }
+    while (v < 1.0f) { v *= 10.0f; exp--; }
+    int p = 0;
+    if (neg) buf[p++] = '-';
+    int intPart = (int)v;
+    buf[p++] = '0' + intPart;
+    if (digits > 0) {
+        buf[p++] = '.';
+        float frac = v - (float)intPart;
+        for (int d = 0; d < digits && p < 55; d++) {
+            frac *= 10.0f;
+            int dig = (int)frac;
+            buf[p++] = '0' + dig;
+            frac -= dig;
+        }
+    }
+    buf[p++] = 'e';
+    buf[p++] = (exp >= 0) ? '+' : '-';
+    if (exp < 0) exp = -exp;
+    // Write exponent (1-3 digits)
+    char eBuf[8]; int en = 0;
+    if (exp == 0) { eBuf[en++] = '0'; }
+    else { int e = exp; while (e > 0) { eBuf[en++] = '0' + (e % 10); e /= 10; } }
+    for (int i = en - 1; i >= 0; i--) buf[p++] = eBuf[i];
+    buf[p] = '\0';
+    return buf;
 }
 
+)";
+
+// Fragment 2B: String split, join, and routing utilities (FRAG2 split to stay under MSVC 65535-char limit)
+static const char* PRELUDE_FRAG2B = R"(
 // ── String split and join methods ───────────────────────────────────────────────
 __device__ const char* symm_str_split(const char* s, const char* delim) {
     static char buf[512];
@@ -651,16 +870,75 @@ template<typename T> __device__ void symm_arr_concat(T* dst, int* dstlen, const 
     }
 }
 
-// ── JSON merge for spread syntax ───────────────────────────────────────────────
-__device__ void symm_json_merge(const char* obj1, const char* obj2, char* out) {
-    out[0] = '{';
-    out[1] = '}';
-    out[2] = '\0';
+// ── JSON merge for spread syntax ─────────────────────────────────────────────
+// Called by Codegen as: buf_n += symm_json_merge(buf + buf_n, capacity, src_obj)
+// Appends the inner properties of src_obj (a JSON object string) into dest.
+// Returns number of bytes written. The caller already handles the leading comma.
+__device__ int symm_json_merge(char* dest, int cap, const char* src) {
+    if (!src || !dest || cap <= 1) return 0;
+    // Skip to opening '{'
+    const char* p = src;
+    while (*p && *p != '{') p++;
+    if (*p == '{') p++;
+    // Skip leading whitespace
+    while (*p == ' ' || *p == '\t' || *p == '\n') p++;
+    // Empty object — nothing to merge
+    if (!*p || *p == '}') return 0;
+    // Copy inner content up to (but not including) the closing '}'
+    int n = 0;
+    // Brace-aware copy: track nesting depth so we stop at the right '}'
+    int depth = 0;
+    while (*p && n < cap - 1) {
+        char c = *p++;
+        if (c == '{' || c == '[') depth++;
+        else if (c == '}' || c == ']') {
+            if (depth == 0) break;   // closing brace of the outer object
+            depth--;
+        }
+        dest[n++] = c;
+    }
+    // Trim trailing whitespace/comma
+    while (n > 0 && (dest[n-1] == ' ' || dest[n-1] == '\t' || dest[n-1] == '\n')) n--;
+    dest[n] = '\0';
+    return n;
 }
 
-// ── Routing utilities ───────────────────────────────────────────────────────────
-__device__ const char* symm_extract_param(const char* path, int index) { return ""; }
-__device__ const char* symm_extract_query(const char* query, const char* key) { return ""; }
+// ── Routing utilities ─────────────────────────────────────────────────────────
+// Extract the URL path segment at position `index` (0-based, split on '/').
+// e.g. symm_extract_param("/users/42/orders", 1) → "42"
+__device__ const char* symm_extract_param(const char* path, int index) {
+    if (!path) return "";
+    static char buf[128];
+    int seg = -1;          // segment counter (-1 before the first '/')
+    int bi  = 0;
+    const char* p = path;
+    // Skip leading slash so segment 0 starts right after it
+    if (*p == '/') p++;
+    seg = 0;
+    while (*p) {
+        if (*p == '/') {
+            if (seg == index) { buf[bi] = '\0'; return buf; }
+            seg++;
+            bi = 0;
+            p++;
+            continue;
+        }
+        if (seg == index && bi < 127) buf[bi++] = *p;
+        p++;
+    }
+    if (seg == index) { buf[bi] = '\0'; return buf; }
+    return "";
+}
+
+// Forward declaration — full definition is in FRAG10
+__device__ const char* symm_url_search_params_get(const char* qs, const char* key);
+
+// Extract a value from a query string by key name.
+// e.g. symm_extract_query("name=john&age=30", "age") → "30"
+// Delegates to the full URLSearchParams parser.
+__device__ const char* symm_extract_query(const char* query, const char* key) {
+    return symm_url_search_params_get(query, key);
+}
 )";
 
 // Fragment 3: Type system and container stubs
@@ -798,9 +1076,42 @@ struct Map {
         }
         return false;
     }
-    __device__ const char* keys() const { return "[]"; }  // Stub — use symm_map_keys()
-    __device__ const char* values() const { return "[]"; }  // Stub — use symm_map_values()
-    __device__ const char* entries() const { return "[]"; }  // Stub — use symm_map_entries()
+    __device__ const char* keys() const {
+        static char buf[1024]; int pos = 0;
+        buf[pos++] = '[';
+        for (int i = 0; i < _n && pos < 990; i++) {
+            if (i) buf[pos++] = ',';
+            buf[pos++] = '"';
+            for (int j = 0; _e[i].k && _e[i].k[j] && pos < 1000; j++) buf[pos++] = _e[i].k[j];
+            buf[pos++] = '"';
+        }
+        buf[pos++] = ']'; buf[pos] = 0; return buf;
+    }
+    __device__ const char* values() const {
+        static char buf[512]; int pos = 0;
+        buf[pos++] = '[';
+        for (int i = 0; i < _n && pos < 480; i++) {
+            if (i) buf[pos++] = ',';
+            int n = symm_write_float(buf + pos, _e[i].v); pos += n;
+        }
+        buf[pos++] = ']'; buf[pos] = 0; return buf;
+    }
+    __device__ const char* entries() const {
+        static char buf[1024]; int pos = 0;
+        buf[pos++] = '[';
+        for (int i = 0; i < _n && pos < 990; i++) {
+            if (i) buf[pos++] = ',';
+            buf[pos++] = '['; buf[pos++] = '"';
+            for (int j = 0; _e[i].k && _e[i].k[j] && pos < 1005; j++) buf[pos++] = _e[i].k[j];
+            buf[pos++] = '"'; buf[pos++] = ',';
+            int n = symm_write_float(buf + pos, _e[i].v); pos += n;
+            buf[pos++] = ']';
+        }
+        buf[pos++] = ']'; buf[pos] = 0; return buf;
+    }
+    __device__ void forEach(void (*fn)(float, const char*)) const {
+        for (int i = 0; i < _n; i++) fn(_e[i].v, _e[i].k);
+    }
 };
 
 // ── Array method stubs ──────────────────────────────────────────────────────────
@@ -810,17 +1121,47 @@ template<typename T> __device__ void symm_arr_map(T* dst, const T* src, int len)
 template<typename T> __device__ void symm_arr_filter(T* dst, const T* src, int len) {
     for (int i = 0; i < len; i++) dst[i] = src[i];
 }
-template<typename T> __device__ T symm_arr_reduce(const T* arr, int len) {
-    T result = arr[0];
-    for (int i = 1; i < len; i++) result = result + arr[i];
-    return result;
+// symm_arr_reduce(arr, len, fn, init) — fold left with callback
+template<typename T, typename Fn>
+__device__ T symm_arr_reduce(const T* arr, int len, Fn fn, T init) {
+    T acc = init;
+    for (int i = 0; i < len; i++) acc = fn(acc, arr[i]);
+    return acc;
 }
-template<typename T> __device__ void symm_arr_slice(T* dst, const T* src, int start, int end) {
-    for (int i = start; i < end && i < 256; i++) dst[i - start] = src[i];
+
+// symm_arr_slice(arr, len, start, end) → returns pointer to static slice buffer
+// Supports negative indices (Python-style).
+template<typename T>
+__device__ T* symm_arr_slice(const T* arr, int len, int start, int end_) {
+    static T buf[256];
+    if (start < 0) start = len + start;
+    if (end_  < 0) end_  = len + end_;
+    if (start < 0) start = 0;
+    if (end_  > len) end_ = len;
+    int n = 0;
+    for (int i = start; i < end_ && n < 256; i++) buf[n++] = arr[i];
+    return buf;
 }
-template<typename T> __device__ void symm_arr_for_each(const T* arr, int len) { }
-template<typename T> __device__ bool symm_arr_every(const T* arr, int len) { return true; }
-template<typename T> __device__ bool symm_arr_some(const T* arr, int len) { return len > 0; }
+
+// symm_arr_for_each(arr, len, fn) — iterate with callback
+template<typename T, typename Fn>
+__device__ void symm_arr_for_each(const T* arr, int len, Fn fn) {
+    for (int i = 0; i < len; i++) fn(arr[i]);
+}
+
+// symm_arr_every(arr, len, fn) — true if all elements satisfy predicate
+template<typename T, typename Fn>
+__device__ bool symm_arr_every(const T* arr, int len, Fn fn) {
+    for (int i = 0; i < len; i++) if (!fn(arr[i])) return false;
+    return true;
+}
+
+// symm_arr_some(arr, len, fn) — true if any element satisfies predicate
+template<typename T, typename Fn>
+__device__ bool symm_arr_some(const T* arr, int len, Fn fn) {
+    for (int i = 0; i < len; i++) if (fn(arr[i])) return true;
+    return false;
+}
 
 __device__ int symm_arr_index_of(const float* arr, int len, float val) {
     for (int i = 0; i < len; i++) {
@@ -845,6 +1186,11 @@ static const char* PRELUDE_FRAG4 = R"(
 
 struct Number {
     static constexpr float    EPSILON          = 1.1920929e-7f;
+    static constexpr float    MAX_VALUE        = 3.4028235e+38f;
+    static constexpr float    MIN_VALUE        = 1.1754944e-38f;  // smallest positive normal float
+    static constexpr float    POSITIVE_INFINITY = (1.0f / 0.0f);
+    static constexpr float    NEGATIVE_INFINITY = (-1.0f / 0.0f);
+    static constexpr float    NaN              = (0.0f / 0.0f);
     static constexpr long long MAX_SAFE_INTEGER = 9007199254740991LL;
     static constexpr long long MIN_SAFE_INTEGER = -9007199254740991LL;
     __device__ static bool isNaN(float v) { return v != v; }
@@ -965,24 +1311,68 @@ __device__ unsigned long long _debug_ring_ptr = 0;
 __device__ void symm_debug_log_write(const char* msg) {}
 
 // ── Console stub ───────────────────────────────────────────────────────────
+// Helper: convert a value to string for console output
+__device__ const char* _symm_to_str(const char* s) { return s ? s : "null"; }
+__device__ const char* _symm_to_str(float v) { static char _b[32]; symm_write_float(_b, v); return _b; }
+__device__ const char* _symm_to_str(int v) { static char _b[24]; symm_write_int(_b, v); return _b; }
+__device__ const char* _symm_to_str(long long v) { static char _b[24]; symm_write_int(_b, v); return _b; }
+__device__ const char* _symm_to_str(bool v) { return v ? "true" : "false"; }
+template<typename T> __device__ const char* _symm_to_str(T) { return "[object]"; }
+
+// Multi-arg concat helper (up to 4 args, space-separated)
+__device__ const char* _symm_concat2(const char* a, const char* b) {
+    static char buf[512];
+    int p = 0;
+    for (int i = 0; a[i] && p < 254; i++) buf[p++] = a[i];
+    buf[p++] = ' ';
+    for (int i = 0; b[i] && p < 510; i++) buf[p++] = b[i];
+    buf[p] = '\0'; return buf;
+}
+__device__ const char* _symm_concat3(const char* a, const char* b, const char* c) {
+    static char buf[512];
+    int p = 0;
+    for (int i = 0; a[i] && p < 168; i++) buf[p++] = a[i];
+    buf[p++] = ' ';
+    for (int i = 0; b[i] && p < 337; i++) buf[p++] = b[i];
+    buf[p++] = ' ';
+    for (int i = 0; c[i] && p < 510; i++) buf[p++] = c[i];
+    buf[p] = '\0'; return buf;
+}
+
 struct _Console {
     __device__ void log() { symm_debug_log_write("[log]"); }
     __device__ void log(const char* msg) { symm_debug_log_write(msg); }
-    __device__ void log(float v) { static char buf[32]; symm_write_float(buf, v); symm_debug_log_write(buf); }
-    __device__ void log(int v) { static char buf[24]; symm_write_int(buf, v); symm_debug_log_write(buf); }
-    __device__ void log(long long v) { static char buf[24]; symm_write_int(buf, v); symm_debug_log_write(buf); }
-    __device__ void log(bool v) { symm_debug_log_write(v ? "true" : "false"); }
-    template<typename T> __device__ void log(T a) { symm_debug_log_write("[object]"); }
+    __device__ void log(float v) { symm_debug_log_write(_symm_to_str(v)); }
+    __device__ void log(int v) { symm_debug_log_write(_symm_to_str(v)); }
+    __device__ void log(long long v) { symm_debug_log_write(_symm_to_str(v)); }
+    __device__ void log(bool v) { symm_debug_log_write(_symm_to_str(v)); }
+    template<typename T> __device__ void log(T a) { symm_debug_log_write(_symm_to_str(a)); }
+    // Multi-arg overloads (space-separated)
+    template<typename A, typename B>
+    __device__ void log(A a, B b) {
+        symm_debug_log_write(_symm_concat2(_symm_to_str(a), _symm_to_str(b)));
+    }
+    template<typename A, typename B, typename C>
+    __device__ void log(A a, B b, C c) {
+        symm_debug_log_write(_symm_concat3(_symm_to_str(a), _symm_to_str(b), _symm_to_str(c)));
+    }
     __device__ void warn(const char* msg) { symm_debug_log_write(msg); }
     __device__ void error(const char* msg) { symm_debug_log_write(msg); }
     __device__ void info(const char* msg) { symm_debug_log_write(msg); }
-    template<typename T> __device__ void warn(T a) { symm_debug_log_write("[warn]"); }
-    template<typename T> __device__ void error(T a) { symm_debug_log_write("[error]"); }
+    template<typename T> __device__ void warn(T a)  { symm_debug_log_write(_symm_to_str(a)); }
+    template<typename T> __device__ void error(T a) { symm_debug_log_write(_symm_to_str(a)); }
+    template<typename T> __device__ void info(T a)  { symm_debug_log_write(_symm_to_str(a)); }
+    template<typename A, typename B> __device__ void warn(A a, B b)  { log(a, b); }
+    template<typename A, typename B> __device__ void error(A a, B b) { log(a, b); }
     __device__ void assert_(bool cond, const char* msg = "") {
         if (!cond) symm_debug_log_write(msg[0] ? msg : "Assertion failed");
     }
     template<typename T> __device__ void time(T) {}
     template<typename T> __device__ void timeEnd(T) {}
+    __device__ void count(const char* label = "default") { symm_debug_log_write(label); }
+    __device__ void countReset(const char* label = "default") { (void)label; }
+    __device__ void group(const char* label = "") { if (label[0]) symm_debug_log_write(label); }
+    __device__ void groupEnd() {}
 };
 __device__ _Console console;
 
@@ -1042,6 +1432,23 @@ struct Promise {
         }
         return result;
     }
+    // allSettled — run all, collect into array (GPU sync: same as all)
+    template<typename T> __device__ static SyncPromise<T*> allSettled(T* arr, int len) {
+        SyncPromise<T*> result;
+        result._value = arr;
+        return result;
+    }
+    // any — return first fulfilled (GPU sync: return first non-rejected)
+    template<typename T> __device__ static SyncPromise<T> any(T* arr, int len) {
+        SyncPromise<T> result;
+        for (int i = 0; i < len; i++) {
+            if (arr[i]._rejected == false) { result._value = arr[i]._value; return result; }
+        }
+        // all rejected: return rejected promise
+        result._rejected = true;
+        result._error = "AggregateError: All promises were rejected";
+        return result;
+    }
 };
 )";
 
@@ -1079,9 +1486,35 @@ struct Set {
         }
         return false;
     }
-    __device__ const char* values() const { return "[]"; }  // Stub
-    __device__ const char* keys() const { return "[]"; }  // Stub
-    __device__ const char* entries() const { return "[]"; }  // Stub
+    __device__ const char* values() const {
+        static char buf[1024]; int pos = 0;
+        buf[pos++] = '[';
+        for (int i = 0; i < _count && pos < 990; i++) {
+            if (i) buf[pos++] = ',';
+            buf[pos++] = '"';
+            for (int j = 0; _items[i] && _items[i][j] && pos < 1000; j++) buf[pos++] = _items[i][j];
+            buf[pos++] = '"';
+        }
+        buf[pos++] = ']'; buf[pos] = 0; return buf;
+    }
+    __device__ const char* keys() const { return values(); }
+    __device__ const char* entries() const {
+        static char buf[1024]; int pos = 0;
+        buf[pos++] = '[';
+        for (int i = 0; i < _count && pos < 990; i++) {
+            if (i) buf[pos++] = ',';
+            buf[pos++] = '[';
+            char ibuf[12]; int ilen = symm_write_int(ibuf, i);
+            for (int j = 0; j < ilen && pos < 1000; j++) buf[pos++] = ibuf[j];
+            buf[pos++] = ','; buf[pos++] = '"';
+            for (int j = 0; _items[i] && _items[i][j] && pos < 1005; j++) buf[pos++] = _items[i][j];
+            buf[pos++] = '"'; buf[pos++] = ']';
+        }
+        buf[pos++] = ']'; buf[pos] = 0; return buf;
+    }
+    __device__ void forEach(void (*fn)(const char*)) const {
+        for (int i = 0; i < _count; i++) fn(_items[i]);
+    }
 };
 
 // ── WeakMap: weak reference map ────────────────────────────────────────────────
@@ -1157,11 +1590,22 @@ struct Reflect {
 };
 
 // ── URLSearchParams: query string parser ───────────────────────────────────────
+// Note: symm_url_search_params_get() is defined in FRAG10 (below)
+// Forward declaration so FRAG6 can reference it in the struct
+__device__ const char* symm_url_search_params_get(const char* qs, const char* key);
 struct URLSearchParams {
     const char* _qs;
-    __device__ URLSearchParams(const char* qs = "") : _qs(qs) {}
-    __device__ const char* get(const char* key) { return ""; }
-    __device__ void set(const char* key, const char* val) {}
+    __device__ URLSearchParams(const char* qs = "") : _qs(qs ? qs : "") {}
+    __device__ const char* get(const char* key) const {
+        return symm_url_search_params_get(_qs, key);
+    }
+    __device__ bool has(const char* key) const {
+        return symm_url_search_params_get(_qs, key)[0] != '\0';
+    }
+    __device__ void set(const char* key, const char* val) {}  // read-only on GPU
+    __device__ void append(const char* key, const char* val) {}
+    __device__ void delete_(const char* key) {}
+    __device__ const char* toString() const { return _qs ? _qs : ""; }
 };
 
 // ── Buffer: binary data ────────────────────────────────────────────────────────
@@ -1176,6 +1620,66 @@ struct Buffer {
     }
     __device__ int length() const { return _len; }
 };
+
+// ── AbortController / AbortSignal ──────────────────────────────────────────────
+struct AbortSignal {
+    bool aborted; const char* reason;
+    __device__ AbortSignal() : aborted(false), reason("") {}
+};
+struct AbortController {
+    AbortSignal signal;
+    __device__ void abort(const char* reason = "AbortError") {
+        signal.aborted = true; signal.reason = reason;
+    }
+};
+
+// ── TextEncoder / TextDecoder (UTF-8 passthrough on GPU) ──────────────────────
+struct TextEncoder {
+    __device__ const char* encode(const char* s) { return s ? s : ""; }
+};
+struct TextDecoder {
+    const char* _enc;
+    __device__ TextDecoder(const char* enc = "utf-8") : _enc(enc) {}
+    __device__ const char* decode(const char* s) { return s ? s : ""; }
+};
+
+// ── process global ─────────────────────────────────────────────────────────────
+// Maps Node.js process.env access patterns for configuration injection.
+struct _ProcessEnv {
+    const char* NODE_ENV;
+    const char* PORT;
+    const char* HOST;
+    __device__ _ProcessEnv() : NODE_ENV("production"), PORT("8000"), HOST("0.0.0.0") {}
+    __device__ const char* operator[](const char* key) const {
+        if (!key) return "";
+        if (strcmp(key, "NODE_ENV") == 0) return NODE_ENV;
+        if (strcmp(key, "PORT") == 0) return PORT;
+        if (strcmp(key, "HOST") == 0) return HOST;
+        return "";
+    }
+};
+struct _Process {
+    _ProcessEnv env;
+    const char* platform;
+    int exitCode;
+    __device__ _Process() : platform("linux"), exitCode(0) {}
+    __device__ void exit(int code = 0) { exitCode = code; }
+    __device__ const char* version() const { return "v20.0.0"; }
+};
+__device__ _Process _symm_process;
+
+// ── globalThis ─────────────────────────────────────────────────────────────────
+// globalThis is the global object; on GPU it's effectively the thread context.
+struct _GlobalThis {
+    __device__ _GlobalThis() {}
+    _Process process;
+    __device__ float parseInt(const char* s) { return symm_parse_float(s); }
+    __device__ float parseFloat(const char* s) { return symm_parse_float(s); }
+    __device__ bool isNaN(float v) { return v != v; }
+    __device__ bool isFinite(float v) { float inf = 1e30f * 1e30f; return v != inf && v != -inf && v == v; }
+};
+__device__ _GlobalThis globalThis;
+
 )";
 
 // Fragment 7: Full string method implementations and regex support
@@ -1756,13 +2260,115 @@ __device__ T* symm_arr_to_sorted(const T* src, int len, T* dst) {
 }
 
 // ── Array: arr.entries() — yields [index, value] pairs ────────────────────────
-// On GPU: generator not available — emits index,value string
+// Returns JSON-array string of [index, value] pairs.
 template<typename T>
-__device__ const char* symm_arr_entries(const T* arr, int len) { return "[]"; }
+__device__ const char* symm_arr_entries(const T* arr, int len) {
+    static char buf[1024]; int pos = 0;
+    buf[pos++] = '[';
+    for (int i = 0; i < len && pos < 990; i++) {
+        if (i) buf[pos++] = ',';
+        buf[pos++] = '[';
+        int n = symm_write_int(buf + pos, i); pos += n;
+        buf[pos++] = ',';
+        n = symm_write_float(buf + pos, (float)arr[i]); pos += n;
+        buf[pos++] = ']';
+    }
+    buf[pos++] = ']'; buf[pos] = 0; return buf;
+}
 template<typename T>
-__device__ const char* symm_arr_keys(const T* arr, int len) { return "[]"; }
+__device__ const char* symm_arr_keys(const T* /*arr*/, int len) {
+    static char buf[512]; int pos = 0;
+    buf[pos++] = '[';
+    for (int i = 0; i < len && pos < 490; i++) {
+        if (i) buf[pos++] = ',';
+        int n = symm_write_int(buf + pos, i); pos += n;
+    }
+    buf[pos++] = ']'; buf[pos] = 0; return buf;
+}
 template<typename T>
-__device__ const char* symm_arr_values(const T* arr, int len) { return "[]"; }
+__device__ const char* symm_arr_values(const T* arr, int len) {
+    static char buf[512]; int pos = 0;
+    buf[pos++] = '[';
+    for (int i = 0; i < len && pos < 480; i++) {
+        if (i) buf[pos++] = ',';
+        int n = symm_write_float(buf + pos, (float)arr[i]); pos += n;
+    }
+    buf[pos++] = ']'; buf[pos] = 0; return buf;
+}
+
+)";
+
+// Fragment 10B: Missing array helpers, Error subtypes, structuredClone
+static const char* PRELUDE_FRAG10B = R"(
+// ── Array: find / findIndex (with function predicate) ─────────────────────────
+template<typename T, typename Fn>
+__device__ T symm_arr_find(const T* arr, int len, Fn fn) {
+    for (int i = 0; i < len; i++) if (fn(arr[i])) return arr[i];
+    return T{};
+}
+template<typename T, typename Fn>
+__device__ int symm_arr_find_index(const T* arr, int len, Fn fn) {
+    for (int i = 0; i < len; i++) if (fn(arr[i])) return i;
+    return -1;
+}
+
+// ── Array: reverse (in-place) ──────────────────────────────────────────────────
+template<typename T>
+__device__ T* symm_arr_reverse(T* arr, int len) {
+    for (int i = 0; i < len / 2; i++) {
+        T tmp = arr[i]; arr[i] = arr[len-1-i]; arr[len-1-i] = tmp;
+    }
+    return arr;
+}
+
+// ── Array: sort (insertion sort, in-place) ─────────────────────────────────────
+template<typename T>
+__device__ void symm_arr_sort(T* arr, int len) {
+    for (int i = 1; i < len; i++) {
+        T key = arr[i]; int j = i - 1;
+        while (j >= 0 && arr[j] > key) { arr[j+1] = arr[j]; j--; }
+        arr[j+1] = key;
+    }
+}
+template<typename T, typename Fn>
+__device__ void symm_arr_sort_fn(T* arr, int len, Fn cmp) {
+    for (int i = 1; i < len; i++) {
+        T key = arr[i]; int j = i - 1;
+        while (j >= 0 && cmp(arr[j], key) > 0) { arr[j+1] = arr[j]; j--; }
+        arr[j+1] = key;
+    }
+}
+
+// ── Array: flat (one level deep — GPU can only flatten string arrays) ──────────
+__device__ const char* symm_arr_flat(const char** arr, int len) {
+    // Concatenate string elements into a flat JSON array
+    static char buf[1024]; int pos = 0;
+    buf[pos++] = '[';
+    bool first = true;
+    for (int i = 0; i < len && pos < 990; i++) {
+        const char* elem = arr[i];
+        if (!elem) continue;
+        // If element looks like a JSON array, inline its contents
+        if (elem[0] == '[') {
+            const char* inner = elem + 1;
+            while (*inner && pos < 990) {
+                if (*inner == ']') break;
+                if (!first) { buf[pos++] = ','; first = false; }
+                first = false;
+                buf[pos++] = *inner++;
+            }
+        } else {
+            if (!first) buf[pos++] = ',';
+            first = false;
+            buf[pos++] = '"';
+            for (int j = 0; elem[j] && pos < 1000; j++) buf[pos++] = elem[j];
+            buf[pos++] = '"';
+        }
+    }
+    buf[pos++] = ']'; buf[pos] = 0; return buf;
+}
+template<typename T>
+__device__ T* symm_arr_flat(T* arr, int len) { return arr; } // numeric: no-op
 
 // ── Error subtypes ─────────────────────────────────────────────────────────────
 struct SyntaxError : Error {
@@ -1899,6 +2505,133 @@ __device__ const char* symm_str_at(const char* s, int idx) {
 __device__ const char* symm_json_stringify_indent(const char* json, int indent) {
     // For GPU: just return the flat JSON (indent is cosmetic)
     return json ? json : "null";
+}
+
+// ── btoa / atob: Base64 encode/decode ─────────────────────────────────────────
+static __device__ __constant__ const char _B64_ENC[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+__device__ const char* btoa(const char* s) {
+    if (!s) return "";
+    static char buf[512];
+    int slen = symm_strlen(s);
+    int p = 0;
+    for (int i = 0; i < slen && p < 508; i += 3) {
+        unsigned int b0 = (unsigned char)s[i];
+        unsigned int b1 = (i+1 < slen) ? (unsigned char)s[i+1] : 0;
+        unsigned int b2 = (i+2 < slen) ? (unsigned char)s[i+2] : 0;
+        buf[p++] = _B64_ENC[(b0 >> 2) & 0x3F];
+        buf[p++] = _B64_ENC[((b0 << 4) | (b1 >> 4)) & 0x3F];
+        buf[p++] = (i+1 < slen) ? _B64_ENC[((b1 << 2) | (b2 >> 6)) & 0x3F] : '=';
+        buf[p++] = (i+2 < slen) ? _B64_ENC[b2 & 0x3F] : '=';
+    }
+    buf[p] = '\0';
+    return buf;
+}
+
+__device__ const char* atob(const char* s) {
+    if (!s) return "";
+    static char buf[384];
+    // Decode base64 (ignores invalid chars and padding)
+    auto decode_char = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+' || c == '-') return 62;
+        if (c == '/' || c == '_') return 63;
+        return -1;
+    };
+    int p = 0;
+    int slen = symm_strlen(s);
+    for (int i = 0; i < slen && p < 382; ) {
+        int a0 = -1, a1 = -1, a2 = -1, a3 = -1;
+        while (i < slen && a0 < 0) { int v = decode_char(s[i++]); if (v >= 0) a0 = v; }
+        while (i < slen && a1 < 0) { int v = decode_char(s[i++]); if (v >= 0) a1 = v; }
+        while (i < slen && a2 < 0) { int v = decode_char(s[i++]); if (v >= 0) a2 = v; }
+        while (i < slen && a3 < 0) { int v = decode_char(s[i++]); if (v >= 0) a3 = v; }
+        if (a0 < 0 || a1 < 0) break;
+        buf[p++] = (char)((a0 << 2) | (a1 >> 4));
+        if (a2 >= 0) buf[p++] = (char)(((a1 & 0xF) << 4) | (a2 >> 2));
+        if (a3 >= 0) buf[p++] = (char)(((a2 & 0x3) << 6) | a3);
+    }
+    buf[p] = '\0';
+    return buf;
+}
+
+// ── URLSearchParams: query string parse ────────────────────────────────────────
+// Full implementation: parse key=value pairs from query string
+__device__ const char* symm_url_search_params_get(const char* qs, const char* key) {
+    if (!qs || !key) return "";
+    static char buf[256];
+    int klen = symm_strlen(key);
+    // Skip leading '?'
+    if (*qs == '?') qs++;
+    const char* p = qs;
+    while (*p) {
+        // Find key end
+        const char* eq = p;
+        while (*eq && *eq != '=' && *eq != '&') eq++;
+        int pklen = (int)(eq - p);
+        if (pklen == klen) {
+            // Compare key (percent-decoded comparison would be ideal; simple for now)
+            bool match = true;
+            for (int i = 0; i < klen; i++) {
+                if (p[i] != key[i]) { match = false; break; }
+            }
+            if (match && *eq == '=') {
+                // Extract value up to next '&' or end
+                const char* vs = eq + 1;
+                const char* ve = vs;
+                while (*ve && *ve != '&') ve++;
+                int vlen = (int)(ve - vs);
+                if (vlen > 255) vlen = 255;
+                for (int i = 0; i < vlen; i++) buf[i] = vs[i];
+                buf[vlen] = '\0';
+                return buf;
+            }
+        }
+        // Skip to next pair
+        while (*p && *p != '&') p++;
+        if (*p == '&') p++;
+    }
+    return "";
+}
+
+// ── crypto.randomUUID — deterministic UUID based on thread+counter ─────────────
+__device__ const char* symm_random_uuid() {
+    static char buf[37];
+    uint32_t seed = (uint32_t)(threadIdx.x * 1664525u + blockIdx.x * 22695477u + 1013904223u);
+    auto rnd = [&]() -> uint32_t {
+        seed = seed * 1664525u + 1013904223u;
+        return seed;
+    };
+    auto hex4 = [&](int p, int n) {
+        uint32_t v = rnd();
+        for (int i = 0; i < n; i++) {
+            int d = (v >> (i*4)) & 0xF;
+            buf[p + n - 1 - i] = (d < 10) ? '0' + d : 'a' + d - 10;
+        }
+    };
+    hex4(0, 8);  buf[8]  = '-';
+    hex4(9, 4);  buf[13] = '-';
+    // version 4
+    uint32_t v = rnd();
+    buf[14] = '4';
+    for (int i = 1; i < 4; i++) {
+        int d = (v >> (i*4)) & 0xF;
+        buf[14 + i] = (d < 10) ? '0' + d : 'a' + d - 10;
+    }
+    buf[18] = '-';
+    // variant bits
+    uint32_t v2 = rnd();
+    buf[19] = "89ab"[(v2 >> 4) & 0x3];
+    for (int i = 1; i < 4; i++) {
+        int d = (v2 >> (i*4)) & 0xF;
+        buf[19 + i] = (d < 10) ? '0' + d : 'a' + d - 10;
+    }
+    buf[23] = '-';
+    hex4(24, 12); buf[36] = '\0';
+    return buf;
 }
 
 )";
@@ -2099,11 +2832,13 @@ __device__ const char* symm_map_entries(const Map& m) {
 
 // ── Set keys() / values() / entries() ─────────────────────────────────────────
 __device__ const char* symm_set_values(const Set& s) {
-    static char buf[512]; int pos = 0;
+    static char buf[1024]; int pos = 0;
     buf[pos++] = '[';
-    for (int i = 0; i < s._count && pos < 480; i++) {
+    for (int i = 0; i < s._count && pos < 990; i++) {
         if (i) buf[pos++] = ',';
-        int n = symm_write_float(buf + pos, s._items[i]); pos += n;
+        buf[pos++] = '"';
+        for (int j = 0; s._items[i] && s._items[i][j] && pos < 1000; j++) buf[pos++] = s._items[i][j];
+        buf[pos++] = '"';
     }
     buf[pos++] = ']'; buf[pos] = 0;
     return buf;
@@ -2167,7 +2902,22 @@ __device__ void symm_sha256(const uint8_t* msg, int len, uint8_t* digest) {
     for (int j = 0; j < rem; j++) block[j] = msg[i+j];
     block[rem] = 0x80;
     if (rem >= 56) {
-        // Need extra block — not supported in this simplified version; just finalize
+        // Process this block (padding byte only, no length), then add a second padding block
+        uint32_t ww[64];
+        for (int j = 0; j < 16; j++)
+            ww[j]=((uint32_t)block[j*4]<<24)|((uint32_t)block[j*4+1]<<16)|
+                  ((uint32_t)block[j*4+2]<<8)|(uint32_t)block[j*4+3];
+        for (int j=16;j<64;j++) ww[j]=_sha256_sig1(ww[j-2])+ww[j-7]+_sha256_sig0(ww[j-15])+ww[j-16];
+        uint32_t aa=h[0],bb=h[1],cc=h[2],dd=h[3],ee=h[4],ff=h[5],gg=h[6],hh=h[7];
+        for(int j=0;j<64;j++){uint32_t t1=hh+_sha256_ep1(ee)+_sha256_ch(ee,ff,gg)+K[j]+ww[j];uint32_t t2=_sha256_ep0(aa)+_sha256_maj(aa,bb,cc);hh=gg;gg=ff;ff=ee;ee=dd+t1;dd=cc;cc=bb;bb=aa;aa=t1+t2;}
+        h[0]+=aa;h[1]+=bb;h[2]+=cc;h[3]+=dd;h[4]+=ee;h[5]+=ff;h[6]+=gg;h[7]+=hh;
+        // Prepare second (final) block with length only
+        for (int j = 0; j < 64; j++) block[j] = 0;
+        long long bitlen = (long long)len * 8;
+        block[56]=(uint8_t)(bitlen>>56); block[57]=(uint8_t)(bitlen>>48);
+        block[58]=(uint8_t)(bitlen>>40); block[59]=(uint8_t)(bitlen>>32);
+        block[60]=(uint8_t)(bitlen>>24); block[61]=(uint8_t)(bitlen>>16);
+        block[62]=(uint8_t)(bitlen>>8);  block[63]=(uint8_t)(bitlen);
     } else {
         long long bitlen = (long long)len * 8;
         block[56]=(uint8_t)(bitlen>>56); block[57]=(uint8_t)(bitlen>>48);
@@ -2258,6 +3008,10 @@ struct _CryptoSubtle {
         while (s && *s && i<64) { k._raw[i++]=(uint8_t)*s++; }
         k._len=i; return k;
     }
+    // digestSync(algo, data) → hex string of SHA-256 hash
+    __device__ const char* digestSync(const char* algo, const char* data) {
+        return symm_sha256_hex(data);
+    }
 };
 
 // SHA-256 convenience (used directly by Codegen)
@@ -2276,6 +3030,7 @@ struct _CryptoGlobal {
     _CryptoSubtle subtle;
     __device__ void getRandomValues(float* arr, int len)   { subtle.getRandomValues(arr, len); }
     __device__ void getRandomValues(uint8_t* arr, int len) { subtle.getRandomValues(arr, len); }
+    __device__ const char* randomUUID() { return symm_random_uuid(); }
 };
 __device__ _CryptoGlobal crypto;
 )";
@@ -2283,16 +3038,18 @@ __device__ _CryptoGlobal crypto;
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
-    if (PRELUDE_FRAG1) result += PRELUDE_FRAG1;
-    if (PRELUDE_FRAG2) result += PRELUDE_FRAG2;
-    if (PRELUDE_FRAG3) result += PRELUDE_FRAG3;
+    if (PRELUDE_FRAG1)  result += PRELUDE_FRAG1;
+    if (PRELUDE_FRAG2)  result += PRELUDE_FRAG2;
+    if (PRELUDE_FRAG2B) result += PRELUDE_FRAG2B;
+    if (PRELUDE_FRAG3)  result += PRELUDE_FRAG3;
     if (PRELUDE_FRAG4) result += PRELUDE_FRAG4;
     if (PRELUDE_FRAG5) result += PRELUDE_FRAG5;
     if (PRELUDE_FRAG6) result += PRELUDE_FRAG6;
     if (PRELUDE_FRAG7) result += PRELUDE_FRAG7;
     if (PRELUDE_FRAG9) result += PRELUDE_FRAG9;
     if (PRELUDE_FRAG8) result += PRELUDE_FRAG8;
-    if (PRELUDE_FRAG10) result += PRELUDE_FRAG10;
+    if (PRELUDE_FRAG10)  result += PRELUDE_FRAG10;
+    if (PRELUDE_FRAG10B) result += PRELUDE_FRAG10B;
     if (PRELUDE_FRAG11) result += PRELUDE_FRAG11;
     if (PRELUDE_FRAG12) result += PRELUDE_FRAG12; // SHA-256 + HMAC
     return result;

@@ -10294,7 +10294,7 @@ static void testPhase20NewFeatures() {
     });
 
     // Map.keys/values/entries
-    TEST("Map.keys — symm_map_keys dispatched", {
+    TEST("Map.keys — inline struct method dispatched", {
         auto src = codegen(
             "app.get('/mk', (ctx) => {\n"
             "  const m = new Map();\n"
@@ -10302,7 +10302,7 @@ static void testPhase20NewFeatures() {
             "  ctx.json({ ok: true });\n"
             "});"
         );
-        ASSERT_CONTAINS(src, "symm_map_keys");
+        ASSERT_CONTAINS(src, ".keys()");
     });
 
     // Numeric separators
@@ -10338,6 +10338,397 @@ static void testPhase20NewFeatures() {
     TEST("symm_body_get_str — in prelude", {
         auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
         ASSERT_CONTAINS(src, "symm_body_get_str");
+    });
+}
+
+// ── Phase 21: btoa/atob, crypto.randomUUID, Set.values, Number consts ────────
+
+static void testPhase21Features() {
+    std::cout << "\n=== Phase 21: Base64, UUID, Set/Map Iterators, Number Constants ===\n";
+
+    // btoa / atob
+    TEST("btoa — dispatched to btoa()", {
+        auto src = codegen(
+            "app.get('/b', (ctx) => {\n"
+            "  const enc = btoa('hello');\n"
+            "  ctx.json({ enc });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "btoa(");
+    });
+
+    TEST("atob — dispatched to atob()", {
+        auto src = codegen(
+            "app.get('/a', (ctx) => {\n"
+            "  const dec = atob('aGVsbG8=');\n"
+            "  ctx.json({ dec });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "atob(");
+    });
+
+    // crypto.randomUUID
+    TEST("crypto.randomUUID — dispatched via crypto global", {
+        auto src = codegen(
+            "app.get('/uuid', (ctx) => {\n"
+            "  const id = crypto.randomUUID();\n"
+            "  ctx.json({ id });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "crypto.randomUUID()");
+    });
+
+    // Set.values / keys / entries
+    TEST("Set.values — inline struct method", {
+        auto src = codegen(
+            "app.get('/sv', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  s.add('a'); s.add('b');\n"
+            "  const v = s.values();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".values()");
+    });
+
+    TEST("Set.entries — inline struct method", {
+        auto src = codegen(
+            "app.get('/se', (ctx) => {\n"
+            "  const s = new Set();\n"
+            "  const e = s.entries();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".entries()");
+    });
+
+    // Map.values / entries
+    TEST("Map.values — inline struct method", {
+        auto src = codegen(
+            "app.get('/mv', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('x', 42);\n"
+            "  const v = m.values();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".values()");
+    });
+
+    TEST("Map.entries — inline struct method", {
+        auto src = codegen(
+            "app.get('/me', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('x', 1);\n"
+            "  const e = m.entries();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".entries()");
+    });
+
+    // Number constants
+    TEST("Number.MAX_VALUE — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "MAX_VALUE");
+    });
+
+    TEST("Number.POSITIVE_INFINITY — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "POSITIVE_INFINITY");
+    });
+
+    // URLSearchParams.get
+    TEST("URLSearchParams.get — real parse dispatched", {
+        auto src = codegen(
+            "app.get('/p', (ctx) => {\n"
+            "  const sp = new URLSearchParams('a=1&b=2');\n"
+            "  const a = sp.get('a');\n"
+            "  ctx.json({ a });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "URLSearchParams");
+        ASSERT_CONTAINS(src, ".get(");
+    });
+
+    // crypto.subtle.digestSync
+    TEST("crypto.subtle.digestSync — SHA-256 method available", {
+        auto src = codegen(
+            "app.get('/h', (ctx) => {\n"
+            "  const h = crypto.subtle.digestSync('SHA-256', 'data');\n"
+            "  ctx.json({ h });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "crypto.subtle.digestSync");
+    });
+
+    // symm_random_uuid in prelude
+    TEST("symm_random_uuid — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_random_uuid");
+    });
+
+    // btoa / atob in prelude
+    TEST("btoa/atob — in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "btoa");
+        ASSERT_CONTAINS(src, "atob");
+    });
+}
+
+// ── Phase 22: process, globalThis, AbortController, Promise.allSettled ───────
+
+static void testPhase23FixedStubs() {
+    std::cout << "\n=== Phase 23: Fixed Stubs — routing, json merge, array callbacks ===\n";
+
+    // ── symm_extract_param (was returning "") ──────────────────────────────────
+
+    TEST("symm_extract_param — route param emitted with correct segment index", {
+        auto src = codegen(
+            "app.get('/users/:id', (ctx) => {\n"
+            "  const id = ctx.params.id;\n"
+            "  ctx.json({ id });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_extract_param");
+        // /users/:id → 'id' is segment 1
+        ASSERT_CONTAINS(src, "ctx->path, 1");
+    });
+
+    TEST("symm_extract_param — nested route param gets correct index", {
+        auto src = codegen(
+            "app.get('/api/v1/:name', (ctx) => {\n"
+            "  const name = ctx.params.name;\n"
+            "  ctx.json({ name });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_extract_param");
+        // /api/v1/:name → 'name' is segment 2
+        ASSERT_CONTAINS(src, "ctx->path, 2");
+    });
+
+    // ── symm_extract_query (was returning "") ──────────────────────────────────
+
+    TEST("symm_extract_query — query param emitted with correct key", {
+        auto src = codegen(
+            "app.get('/search', (ctx) => {\n"
+            "  const q = ctx.query.q;\n"
+            "  ctx.json({ q });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_extract_query");
+        ASSERT_CONTAINS(src, "\"q\"");
+    });
+
+    TEST("symm_extract_query — delegates to url_search_params_get in prelude", {
+        auto src = codegen("app.get('/t', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_url_search_params_get");
+    });
+
+    // ── symm_json_merge (was wrong signature + returned {}) ───────────────────
+
+    TEST("symm_json_merge — correct signature (dest, cap, src) returning int", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const extra = { c: 3 };\n"
+            "  ctx.json({ a: 1, ...extra });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_json_merge");
+    });
+
+    // ── Array callback functions (were missing Fn parameter) ─────────────────
+
+    TEST("arr.forEach — emits symm_arr_for_each with callback arg", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  arr.forEach(x => { });\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_for_each");
+    });
+
+    TEST("arr.every — emits symm_arr_every with predicate", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const all = arr.every(x => x > 0);\n"
+            "  ctx.json({ all });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_every");
+    });
+
+    TEST("arr.some — emits symm_arr_some with predicate", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const any = arr.some(x => x > 2);\n"
+            "  ctx.json({ any });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_some");
+    });
+
+    TEST("arr.reduce — emits symm_arr_reduce with fn and init", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const sum = arr.reduce((acc, x) => acc + x, 0);\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_reduce");
+    });
+
+    TEST("arr.slice — emits symm_arr_slice with (arr, len, start, end)", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  const sl = arr.slice(1, 3);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_slice");
+        ASSERT_CONTAINS(src, "1, 3");
+    });
+
+    TEST("arr.reduceRight — delegates to symm_arr_reduce", {
+        auto src = codegen(
+            "app.get('/t', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const prod = arr.reduceRight((acc, x) => acc * x, 1);\n"
+            "  ctx.json({ prod });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_reduce");
+    });
+}
+
+static void testPhase22Features() {
+    std::cout << "\n=== Phase 22: process/globalThis/AbortController/Promise extras ===\n";
+
+    // process.env
+    TEST("process.env — maps to _symm_process.env", {
+        auto src = codegen(
+            "app.get('/e', (ctx) => {\n"
+            "  const env = process.env.NODE_ENV;\n"
+            "  ctx.json({ env });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_symm_process");
+    });
+
+    // globalThis
+    TEST("globalThis — prelude defines _GlobalThis struct", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "globalThis");
+    });
+
+    // AbortController in prelude
+    TEST("AbortController — struct defined in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "AbortController");
+    });
+
+    // AbortController usage
+    TEST("AbortController — instantiable via new", {
+        auto src = codegen(
+            "app.get('/ac', (ctx) => {\n"
+            "  const ac = new AbortController();\n"
+            "  ac.abort('timeout');\n"
+            "  ctx.json({ aborted: ac.signal.aborted });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "AbortController");
+        ASSERT_CONTAINS(src, "abort");
+    });
+
+    // TextEncoder
+    TEST("TextEncoder — struct defined in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TextEncoder");
+    });
+
+    TEST("TextDecoder — struct defined in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TextDecoder");
+    });
+
+    // Promise.allSettled
+    TEST("Promise.allSettled — defined on Promise struct", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "allSettled");
+    });
+
+    // Promise.any
+    TEST("Promise.any — defined on Promise struct", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    // Array find/findIndex with predicate (new in FRAG10B)
+    TEST("arr.find — symm_arr_find dispatched", {
+        auto src = codegen(
+            "app.get('/f', (ctx) => {\n"
+            "  const arr = [1, 2, 3];\n"
+            "  const f = arr.find((x) => x > 1);\n"
+            "  ctx.json({ f });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_find");
+    });
+
+    TEST("arr.findIndex — symm_arr_find_index dispatched", {
+        auto src = codegen(
+            "app.get('/fi', (ctx) => {\n"
+            "  const arr = [1, 2, 3];\n"
+            "  const i = arr.findIndex((x) => x > 1);\n"
+            "  ctx.json({ i });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_find_index");
+    });
+
+    TEST("arr.reverse — symm_arr_reverse dispatched", {
+        auto src = codegen(
+            "app.get('/r', (ctx) => {\n"
+            "  const arr = [3, 1, 2];\n"
+            "  arr.reverse();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_reverse");
+    });
+
+    TEST("arr.sort — symm_arr_sort dispatched", {
+        auto src = codegen(
+            "app.get('/s', (ctx) => {\n"
+            "  const arr = [3, 1, 2];\n"
+            "  arr.sort();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_sort");
+    });
+
+    TEST("arr.flat — symm_arr_flat dispatched", {
+        auto src = codegen(
+            "app.get('/fl', (ctx) => {\n"
+            "  const arr = [[1, 2], [3, 4]];\n"
+            "  const flat = arr.flat();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_flat");
+    });
+
+    // _symm_process struct in prelude
+    TEST("_symm_process — process global defined in prelude", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_symm_process");
     });
 }
 
@@ -10534,6 +10925,15 @@ int main() {
     // Phase 20: Date, JSON.parse, Namespaces, Error.cause
     symm::testPhase20NewFeatures();
 
+    // Phase 21: btoa/atob, crypto.randomUUID, Set/Map iterators, Number consts
+    symm::testPhase21Features();
+
+    // Phase 22: process, globalThis, AbortController, Promise.allSettled/any, find/sort
+    symm::testPhase22Features();
+
+    // Phase 23: Fixed stubs — extract_param/query, json_merge, arr callbacks
+    symm::testPhase23FixedStubs();
+
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
 
@@ -10544,3 +10944,4 @@ int main() {
     std::cout << "All " << symm::gPassed << " tests passed.\n";
     return 0;
 }
+

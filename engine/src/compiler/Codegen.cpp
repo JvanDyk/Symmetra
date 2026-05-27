@@ -1614,9 +1614,8 @@ std::string Codegen::emitCall(const CallExpr& c) {
             if (args.empty()) {
                 return "console." + prop + "()";
             }
-            // log/warn/error with first arg only (variadic not supported on GPU)
-            std::string first = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
-            return "console." + prop + "(" + first + ")";
+            // log/warn/error/info: pass up to 3 args (multi-arg overloads in prelude)
+            return "console." + prop + "(" + args + ")";
         }
 
         // process.*() — remap 'process' identifier to '_symm_process' struct instance
@@ -1892,9 +1891,7 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 {"startsWith",  "symm_str_starts_with"},
                 {"endsWith",    "symm_str_ends_with"},
                 {"indexOf",     "symm_str_index_of"},
-                {"lastIndexOf", "symm_str_last_index_of"},
-                {"slice",       "symm_str_slice"},
-                {"substring",   "symm_str_substring"},
+                // lastIndexOf, substring, substr, slice handled above (optional-arg special cases)
                 {"toUpperCase", "symm_str_to_upper"}, {"toLocaleUpperCase","symm_str_to_upper"},
                 {"toLowerCase", "symm_str_to_lower"}, {"toLocaleLowerCase","symm_str_to_lower"},
                 {"at",          "symm_str_at"},      // returns _SBuf (1-char string)
@@ -1907,6 +1904,42 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 {"match",       "symm_str_match_all"}, // returns MatchArray
                 {"normalize",   "symm_str_trim"},      // no-op approximation (GPU has no ICU)
             };
+            // Handle methods with optional second argument specially
+            if (prop == "substring") {
+                std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
+                // Default end = full string length
+                std::string end = (c.args.size() > 1)
+                    ? emitExpr(c.args[1])
+                    : ("symm_strlen(" + obj + ")");
+                return "symm_str_substring(" + obj + ", " + start + ", " + end + ")";
+            }
+            if (prop == "substr") {
+                std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
+                std::string len   = (c.args.size() > 1)
+                    ? emitExpr(c.args[1])
+                    : "-1";  // -1 → prelude uses full remaining length
+                return "symm_str_substr(" + obj + ", " + start + ", " + len + ")";
+            }
+            if (prop == "lastIndexOf") {
+                std::string sub = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+                if (c.args.size() > 1) {
+                    std::string from = emitExpr(c.args[1]);
+                    return "symm_str_last_index_of_from(" + obj + ", " + sub + ", " + from + ")";
+                }
+                return "symm_str_last_index_of(" + obj + ", " + sub + ")";
+            }
+            if (prop == "slice") {
+                std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
+                // symm_str_slice(s, start) — already handles negative start, and
+                // if a second arg (end) is present we need symm_str_substring for the copy
+                if (c.args.size() > 1) {
+                    std::string end = emitExpr(c.args[1]);
+                    // negative end: slen+end  — for simplicity use symm_str_substring semantics
+                    return "symm_str_substring(" + obj + ", " + start + ", " + end + ")";
+                }
+                return "symm_str_slice(" + obj + ", " + start + ")";
+            }
+
             auto it = STR_REMAP.find(prop);
             if (it != STR_REMAP.end()) {
                 std::string callArgs = obj;
@@ -2053,15 +2086,8 @@ std::string Codegen::emitCall(const CallExpr& c) {
             std::string val = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
             return "(" + obj + "[" + idx + "] = " + val + ", " + obj + ")";
         }
-        if (prop == "entries") {
-            return "symm_arr_entries(" + obj + ", " + obj + "_len)";
-        }
-        if (prop == "keys") {
-            return "symm_arr_keys(" + obj + ", " + obj + "_len)";
-        }
-        if (prop == "values") {
-            return "symm_arr_values(" + obj + ", " + obj + "_len)";
-        }
+        // Note: entries/keys/values fall through to generic dispatch
+        // so Map.keys(), Set.keys(), arr.keys() all call the struct method directly.
         if (prop == "pop") {
             return "(" + obj + "_len > 0 ? " + obj + "[--" + obj + "_len] : 0)";
         }
@@ -2078,15 +2104,9 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "(++(" + obj + "_len))";  // simplified; actual shift not safe without bounds
         }
 
-        // ── Map / Set forEach ────────────────────────────────────────────────
-        if (prop == "forEach") {
-            std::string fn = c.args.empty() ? "[](auto v, auto k){}" : emitExpr(c.args[0]);
-            return "symm_map_for_each(" + obj + ", " + fn + ")";
-        }
-        // ── Map keys() / values() / entries() — return JSON-array string reps ─
-        if (prop == "keys")    return "symm_map_keys("    + obj + ")";
-        if (prop == "values")  return "symm_map_values("  + obj + ")";
-        if (prop == "entries") return "symm_map_entries(" + obj + ")";
+        // ── Map/Set keys() / values() / entries() — inline struct methods ──────
+        // Map and Set both have inline keys()/values()/entries() methods now.
+        // Fall through to generic dispatch: obj.keys() / obj.values() / obj.entries()
 
         // ── Generator protocol: gen.return(val) / gen.throw(err) ────────────
         if (prop == "return" || prop == "return_") {
@@ -2146,10 +2166,32 @@ std::string Codegen::emitCall(const CallExpr& c) {
         std::string a = c.args.empty() ? "0" : emitExpr(c.args[0]);
         return fn + "(" + a + ")";
     }
-    // encodeURIComponent / decodeURIComponent — identity stubs
-    if (fn == "encodeURIComponent" || fn == "decodeURIComponent" ||
-        fn == "encodeURI"          || fn == "decodeURI") {
-        return c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+    // encodeURIComponent / decodeURIComponent — full implementation via prelude
+    if (fn == "encodeURIComponent") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "symm_encode_uri_component(" + a + ")";
+    }
+    if (fn == "decodeURIComponent") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "symm_decode_uri_component(" + a + ")";
+    }
+    // encodeURI / decodeURI — encodes/decodes fewer chars; reuse component variant for GPU
+    if (fn == "encodeURI") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "symm_encode_uri_component(" + a + ")";
+    }
+    if (fn == "decodeURI") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "symm_decode_uri_component(" + a + ")";
+    }
+    // btoa / atob — base64 encode/decode (GPU implementations in prelude FRAG10)
+    if (fn == "btoa") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "btoa(" + a + ")";
+    }
+    if (fn == "atob") {
+        std::string a = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+        return "atob(" + a + ")";
     }
     // eval(expr) — dynamic execution not supported on GPU; return null (safe no-op)
     if (fn == "eval") {

@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "released": "2026-05-27",
+  "windows_sha256": "",
+  "linux_sha256": "",
+  "downloads": {
+    "windows_zip": "https://github.com/JvanDyk/symmetra/releases/download/v1.0.0/symmetra-1.0.0-windows-x64.zip",
+    "linux_deb": "https://github.com/JvanDyk/symmetra/releases/download/v1.0.0/symmetra-1.0.0-linux-x64.deb",
+    "linux_rpm": "https://github.com/JvanDyk/symmetra/releases/download/v1.0.0/symmetra-1.0.0-linux-x64.rpm",
+    "linux_snap": "https://github.com/JvanDyk/symmetra/releases/download/v1.0.0/symmetra-1.0.0-linux-x64.snap",
+    "linux_binary": "https://github.com/JvanDyk/symmetra/releases/download/v1.0.0/sym-linux-x64"
+  }
+}
