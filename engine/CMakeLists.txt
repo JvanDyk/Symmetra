@@ -310,6 +310,15 @@ if(SYMM_BUILD_TESTS)
     target_compile_definitions(performance_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
     add_test(NAME performance_test COMMAND performance_test)
     message(STATUS "Performance tests: ENABLED (run with ./Release/performance_test.exe for comprehensive benchmarking)")
+
+    # ── Turing Machine Benchmark (warp divergence patterns) ──────────────────────
+    add_executable(turing_machine_benchmark
+        src/runtime/turing_machine_benchmark.cpp
+    )
+    target_include_directories(turing_machine_benchmark PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(turing_machine_benchmark PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    add_test(NAME turing_machine_benchmark COMMAND turing_machine_benchmark)
+    message(STATUS "Turing Machine benchmarks: ENABLED (run with ./Release/turing_machine_benchmark.exe)")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
