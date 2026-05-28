@@ -345,6 +345,14 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(max_throughput_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
     target_compile_definitions(max_throughput_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
     message(STATUS "Max Throughput tests: ENABLED (run with ./Release/max_throughput_test.exe [duration])")
+
+    # ── Production Benchmark (Real workload: fetch → GPU → serialize) ────────────
+    add_executable(production_benchmark
+        src/runtime/test_production_benchmark.cpp
+    )
+    target_include_directories(production_benchmark PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(production_benchmark PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    message(STATUS "Production Benchmark: ENABLED (run with ./Release/production_benchmark.exe [duration] [workers])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
