@@ -329,6 +329,22 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(gpu_batch_async_test PRIVATE CUDA::cuda_driver CUDA::cudart)
     add_test(NAME gpu_batch_async_test COMMAND gpu_batch_async_test)
     message(STATUS "GPU Batch Async tests: ENABLED (run with ./Release/gpu_batch_async_test.exe)")
+
+    # ── HTTP Load Test (Max throughput benchmark) ────────────────────────────────
+    add_executable(http_load_test
+        src/runtime/test_http_load.cpp
+    )
+    target_include_directories(http_load_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(http_load_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    message(STATUS "HTTP Load tests: ENABLED (run with ./Release/http_load_test.exe [duration] [workers])")
+
+    # ── Max Throughput Test (Pure GPU batch performance) ────────────────────────
+    add_executable(max_throughput_test
+        src/runtime/test_max_throughput.cpp
+    )
+    target_include_directories(max_throughput_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(max_throughput_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    message(STATUS "Max Throughput tests: ENABLED (run with ./Release/max_throughput_test.exe [duration])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
