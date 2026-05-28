@@ -5,14 +5,44 @@
 #include <cstdio>
 #include <chrono>
 #include <cuda_runtime.h>
+#include <atomic>
+#include <mutex>
 
 #define NVRTC_CHECK(call) checkNvrtc((call), #call)
 #define CU_CHECK(call)    checkCu((call), #call)
 
 namespace symm {
 
+// Static flag to track if CUDA has been initialized globally
+static std::atomic<bool> g_cuda_initialized(false);
+static std::mutex g_cuda_init_mutex;
+
 NvrtcCompiler::NvrtcCompiler() {
+    // Quick check: if another NvrtcCompiler instance already initialized CUDA, skip
+    if (g_cuda_initialized.load()) {
+        // Just get the device - we know CUDA is init'd
+        CU_CHECK(cuDeviceGet(&_device, 0));
+        CU_CHECK(cuDevicePrimaryCtxRetain(&_context, _device));
+        CU_CHECK(cuCtxSetCurrent(_context));
+        return;
+    }
+
+    // Lock to prevent multiple threads from initializing simultaneously
+    std::lock_guard<std::mutex> lock(g_cuda_init_mutex);
+
+    // Double-check after acquiring lock
+    if (g_cuda_initialized.load()) {
+        CU_CHECK(cuDeviceGet(&_device, 0));
+        CU_CHECK(cuDevicePrimaryCtxRetain(&_context, _device));
+        CU_CHECK(cuCtxSetCurrent(_context));
+        return;
+    }
+
+    // Diagnostic output
+    // Try to initialize CUDA with explicit error handling
     CU_CHECK(cuInit(0));
+    g_cuda_initialized = true;
+
     CU_CHECK(cuDeviceGet(&_device, 0));
     CU_CHECK(cuDevicePrimaryCtxRetain(&_context, _device));
     CU_CHECK(cuCtxSetCurrent(_context));
