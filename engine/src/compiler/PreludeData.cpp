@@ -485,18 +485,6 @@ __device__ int symm_str_char_code_at(const char* s, int index) {
     return (s[i]) ? (int)(unsigned char)s[i] : -1;
 }
 
-__device__ const char* symm_str_locale_compare(const char* a, const char* b) {
-    // Stub: simple string comparison
-    if (!a || !b) return a ? "1" : b ? "-1" : "0";
-    while (*a && *b) {
-        if (*a < *b) return "-1";
-        if (*a > *b) return "1";
-        a++; b++;
-    }
-    if (*a) return "1";
-    if (*b) return "-1";
-    return "0";
-}
 
 __device__ const char* symm_str_normalize(const char* s) {
     // Stub: return as-is (GPU doesn't support Unicode normalization)
@@ -1614,11 +1602,6 @@ struct Buffer {
     uint8_t _data[1024];
     int _len;
     __device__ Buffer() : _len(0) {}
-    __device__ static Buffer* from(const char* str) {
-        static Buffer b;
-        b._len = symm_strlen(str);
-        return &b;
-    }
     __device__ int length() const { return _len; }
 };
 
@@ -1663,23 +1646,19 @@ struct _Process {
     _ProcessEnv env;
     const char* platform;
     int exitCode;
-    __device__ _Process() : platform("linux"), exitCode(0) {}
     __device__ void exit(int code = 0) { exitCode = code; }
     __device__ const char* version() const { return "v20.0.0"; }
 };
-__device__ _Process _symm_process;
 
 // ── globalThis ─────────────────────────────────────────────────────────────────
 // globalThis is the global object; on GPU it's effectively the thread context.
 struct _GlobalThis {
-    __device__ _GlobalThis() {}
     _Process process;
     __device__ float parseInt(const char* s) { return symm_parse_float(s); }
     __device__ float parseFloat(const char* s) { return symm_parse_float(s); }
     __device__ bool isNaN(float v) { return v != v; }
     __device__ bool isFinite(float v) { float inf = 1e30f * 1e30f; return v != inf && v != -inf && v == v; }
 };
-__device__ _GlobalThis globalThis;
 
 )";
 
@@ -2122,21 +2101,6 @@ __device__ const char* symm_str_replace_all_regex(const char* pattern, const cha
     return buf;
 }
 
-// String.prototype.lastIndexOf — find last occurrence of substring
-__device__ int symm_str_last_index_of(const char* s, const char* sub) {
-    if (!s || !sub) return -1;
-    int slen = symm_strlen(s);
-    int sublen = symm_strlen(sub);
-    if (sublen > slen) return -1;
-    for (int i = slen - sublen; i >= 0; i--) {
-        bool match = true;
-        for (int j = 0; j < sublen; j++) {
-            if (s[i + j] != sub[j]) { match = false; break; }
-        }
-        if (match) return i;
-    }
-    return -1;
-}
 
 // String.prototype.localeCompare — compare strings (simplified)
 __device__ int symm_str_locale_compare(const char* a, const char* b) {
