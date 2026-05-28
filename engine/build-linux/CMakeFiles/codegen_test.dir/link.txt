@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/codegen_test.dir/src/compiler/test_codegen.cpp.o CMakeFiles/codegen_test.dir/src/compiler/Codegen.cpp.o CMakeFiles/codegen_test.dir/src/compiler/PreludeData.cpp.o CMakeFiles/codegen_test.dir/src/parser/SymmParser.cpp.o CMakeFiles/codegen_test.dir/src/parser/EsbuildBridge.cpp.o -o codegen_test 

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/benchmark_test.dir/src/compiler/test_benchmarks.cpp.o CMakeFiles/benchmark_test.dir/src/compiler/Codegen.cpp.o CMakeFiles/benchmark_test.dir/src/compiler/PreludeData.cpp.o CMakeFiles/benchmark_test.dir/src/parser/SymmParser.cpp.o CMakeFiles/benchmark_test.dir/src/parser/EsbuildBridge.cpp.o -o benchmark_test 

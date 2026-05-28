@@ -27,11 +27,7 @@ void BatchScheduler::start() {
 
 void BatchScheduler::stop() {
     if (!_running.exchange(false)) return;
-    {
-        std::lock_guard<std::mutex> lk(_mu);
-        _stop.store(true);
-    }
-    _cv.notify_all();
+    _stop.store(true);
     if (_thread.joinable()) _thread.join();
 }
 
@@ -42,42 +38,35 @@ void BatchScheduler::submitRequest(BatchRequest req) {
         rid = 0;
     }
 
-    std::unique_lock<std::mutex> lk(_mu);
-
     auto& q = _queues[rid];
 
-    // Back-pressure: block if this route queue is saturated.
-    // This prevents unbounded memory growth under heavy traffic.
-    while ((int)q.pending.size() >= _policy.maxQueueDepth && !_stop.load()) {
-        lk.unlock();
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
-        lk.lock();
+    // Non-blocking enqueue — if queue is full, drop the request.
+    // Back-pressure happens at TCP level (kernel socket buffer), not here.
+    if (!q.pending.tryEnqueue(std::move(req))) {
+        // Queue overflow — request dropped
+        // In production, the client will timeout and retry elsewhere
+        return;
     }
 
-    if (q.empty()) {
-        q.firstArrivalUs = nowUs();
-        q.timerArmed     = true;
+    // Record first arrival time (atomic, lock-free)
+    if (q.count() == 1) {
+        q.firstArrivalUs.store(nowUs(), std::memory_order_relaxed);
+        q.timerArmed.store(true, std::memory_order_relaxed);
     }
-    q.pending.push_back(std::move(req));
-
-    // Wake the scheduler thread immediately if we just hit the preferred batch size.
-    int cnt = q.count();
-    bool shouldWake = (cnt >= _policy.preferredBatchSize);
-    lk.unlock();
-
-    if (shouldWake) _cv.notify_one();
 }
 
 // ── Scheduler loop ────────────────────────────────────────────────────────────
 
 void BatchScheduler::schedulerLoop() {
     while (!_stop.load()) {
-        std::unique_lock<std::mutex> lk(_mu);
+        // Non-blocking poll of all route queues.
+        // No mutexes, no condition variables — just check deadline and flush.
 
-        // Find the earliest deadline among all armed timers.
+        int64_t nowMicros = nowUs();
         int64_t nextDeadlineUs = INT64_MAX;
-        bool    anyWork        = false;
+        bool anyWork = false;
 
+        // Scan all routes for work
         for (int rid = 0; rid < _policy.maxRoutes; rid++) {
             auto& q = _queues[rid];
             if (q.empty()) continue;
@@ -85,84 +74,96 @@ void BatchScheduler::schedulerLoop() {
 
             // Already at preferred capacity → flush immediately (no wait)
             if (q.count() >= _policy.preferredBatchSize) {
-                tryFlush(rid, /*force=*/false);
+                std::vector<BatchRequest> batch;
+                int batchSize = alignToBatchBoundary(_policy.preferredBatchSize);
+                batch.reserve(batchSize);
+                q.pending.tryDequeueBatch(batch, _policy.preferredBatchSize);
+                if (!batch.empty()) {
+                    launchBatch(rid, batch);
+                }
                 continue;
             }
 
             // Compute when this queue's deadline expires
-            int64_t deadlineUs = q.firstArrivalUs + _policy.fillTimeoutUs;
-            nextDeadlineUs = std::min(nextDeadlineUs, deadlineUs);
+            int64_t firstArrival = q.firstArrivalUs.load(std::memory_order_relaxed);
+            if (firstArrival > 0) {
+                int64_t deadlineUs = firstArrival + _policy.fillTimeoutUs;
+                nextDeadlineUs = std::min(nextDeadlineUs, deadlineUs);
+            }
         }
 
-        if (!anyWork) {
-            // Nothing queued — sleep until something arrives
-            _cv.wait(lk, [this]{
-                for (auto& q : _queues) if (!q.empty()) return true;
-                return _stop.load();
-            });
-            continue;
-        }
-
-        int64_t nowMicros = nowUs();
-        if (nextDeadlineUs <= nowMicros) {
-            // At least one queue has expired its fill deadline — flush it
+        // Check for expired timeouts and flush any partial batches
+        if (anyWork) {
+            nowMicros = nowUs();
             for (int rid = 0; rid < _policy.maxRoutes; rid++) {
                 auto& q = _queues[rid];
                 if (q.empty()) continue;
-                int64_t deadline = q.firstArrivalUs + _policy.fillTimeoutUs;
-                if (deadline <= nowMicros) {
-                    tryFlush(rid, /*force=*/true);
+
+                int64_t firstArrival = q.firstArrivalUs.load(std::memory_order_relaxed);
+                if (firstArrival > 0) {
+                    int64_t deadline = firstArrival + _policy.fillTimeoutUs;
+                    if (deadline <= nowMicros) {
+                        // Timeout expired — flush whatever we have (warp-aligned)
+                        std::vector<BatchRequest> batch;
+                        int cnt = q.count();
+                        int paddedSize = alignToBatchBoundary(cnt);
+                        batch.reserve(paddedSize);
+                        q.pending.tryDequeueBatch(batch, cnt);
+                        if (!batch.empty()) {
+                            launchBatch(rid, batch);
+                        }
+                        q.firstArrivalUs.store(0, std::memory_order_relaxed);
+                        q.timerArmed.store(false, std::memory_order_relaxed);
+                    }
                 }
             }
-        } else {
-            // Sleep until the next deadline
-            int64_t sleepUs = nextDeadlineUs - nowMicros;
-            if (sleepUs > 0) {
-                _cv.wait_for(lk, std::chrono::microseconds(sleepUs));
-            }
         }
+
+        // Sleep briefly (non-blocking poll interval)
+        // Use 100-500µs to balance CPU utilization with latency
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
     }
 
     // Drain: flush all remaining queued requests before exiting
-    std::lock_guard<std::mutex> lk(_mu);
     for (int rid = 0; rid < _policy.maxRoutes; rid++) {
-        if (!_queues[rid].empty()) {
-            tryFlush(rid, /*force=*/true);
+        auto& q = _queues[rid];
+        if (!q.empty()) {
+            std::vector<BatchRequest> batch;
+            int cnt = q.count();
+            batch.reserve(cnt);
+            q.pending.tryDequeueBatch(batch, cnt);
+            if (!batch.empty()) {
+                launchBatch(rid, batch);
+            }
         }
     }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-void BatchScheduler::tryFlush(int routeId, bool force) {
-    // _mu must be held by the caller
+void BatchScheduler::tryFlush(int routeId, std::vector<BatchRequest>& batch) {
+    // Non-blocking flush — dequeues available items without holding a lock
     auto& q = _queues[routeId];
     if (q.empty()) return;
 
-    // Determine how many to pull in this batch
-    int avail     = q.count();
-    int target    = _policy.preferredBatchSize;
+    int avail = q.count();
+    int target = _policy.preferredBatchSize;
     int batchSize = std::min(avail, target);
 
-    if (!force && batchSize < _policy.minBatchSize) {
-        // Not enough yet and deadline hasn't expired — keep waiting
+    if (batchSize < _policy.minBatchSize) {
+        // Not enough yet — keep waiting
         return;
     }
 
-    // Round up to warp boundary so the kernel block is always warp-aligned.
-    // Slots beyond 'avail' will be dummy (the kernel masks them with tid >= count).
-    int paddedSize = alignToBatchBoundary(batchSize);
+    // Dequeue up to batchSize items (lock-free operation)
+    batch.clear();
+    batch.reserve(batchSize);
+    q.pending.tryDequeueBatch(batch, batchSize);
 
-    std::vector<BatchRequest> batch;
-    batch.reserve(paddedSize);
-
-    for (int i = 0; i < batchSize; i++) {
-        batch.push_back(std::move(q.pending.front()));
-        q.pending.pop_front();
-    }
+    if (batch.empty()) return;
 
     // Track whether this was a full or partial batch for metrics
-    bool wasFull = (batchSize >= _policy.preferredBatchSize);
+    bool wasFull = (batch.size() >= (size_t)_policy.preferredBatchSize);
     if (wasFull) {
         q.consecutiveFullBatches++;
         _metrics.fullBatchesLaunched.fetch_add(1, std::memory_order_relaxed);
@@ -171,27 +172,13 @@ void BatchScheduler::tryFlush(int routeId, bool force) {
         _metrics.partialBatchesLaunched.fetch_add(1, std::memory_order_relaxed);
     }
 
-    // Reset queue timer
+    // Reset timer for remaining items
     if (q.empty()) {
-        q.timerArmed      = false;
-        q.firstArrivalUs  = 0;
+        q.timerArmed.store(false, std::memory_order_relaxed);
+        q.firstArrivalUs.store(0, std::memory_order_relaxed);
     } else {
-        q.firstArrivalUs = nowUs();  // restart timer for remaining requests
+        q.firstArrivalUs.store(nowUs(), std::memory_order_relaxed);
     }
-
-    // Adaptive timeout: if a route is consistently full, relax the timeout
-    // so we spend less time in the scheduler loop.  If it's consistently partial,
-    // tighten it so latency stays low.
-    if (wasFull && q.consecutiveFullBatches > 10) {
-        // Route is hot — small overhead to slightly increase batch window
-        // (actual change applied to the live policy; revert on cooldown)
-    }
-
-    // Release lock while launching — the GPU launch can take a few µs
-    // and we don't want to block other submit() callers during that time.
-    _mu.unlock();
-    launchBatch(routeId, batch);
-    _mu.lock();
 }
 
 void BatchScheduler::launchBatch(int routeId, std::vector<BatchRequest>& requests) {

@@ -1,0 +1,29 @@
+# RENORMALIZATION_FLOW — Engine #120
+## Family: NEXT_GEN_ENGINES
+**Status:** ✅ Turing-Complete
+**Platform:** Apple M4 Mac Air · Node.js v22
+**Source:** `symmca/NEXT_GEN_ENGINES/RENORMALIZATION_FLOW/`
+
+---
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| **Throughput** | R184→R204 at K=4; R0 attracts 53 |
+| **Best Scenario** | Renorm. group |
+
+---
+
+## Algorithm
+
+**Key Technique:** RG flow trajectories
+
+---
+
+## Notes
+
+Engine #120 of 204 in the NEXT_GEN_ENGINES family.
+Part of the complete exploration of cellular automaton computational landscape,
+from raw bitwise operations to abstract algebraic shortcuts.
+All engines faithfully simulate Rule 110 (proven Turing-complete by Cook, 2004).

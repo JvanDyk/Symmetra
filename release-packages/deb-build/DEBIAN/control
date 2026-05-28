@@ -1,0 +1,10 @@
+Package: symmetra
+Version: 1.0.0
+Section: devel
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 2.31)
+Maintainer: Symmetra <support@symmetra.dev>
+Description: GPU-accelerated TypeScript compiler
+ Symmetra compiles TypeScript to native CUDA machine code.
+ 3.1M RPS with sub-20us P99 latency.

@@ -8,20 +8,20 @@
  *      (8 warps / 1 block) for good SM occupancy.
  *   3. Fill deadline: if a queue hasn't reached its target in FILL_TIMEOUT_US, launch
  *      with whatever is queued (padded with dummy slots so the block is still aligned).
- *   4. Back-pressure: if all streams are busy, submitRequest() blocks until one is free.
- *   5. Thread-safe: multiple accept threads can call submitRequest() concurrently.
+ *   4. Non-blocking: submitRequest() never blocks. Overflow requests are dropped if queue
+ *      reaches maxQueueDepth (back-pressure happens at TCP level, not here).
+ *   5. Lock-free: multiple accept threads can call submitRequest() concurrently without
+ *      any mutex contention using atomic operations.
  */
 
 #include <array>
-#include <deque>
 #include <vector>
 #include <string>
-#include <mutex>
-#include <condition_variable>
 #include <thread>
 #include <atomic>
 #include <functional>
 #include <chrono>
+#include "LockFreeQueue.h"
 
 namespace symm {
 
@@ -117,19 +117,19 @@ public:
     const Metrics& metrics() const { return _metrics; }
 
 private:
-    // ── Per-route queue ───────────────────────────────────────────────────────
+    // ── Per-route queue (lock-free) ───────────────────────────────────────────
     struct RouteQueue {
-        std::deque<BatchRequest> pending;
-        int64_t firstArrivalUs  = 0;    // oldest pending request
-        bool    timerArmed      = false;
-        int     consecutiveFullBatches = 0;  // used for adaptive timeout
+        LockFreeQueue<BatchRequest> pending;
+        std::atomic<int64_t> firstArrivalUs{0};    // oldest pending request
+        std::atomic<bool>    timerArmed{false};
+        int     consecutiveFullBatches = 0;  // used for adaptive timeout (read by scheduler only)
 
-        bool empty()   const { return pending.empty(); }
-        int  count()   const { return (int)pending.size(); }
+        bool empty() const { return pending.empty(); }
+        int  count() const { return (int)pending.size(); }
     };
 
     void   schedulerLoop();
-    void   tryFlush(int routeId, bool force);
+    void   tryFlush(int routeId, std::vector<BatchRequest>& batch);
     void   launchBatch(int routeId, std::vector<BatchRequest>& requests);
     int    alignToBatchBoundary(int count) const;
     int64_t nowUs() const;
@@ -137,9 +137,7 @@ private:
     BatchLaunchFn _launchFn;
     BatchPolicy   _policy;
 
-    std::vector<RouteQueue> _queues;    // one per route slot
-    std::mutex              _mu;
-    std::condition_variable _cv;        // woken when any queue has new work
+    std::vector<RouteQueue> _queues;    // one per route slot (lock-free)
     std::thread             _thread;
     std::atomic<bool>       _stop{false};
     std::atomic<bool>       _running{false};

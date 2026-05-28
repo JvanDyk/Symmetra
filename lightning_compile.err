@@ -1,0 +1,19 @@
+── compile log ──
+turing_lightning.ts(364): warning #222-D: floating-point operation result is out of range
+  __device__ float _symm_inf() { return 1e30f * 1e30f; }
+                                              ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+turing_lightning.ts(1634): warning #222-D: floating-point operation result is out of range
+      __device__ bool isFinite(float v) { float inf = 1e30f * 1e30f; return v != inf && v != -inf && v == v; }
+                                                            ^
+
+turing_lightning.ts(1762): warning #177-D: variable "group_start" was declared but never referenced
+                      const char* group_start = p;
+                                  ^
+
+turing_lightning.ts(1163): warning #20044-D: extern declaration of the entity Number::MAX_SAFE_INTEGER is treated as a static definition
+
+
+────

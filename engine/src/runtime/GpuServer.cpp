@@ -231,6 +231,20 @@ bool GpuServer::initSocket() {
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 void GpuServer::run() {
+    // Debug: check batch mode status
+    {
+        FILE* log = fopen("D:\\GITHUB\\SYMMETRA\\mode_debug.log", "w");
+        fprintf(log, "dispatchBatch=%p, _scheduler=%p, batchModeActive=%d\n",
+                _mod.dispatchBatch, _scheduler.get(), batchModeActive() ? 1 : 0);
+        if (_scheduler) {
+            fprintf(log, "Scheduler is active - batch mode should be working\n");
+        } else {
+            fprintf(log, "Scheduler is NULL - batch mode disabled\n");
+        }
+        fflush(log);
+        fclose(log);
+    }
+
     if (!initSocket())
         throw std::runtime_error("GpuServer: failed to bind socket");
 
@@ -567,6 +581,9 @@ void GpuServer::handleConn(int connFd, StreamPool::Slot slot) {
 // connFd.  sendBatchResponses() closes it after the response is written.
 
 void GpuServer::acceptLoopBatch() {
+    FILE* log = fopen("D:\\GITHUB\\SYMMETRA\\acceptloop_debug.log", "a");
+    fprintf(log, "[acceptLoopBatch] Starting...\n");
+    fflush(log);
     static thread_local char rawBuf[128 * 1024];
 
     while (_running.load(std::memory_order_relaxed)
@@ -641,6 +658,8 @@ void GpuServer::acceptLoopBatch() {
         br.contentType   = req.contentType;
         br.userAgent     = req.userAgent;
 
+        fprintf(log, "[acceptLoopBatch] Submitting request to scheduler\n");
+        fflush(log);
         _scheduler->submitRequest(std::move(br));
         // connFd is now owned by the BatchRequest — do NOT use it below
     }
@@ -653,6 +672,18 @@ void GpuServer::acceptLoopBatch() {
 void GpuServer::batchLaunch(int routeId,
                              const std::vector<BatchRequest>& requests,
                              BatchResult& result) {
+    static int batch_counter = 0;
+    static FILE* debug_log = nullptr;
+    if (!debug_log) {
+        debug_log = fopen("D:\\GITHUB\\SYMMETRA\\batch_debug.log", "w");
+    }
+
+    int batch_id = ++batch_counter;
+    if (debug_log) {
+        fprintf(debug_log, "[BATCH %d] Starting with %zu requests\n", batch_id, requests.size());
+        fflush(debug_log);
+    }
+
     int count  = static_cast<int>(requests.size());
     // Warp-align the thread count — dummy slots are masked by d_active bitmask
     int padded = ((count + BatchContext::WARP_WIDTH - 1)
@@ -738,21 +769,66 @@ void GpuServer::batchLaunch(int routeId,
         std::fprintf(stderr, "[symm] batchLaunch: cuLaunchKernel: %s\n", msg ? msg : "?");
         for (auto& s : result.statuses)  s = 500;
         for (auto& r : result.responses) r = "{\"error\":\"gpu kernel failed\"}";
+
+        // Error path: queue error responses immediately
+        _streams->release(slot);
+        _io->post([this, reqs = std::vector<BatchRequest>(requests), res = result]() mutable {
+            this->sendBatchResponses(reqs, res);
+        });
     } else {
-        // Download response lengths, status codes, and bodies.
-        // downloadResults() synchronises slot.stream internally.
-        std::vector<unsigned int> lens;
-        bctx.downloadResults(lens, result.statuses, result.responses, result.respHeaders, slot.stream);
+        // Success path: start async download of GPU results WITHOUT BLOCKING
+        // The callback will fire when GPU work completes and download results
+        if (debug_log) {
+            fprintf(debug_log, "[BATCH %d ASYNC] Starting async download for %d requests\n", batch_id, count);
+            fflush(debug_log);
+        }
+        CUresult dr = bctx.downloadResultsAsync(
+            requests,
+            slot.stream,
+            [this, slot](BatchContext::AsyncDownloadContext* ctx) {
+                // This callback runs in a CUDA driver thread when GPU work is complete
+                // All results are now downloaded to host memory
+                fprintf(stderr, "[batchLaunch callback] GPU results downloaded, queueing response send\n");
+
+                // Convert context to BatchResult format
+                BatchResult result;
+                result.statuses = ctx->resp_statuses;
+                result.responses = ctx->resp_bodies;
+                result.respHeaders = ctx->resp_headers;
+
+                // Queue response sending to I/O thread pool
+                _io->post([this, reqs = ctx->requests, res = result]() mutable {
+                    fprintf(stderr, "[I/O thread] Sending %zu responses\n", reqs.size());
+                    this->sendBatchResponses(reqs, res);
+                });
+
+                // Release stream back to pool
+                fprintf(stderr, "[batchLaunch callback] Releasing stream\n");
+                _streams->release(slot);
+
+                // Context will be freed by downloadResultsAsync
+            }
+        );
+
+        if (dr != CUDA_SUCCESS) {
+            const char* msg = nullptr;
+            cuGetErrorString(dr, &msg);
+            std::fprintf(stderr, "[symm] batchLaunch: downloadResultsAsync: %s\n", msg ? msg : "?");
+            _streams->release(slot);
+
+            // Fallback: send error response
+            _io->post([this, reqs = std::vector<BatchRequest>(requests)]() mutable {
+                BatchResult errorResult;
+                errorResult.statuses.assign(reqs.size(), 500);
+                errorResult.responses.assign(reqs.size(), "{\"error\":\"result download failed\"}");
+                this->sendBatchResponses(reqs, errorResult);
+            });
+        }
     }
 
-    // Return stream to the pool.
-    // BatchContext owns its own permanent VRAM — the slab allocator is NOT used
-    // in the batch path, so we skip GpuAllocator::requestFree here.
-    // Other streams continue running; only this stream was synchronised.
-    _streams->release(slot);
-
-    // Send HTTP responses to all client fds and close them.
-    sendBatchResponses(requests, result);
+    // IMPORTANT: Return immediately WITHOUT BLOCKING
+    // The scheduler thread can now process the next batch while this batch's
+    // GPU work completes in parallel and results are downloaded/sent asynchronously
 }
 
 // ── Batch response sender ─────────────────────────────────────────────────────

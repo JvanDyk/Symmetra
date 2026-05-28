@@ -281,6 +281,137 @@ struct BatchContext {
         return CUDA_SUCCESS;
     }
 
+    // ── Async result download with callback (non-blocking) ──────────────────────
+    // This structure holds persistent buffers for async GPU->CPU transfers.
+    // It's allocated on the heap and freed by the callback after processing.
+    struct AsyncDownloadContext {
+        // Persistent result buffers (allocated on heap)
+        std::vector<unsigned int> resp_lens;
+        std::vector<int> resp_statuses;
+        std::vector<std::string> resp_bodies;
+        std::vector<std::string> resp_headers;
+
+        // Requests that this batch is processing
+        std::vector<BatchRequest> requests;
+
+        // Callback to invoke when download completes
+        std::function<void(AsyncDownloadContext*)> onComplete;
+
+        // Reference to BatchContext for cleanup
+        BatchContext* bctx;
+        int count;
+    };
+
+    // Start async download of GPU results without blocking.
+    // onComplete will be called from a CUDA driver thread when downloads finish.
+    CUresult downloadResultsAsync(
+        const std::vector<BatchRequest>& requests,
+        CUstream stream,
+        std::function<void(AsyncDownloadContext*)> onComplete
+    ) {
+        // Allocate persistent context on heap (will be freed by callback)
+        auto* ctx = new AsyncDownloadContext();
+        ctx->resp_lens.resize(actualCount);
+        ctx->resp_statuses.resize(actualCount);
+        ctx->resp_bodies.resize(actualCount);
+        ctx->resp_headers.resize(actualCount);
+        ctx->requests = requests;
+        ctx->onComplete = onComplete;
+        ctx->bctx = this;
+        ctx->count = actualCount;
+
+        // Queue async memcopy of response lengths
+        CUresult r1 = cuMemcpyDtoHAsync(
+            ctx->resp_lens.data(),
+            (CUdeviceptr)d_resp_lens,
+            actualCount * sizeof(unsigned int),
+            stream
+        );
+
+        // Queue async memcopy of HTTP status codes
+        CUresult r2 = cuMemcpyDtoHAsync(
+            ctx->resp_statuses.data(),
+            (CUdeviceptr)d_statuses,
+            actualCount * sizeof(int),
+            stream
+        );
+
+        if (r1 != CUDA_SUCCESS || r2 != CUDA_SUCCESS) {
+            delete ctx;
+            return r1 != CUDA_SUCCESS ? r1 : r2;
+        }
+
+        // Register callback to fire when stream becomes idle
+        // The callback will download response bodies and invoke onComplete
+        CUresult r3 = cuStreamAddCallback(
+            stream,
+            [](CUstream stream, CUresult status, void* userData) {
+                auto* ctx = static_cast<AsyncDownloadContext*>(userData);
+                fprintf(stderr, "[AsyncCallback] GPU results ready, count=%d, status=%d\n", ctx->count, status);
+
+                if (status == CUDA_SUCCESS) {
+                    // GPU work succeeded - download response bodies
+                    // This happens in a CUDA driver thread, not the scheduler
+                    for (int i = 0; i < ctx->count; i++) {
+                        unsigned int bodyLen = ctx->resp_lens[i];
+                        bodyLen = std::min(bodyLen, (unsigned int)RESP_HDR_OFFSET);
+
+                        if (bodyLen > 0) {
+                            ctx->resp_bodies[i].resize(bodyLen);
+                            CUresult r = cuMemcpyDtoH(
+                                ctx->resp_bodies[i].data(),
+                                (CUdeviceptr)(ctx->bctx->d_respBuf +
+                                            (size_t)i * MAX_RESP_BYTES),
+                                bodyLen
+                            );
+                            if (r != CUDA_SUCCESS) {
+                                ctx->resp_bodies[i] = "{\"error\":\"download failed\"}";
+                                ctx->resp_statuses[i] = 500;
+                            }
+                        }
+
+                        // Download custom response headers (last 256 bytes of response buffer)
+                        char h_hdrs[256] = {};
+                        CUresult r = cuMemcpyDtoH(
+                            h_hdrs,
+                            (CUdeviceptr)(ctx->bctx->d_respBuf +
+                                        (size_t)i * MAX_RESP_BYTES + RESP_HDR_OFFSET),
+                            256
+                        );
+                        if (r == CUDA_SUCCESS && h_hdrs[0] != '\0') {
+                            ctx->resp_headers[i] = h_hdrs;
+                        }
+                    }
+                } else {
+                    // GPU error - fill with error responses
+                    for (int i = 0; i < ctx->count; i++) {
+                        ctx->resp_statuses[i] = 500;
+                        ctx->resp_bodies[i] = "{\"error\":\"GPU computation failed\"}";
+                    }
+                }
+
+                // Invoke completion callback
+                if (ctx->onComplete) {
+                    fprintf(stderr, "[AsyncCallback] Invoking onComplete callback\n");
+                    ctx->onComplete(ctx);
+                }
+
+                // Free context
+                fprintf(stderr, "[AsyncCallback] Callback complete, freeing context\n");
+                delete ctx;
+            },
+            ctx,
+            0
+        );
+
+        if (r3 != CUDA_SUCCESS) {
+            delete ctx;
+            return r3;
+        }
+
+        return CUDA_SUCCESS;
+    }
+
     void free() {
         if (d_base) { cuMemFree(d_base); d_base = 0; }
     }

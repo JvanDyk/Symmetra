@@ -319,6 +319,16 @@ if(SYMM_BUILD_TESTS)
     target_compile_definitions(turing_machine_benchmark PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
     add_test(NAME turing_machine_benchmark COMMAND turing_machine_benchmark)
     message(STATUS "Turing Machine benchmarks: ENABLED (run with ./Release/turing_machine_benchmark.exe)")
+
+    # ── GPU Batch Async Callback Test (CUDA callback performance) ────────────────────
+    add_executable(gpu_batch_async_test
+        src/runtime/test_gpu_batch_async.cpp
+    )
+    target_include_directories(gpu_batch_async_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(gpu_batch_async_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(gpu_batch_async_test PRIVATE CUDA::cuda_driver CUDA::cudart)
+    add_test(NAME gpu_batch_async_test COMMAND gpu_batch_async_test)
+    message(STATUS "GPU Batch Async tests: ENABLED (run with ./Release/gpu_batch_async_test.exe)")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()

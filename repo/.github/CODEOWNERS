@@ -1,0 +1,13 @@
+# CODEOWNERS
+# This file defines who should be notified for changes to certain parts of the repository
+
+* @JvanDyk
+
+# Documentation
+*.md @JvanDyk
+
+# Workflows
+.github/workflows/ @JvanDyk
+
+# Scripts
+scripts/ @JvanDyk
