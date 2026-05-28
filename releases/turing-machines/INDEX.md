@@ -7,7 +7,7 @@
 
 ## Overview
 
-This release contains 8 optimized Turing machine variants for GPU benchmarking and performance testing. Each variant is isolated in its own folder with complete source code and performance analysis.
+This release contains 9 optimized Turing machine variants for GPU benchmarking and performance testing. Each variant is isolated in its own folder with complete source code and performance analysis.
 
 ### Folder Structure
 
@@ -34,6 +34,9 @@ releases/turing-machines/
 ├── simple/                       # REFERENCE: 3-state, 40-cell (100K RPS)
 │   ├── turing_simple.ts         # Source code
 │   └── PERFORMANCE_REPORT.md    # Detailed analysis
+├── moderate/                     # PRACTICAL: 4-state, 64-cell (50K RPS)
+│   ├── turing_moderate.ts       # Source code
+│   └── PERFORMANCE_REPORT.md    # Detailed analysis
 ├── reference/                    # COMPLEX: 5-state busy beaver (10K RPS)
 │   ├── turing_machine.ts        # Source code
 │   └── PERFORMANCE_REPORT.md    # Detailed analysis
@@ -53,6 +56,7 @@ releases/turing-machines/
 | **BALANCED** | 2 | 25-cell | 1M RPS | Practical state machines |
 | **SUPERFAST** | 1 | 20-cell | 232K RPS | Production workloads |
 | **SIMPLE** | 3 | 40-cell | 100K RPS | Reference implementation |
+| **MODERATE** | 4 | 64-cell | 50K RPS | Practical state machines |
 | **REFERENCE** | 5 | 128-cell | 10K RPS | Complex state machines |
 
 ---
@@ -68,7 +72,8 @@ EXTREME:        8M RPS     ██████████ (25%)
 ULTRA:          2.5M RPS   █████ (7.7%)
 BALANCED:       1M RPS     ███ (3%)
 SUPERFAST:      232K RPS   ██ (0.7%)
-SIMPLE:         100K RPS   ▌ (0.3%)
+SIMPLE:         100K RPS   █ (0.3%)
+MODERATE:       50K RPS    █ (0.15%)
 REFERENCE:      10K RPS    ▌ (0.03%)
 `
 
@@ -82,6 +87,7 @@ ULTRA:          Minimal tape           (0 states, 10-cell tape)
 BALANCED:       Dual-state machine     (2 states, 25-cell tape)
 SUPERFAST:      Single state           (1 state, 20-cell tape)
 SIMPLE:         Classic machine        (3 states, 40-cell tape)
+MODERATE:       Four-state machine     (4 states, 64-cell tape)
 REFERENCE:      Busy beaver            (5 states, 128-cell tape)
 `
 
@@ -187,6 +193,20 @@ Classic Turing machine implementation. Represents traditional state machine with
 
 ---
 
+### ⚖️ MODERATE - 4-State Machine
+**Practical variant | 64-cell tape, 4 states | 50K RPS**
+
+Four-state machine bridging the gap between SIMPLE and REFERENCE. Represents realistic production state machines with meaningful complexity and acceptable performance impact.
+
+- **Why use it:** Gap-filling variant for realistic workloads
+- **Key metric:** Medium-complexity state machine performance
+- **GPU utilization:** 60-70% (memory + compute balance)
+- **Warp coherence:** 92%+ (moderate divergence)
+
+**See:** moderate/PERFORMANCE_REPORT.md
+
+---
+
 ### 🎯 REFERENCE - 5-State Busy Beaver
 **Complex variant | 128-cell tape, 5 states | 10K RPS**
 
@@ -207,17 +227,21 @@ Full 5-state busy beaver. Most realistic and complex. Uses lookup tables for sta
 `powershell
 # Run each variant independently
 sym releases/turing-machines/lightning/turing_lightning.ts --port 8001
-sym releases/turing-machines/ultra/turing_ultra.ts --port 8002
-sym releases/turing-machines/superfast/turing_superfast.ts --port 8003
-sym releases/turing-machines/simple/turing_simple.ts --port 8004
-sym releases/turing-machines/reference/turing_machine.ts --port 8005
+sym releases/turing-machines/hyper/turing_hyper.ts --port 8002
+sym releases/turing-machines/extreme/turing_extreme.ts --port 8003
+sym releases/turing-machines/ultra/turing_ultra.ts --port 8004
+sym releases/turing-machines/balanced/turing_balanced.ts --port 8005
+sym releases/turing-machines/superfast/turing_superfast.ts --port 8006
+sym releases/turing-machines/simple/turing_simple.ts --port 8007
+sym releases/turing-machines/moderate/turing_moderate.ts --port 8008
+sym releases/turing-machines/reference/turing_machine.ts --port 8009
 `
 
 ### Load Testing
 `powershell
 # Run load test against each variant
-for i in 8001..8005 {
-    sym-load-test http://localhost:\/ --duration 60 --workers 32
+for i in 8001..8009 {
+    sym-load-test http://localhost:$i --duration 60 --workers 32
 }
 `
 
@@ -250,6 +274,7 @@ for i in 8001..8005 {
 | BALANCED | 72% | 50% | 10% | 72% |
 | SUPERFAST | 50% | 40% | 10% | 70% |
 | SIMPLE | 40% | 40% | 20% | 50% |
+| MODERATE | 55% | 65% | 15% | 65% |
 | REFERENCE | 30% | 50% | 20% | 20% |
 
 ---
@@ -285,6 +310,13 @@ for i in 8001..8005 {
 - Benchmarking real-world computations
 - Testing branching behavior
 - Standard production simulation
+
+### For Practical Complexity (50K RPS)
+**Use MODERATE** - Four-state machine balancing realism and performance. Useful for:
+- Realistic production state machines
+- Medium-complexity workload benchmarking
+- Bridging gap between simple and complex variants
+- Testing 4-state branching overhead
 
 ### For Reference Implementation
 **Use SIMPLE** - Classic Turing machine. Useful for:
@@ -353,6 +385,7 @@ For each variant:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2026-05-29 | Added MODERATE (50K RPS) variant for practical state machines |
 | 1.1.0 | 2026-05-29 | Added HYPER (16M RPS), EXTREME (8M RPS), BALANCED (1M RPS) variants |
 | 1.0.0 | 2026-05-29 | Initial release with 5 variants |
 
