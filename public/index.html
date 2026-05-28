@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Symmetra compiles TypeScript to CUDA machine code. 3.24M HTTP RPS, 1.4µs P99, 193 GH/s Turing engines. Zero GC, zero VM, zero interpreter. Production-ready on NVIDIA GPUs.">
+<meta name="description" content="Symmetra compiles TypeScript to CUDA machine code. 711K sustained HTTP RPS, 1.4µs P99, 193 GH/s Turing engines. Zero GC, zero VM, zero interpreter. Production-ready on NVIDIA GPUs.">
 <meta property="og:title" content="Symmetra — TypeScript for the GPU">
-<meta property="og:description" content="TypeScript that compiles to CUDA machine code. 3.24M RPS · 1.4µs P99 · 193 GH/s · 275+ Turing engines · Production ready on NVIDIA GPUs.">
+<meta property="og:description" content="TypeScript that compiles to CUDA machine code. 711K RPS · 1.4µs P99 · 193 GH/s · Production ready on NVIDIA GPUs.">
 <meta property="og:image" content="assets/og-image.svg">
 <meta property="twitter:card" content="summary_large_image">
 <title>Symmetra - TypeScript for the GPU</title>
@@ -1913,13 +1913,13 @@ code {
       </h1>
 
       <p>
-        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Requests execute directly on GPU silicon at 3.24M RPS.
+        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Requests execute directly on GPU silicon at 711K sustained RPS.
       </p>
 
       <div class="hero-stats">
         <div class="stat-card">
-          <strong>3.24M</strong>
-          <span>HTTP req/s</span>
+          <strong>711K</strong>
+          <span>sustained RPS</span>
         </div>
         <div class="stat-card">
           <strong>1.4 µs</strong>
@@ -1998,7 +1998,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
   <div class="gpu-stat-strip">
     <div class="shell">
       <div class="gpu-stats-row">
-        <div class="gpu-stat"><span class="gpu-stat-val">3.24M</span><span class="gpu-stat-lbl">HTTP RPS · burst-256</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">711K</span><span class="gpu-stat-lbl">sustained RPS · realistic</span></div>
         <div class="gpu-stat-divider"></div>
         <div class="gpu-stat"><span class="gpu-stat-val">1.4 µs</span><span class="gpu-stat-lbl">P99 latency · RTX 5070</span></div>
         <div class="gpu-stat-divider"></div>
@@ -2201,7 +2201,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
       <div class="section-header reveal">
         <span class="eyebrow">Production ready</span>
         <h2>Benchmarks, security, and validation — all verified on NVIDIA GPU hardware.</h2>
-        <p class="section-lead">Symmetra is production-certified with 870+ test assertions, zero memory leaks, AES-256-GCM encryption, and throughput verified at 3.24M HTTP requests per second on RTX 5070 GPU hardware.</p>
+        <p class="section-lead">Symmetra is production-certified with 870+ test assertions, zero memory leaks, AES-256-GCM encryption, and sustained throughput verified at 711K HTTP requests per second on RTX 5070 GPU hardware.</p>
       </div>
 
       <div class="production-layout">
@@ -2221,13 +2221,6 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
             </thead>
             <tbody>
               <tr>
-                <td>Burst-256 peak</td>
-                <td class="win">3.24M RPS</td>
-                <td>320k</td>
-                <td>180k</td>
-                <td class="win">10.1× Bun</td>
-              </tr>
-              <tr>
                 <td>Sustained (batch-32)</td>
                 <td class="win">711K RPS</td>
                 <td>320k</td>
@@ -2235,11 +2228,18 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
                 <td class="win">2.2× Bun</td>
               </tr>
               <tr>
-                <td>Variable load</td>
+                <td>Variable load (warp-aware)</td>
                 <td class="win">668K RPS</td>
                 <td>320k</td>
                 <td>180k</td>
                 <td class="win">2.1× Bun</td>
+              </tr>
+              <tr>
+                <td>Max concurrency (32 warps)</td>
+                <td class="win">362K RPS</td>
+                <td>320k</td>
+                <td>180k</td>
+                <td class="win">1.1× Bun</td>
               </tr>
               <tr>
                 <td>Cold start</td>
@@ -2280,8 +2280,8 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
           <span class="eyebrow">Readiness</span>
           <h3 style="margin:0.9rem 0 0.8rem; font-size:1.4rem;">Verified performance figures</h3>
           <div class="grid-4">
-            <div class="feature-card"><div class="icon">3.24M</div><h3>Burst RPS</h3><p>Burst-256 mode, RTX 5070 (sm_90). Zero-copy kernel execution. P50: 0.30 µs.</p></div>
-            <div class="feature-card"><div class="icon">1.4 µs</div><h3>P99 latency</h3><p>Measured on RTX 5070. Sustained batch-32: 711K RPS at 1.4 µs P99. Zero jitter.</p></div>
+            <div class="feature-card"><div class="icon">711K</div><h3>Sustained RPS</h3><p>Real workloads with warp divergence. RTX 5070 batch-32 mode. Warp-aware scheduling.</p></div>
+            <div class="feature-card"><div class="icon">1.4 µs</div><h3>P99 latency</h3><p>Measured on RTX 5070. All warp threads execute in lock-step. Zero jitter.</p></div>
             <div class="feature-card"><div class="icon">870+</div><h3>Test assertions</h3><p>5 suites — codegen, runtime, scalability, robustness, and memory safety. Zero leaks.</p></div>
             <div class="feature-card"><div class="icon">0 GC</div><h3>Zero GC pauses</h3><p>Slab allocator resets in O(1). No heap, no GC, no 50 ms jitter spikes.</p></div>
           </div>
@@ -2435,7 +2435,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
   <div class="shell footer-grid">
     <div class="footer-copy">
       <strong>Symmetra — TypeScript for the GPU</strong>
-      <span>Compiles TypeScript to CUDA machine code. 3.24M HTTP RPS · 1.4 µs P99 · 193 GH/s Turing engines · RTX 5070 measured · Production ready v1.0.0.</span>
+      <span>Compiles TypeScript to CUDA machine code. 711K sustained RPS · 1.4 µs P99 · Warp-aligned execution · Production ready v1.0.0.</span>
     </div>
     <div class="footer-links">
       <a href="#architecture">Architecture</a>
