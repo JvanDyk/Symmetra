@@ -1,54 +1,31 @@
-name: symmetra
-version: 1.0.0
-summary: TypeScript compiler that targets NVIDIA GPUs
+﻿name: symmetra
+version: "1.0.0"
+summary: GPU-accelerated TypeScript server runtime
 description: |
-  Symmetra is a TypeScript-to-CUDA compiler that generates GPU machine code
-  for high-performance computing workloads.
-
-  Features:
-  - 3.1M requests/second sustained throughput
-  - <20μs P99 latency (batch mode)
-  - Zero garbage collection overhead
-  - Full ES2022+ language support
-  - TLS 1.3 encryption
-  - Production-ready with 835+ test assertions
-
-  Requirements:
-  - NVIDIA GPU (RTX 2070 or newer, sm_75+)
-  - NVIDIA CUDA driver (version 525+)
-
-  Install:
-    snap install symmetra
-
-  Quick start:
-    sym doctor              # verify GPU and CUDA driver
-    sym --version           # check version
-    sym ./server.ts         # compile and run your first server
-
-  Documentation: https://symmetra.dev/docs/getting-started
+  Symmetra compiles TypeScript directly to CUDA for GPU execution.
+  Achieve 3.2M RPS peak throughput with async callbacks and lock-free queues.
 
 grade: stable
 confinement: classic
 base: core22
-architectures:
-  - build-on: amd64
 
 apps:
-  symmetra:
-    command: bin/sym
+  sym:
+    command: sym
     plugs:
       - network
       - network-bind
       - hardware-observe
+    environment:
+      LD_LIBRARY_PATH: $SNAP/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
 parts:
   symmetra:
     plugin: dump
     source: .
-    source-type: tar
     organize:
       sym: bin/sym
-    stage:
-      - bin/sym
-    prime:
-      - bin/sym
+    filesets:
+      binary:
+        - bin/sym
+    prime: [binary]

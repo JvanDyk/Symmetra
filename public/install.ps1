@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Symmetra installer for Windows
-# Usage: iwr https://symmetra.dev/install.ps1 | iex
+# Usage: iwr https://symmetra.io/install.ps1 | iex
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $SYMMETRA_VERSION = "1.0.0"
 $GITHUB_REPO      = "JvanDyk/symmetra"
 $INSTALL_DIR      = "$env:USERPROFILE\.symmetra\bin"
-$BINARY_URL       = "https://github.com/$GITHUB_REPO/releases/download/v$SYMMETRA_VERSION/sym-windows-x64.exe"
+$ZIP_URL          = "https://github.com/$GITHUB_REPO/releases/download/v$SYMMETRA_VERSION/symmetra-v$SYMMETRA_VERSION-windows-x64.zip"
 
 function Write-Step { param([string]$m) Write-Host "  →  $m" -ForegroundColor Cyan }
 function Write-Ok   { param([string]$m) Write-Host "  ✓  $m" -ForegroundColor Green }
@@ -50,37 +50,44 @@ if ($nvSmi) {
 }
 
 # ── 4. Download ────────────────────────────────────────────────────────────────
-Write-Step "Downloading sym.exe..."
+Write-Step "Downloading Symmetra..."
 if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
 }
 
+$tempZip = Join-Path $env:TEMP "symmetra-$SYMMETRA_VERSION-windows-x64.zip"
 $dest = Join-Path $INSTALL_DIR "sym.exe"
 $downloaded = $false
 
 try {
     $wc = New-Object System.Net.WebClient
-    $wc.DownloadFile($BINARY_URL, $dest)
-    if ((Get-Item $dest -ErrorAction SilentlyContinue).Length -gt 0) {
+    $wc.DownloadFile($ZIP_URL, $tempZip)
+    Write-Ok "Downloaded ZIP"
+
+    # Extract sym.exe from ZIP
+    Expand-Archive -Path $tempZip -DestinationPath $INSTALL_DIR -Force
+
+    if ((Get-Item (Join-Path $INSTALL_DIR "sym.exe") -ErrorAction SilentlyContinue).Length -gt 0) {
         $downloaded = $true
-        Write-Ok "Downloaded to $dest"
+        Write-Ok "Extracted to $INSTALL_DIR"
     }
+
+    # Cleanup
+    Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
 } catch {
     # fall through to friendly error
 }
 
 if (-not $downloaded) {
-    if (Test-Path $dest) { Remove-Item $dest -Force }
     Write-Host ""
-    Write-Warn "Binary not yet available for automatic download."
-    Write-Warn "The v$SYMMETRA_VERSION release has not been published to GitHub yet."
+    Write-Warn "Download failed."
     Write-Host ""
     Write-Host "  Manual install:" -ForegroundColor White
-    Write-Host "    1. Download the binary from:"
+    Write-Host "    1. Download from:"
     Write-Host "       https://github.com/$GITHUB_REPO/releases"
-    Write-Host "    2. Place sym.exe in: $INSTALL_DIR"
+    Write-Host "    2. Extract sym.exe to: $INSTALL_DIR"
     Write-Host ""
-    Write-Host "  Docs: https://symmetra.dev/docs/getting-started"
+    Write-Host "  Docs: https://symmetra.io/docs/getting-started"
     Write-Host ""
     exit 1
 }
@@ -113,5 +120,5 @@ Write-Host "  sym doctor          # verify GPU + CUDA driver"
 Write-Host "  sym ./server.ts     # compile and launch"
 Write-Host "  sym check           # audit package.json compatibility"
 Write-Host ""
-Write-Host "  Docs: https://symmetra.dev/docs/getting-started"
+Write-Host "  Docs: https://symmetra.io/docs/getting-started"
 Write-Host ""

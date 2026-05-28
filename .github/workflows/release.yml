@@ -1,304 +1,165 @@
-name: Release
+﻿name: Release
 
 on:
   push:
     tags:
-      - 'v*'
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+      - "v*"
 
 jobs:
-  # Extract version from tag (v1.0.0 → 1.0.0)
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Extract version from tag
-        id: version
-        run: |
-          VERSION="${{ github.ref }}"
-          VERSION="${VERSION#refs/tags/v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-  # ── Windows build ────────────────────────────────────────────────────────────
   build-windows:
-    runs-on: windows-2022
+    name: Build Windows
+    runs-on: windows-latest
+    outputs:
+      exe-path: ${{ steps.build.outputs.exe-path }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install CUDA Toolkit 12.6
-        uses: Jimver/cuda-toolkit@v0.2.16
-        with:
-          cuda: '12.6.0'
-          method: 'network'
-          sub-packages: '["nvcc", "cudart", "nvrtc", "nvrtc_dev"]'
-
-      - name: Configure and build
-        working-directory: engine
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: microsoft/setup-cmake@v3
+      
+      - name: Configure
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
-
+          cd engine\build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+      
+      - name: Build
+        run: |
+          cd engine\build
+          cmake --build . --config Release --parallel 8
+      
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: sym-windows-x64
           path: engine\build\Release\sym.exe
           retention-days: 1
 
-  # ── Linux build ──────────────────────────────────────────────────────────────
   build-linux:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install CUDA Toolkit 12.6
-        uses: Jimver/cuda-toolkit@v0.2.16
-        with:
-          cuda: '12.6.0'
-          method: 'network'
-          sub-packages: '["nvcc", "cudart", "nvrtc", "nvrtc_dev"]'
-
-      - name: Configure and build
-        working-directory: engine
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sym-linux-x64
-          path: engine/build/sym
-          retention-days: 1
-
-  # ── Windows packaging (ZIP) ──────────────────────────────────────────────────
-  package-windows:
-    needs: [prepare, build-windows]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Windows executable
-        uses: actions/download-artifact@v4
-        with:
-          name: sym-windows-x64
-          path: .
-
-      - name: Verify download
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "sym.exe")) { throw "sym.exe not found after download" }
-          Write-Host "sym.exe size: $((Get-Item sym.exe).Length) bytes"
-
-      - name: Create distributions directory
-        shell: pwsh
-        run: New-Item -ItemType Directory -Path dist -Force | Out-Null
-
-      - name: Build ZIP package
-        shell: pwsh
-        run: |
-          $Version = "${{ needs.prepare.outputs.version }}"
-          & packaging\windows\create-zip.ps1 `
-            -SymExePath "sym.exe" `
-            -OutputDir "dist" `
-            -Version $Version
-
-      - name: Upload Windows packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-packages
-          path: dist/*
-          retention-days: 1
-
-  # ── Linux packaging (deb + rpm + snap) ──────────────────────────────────────
-  package-linux:
-    needs: [prepare, build-linux]
+    name: Build Linux
     runs-on: ubuntu-latest
+    outputs:
+      bin-path: ${{ steps.build.outputs.bin-path }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Linux executable
-        uses: actions/download-artifact@v4
+      - uses: microsoft/setup-cmake@v3
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cuda-toolkit-12-1
+      
+      - name: Configure
+        run: |
+          mkdir -p engine/build-linux
+          cd engine/build-linux
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+      
+      - name: Build
+        run: |
+          cd engine/build-linux
+          cmake --build . --config Release --parallel 8
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
           name: sym-linux-x64
-          path: .
+          path: engine/build-linux/sym
+          retention-days: 1
 
-      - name: Make binary executable
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: [build-linux]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v3
+        with:
+          name: sym-linux-x64
+      
+      - name: Run tests
         run: |
           chmod +x ./sym
-          ls -lah ./sym
+          cd engine/build-linux
+          ctest -C Release --output-on-failure -j8
 
-      - name: Install packaging tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            dpkg-dev \
-            rpm \
-            snapcraft
-
-      - name: Create distributions directory
-        run: mkdir -p dist
-
-      - name: Make scripts executable
-        run: chmod +x packaging/linux/create-*.sh
-
-      - name: Build .deb package
-        run: |
-          bash packaging/linux/create-deb.sh \
-            "./sym" \
-            "${{ needs.prepare.outputs.version }}" \
-            "x86_64" \
-            "dist"
-
-      - name: Build .rpm package
-        run: |
-          bash packaging/linux/create-rpm.sh \
-            "./sym" \
-            "${{ needs.prepare.outputs.version }}" \
-            "x86_64" \
-            "dist"
-
-      - name: Build .snap package
-        run: |
-          bash packaging/linux/create-snap.sh \
-            "./sym" \
-            "${{ needs.prepare.outputs.version }}" \
-            "dist"
-
-      - name: Copy raw binary to dist
-        run: |
-          cp ./sym "dist/sym-linux-x64"
-          sha256sum "dist/sym-linux-x64" | awk '{print $1 "  sym-linux-x64"}' \
-            > "dist/sym-linux-x64.sha256"
-
-      - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-packages
-          path: dist/*
-          retention-days: 1
-
-  # ── Create GitHub Release on public repo ─────────────────────────────────────
-  publish:
-    needs: [prepare, package-windows, package-linux]
+  package:
+    name: Package
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
+    needs: [build-windows, build-linux, test]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download all packages
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
         with:
-          path: release-artifacts
-
-      - name: Collect release files
+          name: sym-windows-x64
+          path: windows-build
+      - uses: actions/download-artifact@v3
+        with:
+          name: sym-linux-x64
+          path: linux-build
+      
+      - name: Create ZIP package
         run: |
-          mkdir -p release-files
-          # Flatten all package artifacts into one directory
-          find release-artifacts/windows-packages -type f -exec cp {} release-files/ \;
-          find release-artifacts/linux-packages   -type f -exec cp {} release-files/ \;
-          echo "── Release files ──"
-          ls -lah release-files/
-
-      - name: Generate combined SHA256SUMS
+          mkdir -p windows
+          cp windows-build/sym.exe windows/
+          cp public/install.ps1 windows/
+          cd windows && zip -r ../symmetra-${{ github.ref_name }}-windows-x64.zip . && cd ..
+      
+      - name: Create DEB package
         run: |
-          cd release-files
-          sha256sum $(ls | grep -v SHA256SUMS) > SHA256SUMS.txt
-          echo "── SHA256SUMS.txt ──"
-          cat SHA256SUMS.txt
-
-      - name: Update public/version.json
-        run: |
-          WIN_SHA=$(grep "windows-x64.zip" release-files/SHA256SUMS.txt | awk '{print $1}' || echo "")
-          LIN_SHA=$(grep "sym-linux-x64 "  release-files/SHA256SUMS.txt | awk '{print $1}' || echo "")
-          BASE="https://github.com/JvanDyk/symmetra/releases/download/v${VERSION}"
-          cat > public/version.json << EOF
-          {
-            "version": "${VERSION}",
-            "released": "$(date -u +%Y-%m-%d)",
-            "windows_sha256": "${WIN_SHA}",
-            "linux_sha256": "${LIN_SHA}",
-            "downloads": {
-              "windows_zip": "${BASE}/symmetra-${VERSION}-windows-x64.zip",
-              "linux_deb":   "${BASE}/symmetra-${VERSION}-linux-x64.deb",
-              "linux_rpm":   "${BASE}/symmetra-${VERSION}-linux-x64.rpm",
-              "linux_snap":  "${BASE}/symmetra-${VERSION}-linux-x64.snap",
-              "linux_binary":"${BASE}/sym-linux-x64"
-            }
-          }
+          mkdir -p deb/DEBIAN deb/usr/local/bin
+          cp linux-build/sym deb/usr/local/bin/
+          chmod +x deb/usr/local/bin/sym
+          cat > deb/DEBIAN/control << EOF
+          Package: symmetra
+          Version: ${{ github.ref_name }}
+          Architecture: amd64
+          Maintainer: Symmetra <info@symmetra.io>
+          Depends: libc6 (>= 2.31)
+          Description: GPU-accelerated TypeScript server runtime
           EOF
-          cat public/version.json
-
-      - name: Commit version.json back to repo
+          dpkg-deb --build deb symmetra-${{ github.ref_name }}-linux-x64.deb
+      
+      - name: Create RPM package
         run: |
-          git config user.name  "Symmetra Release"
-          git config user.email "info@symmetra.dev"
-          git add public/version.json
-          if git diff --cached --quiet; then
-            echo "No version.json changes to commit"
-          else
-            git commit -m "chore: bump version.json to $VERSION [skip ci]"
-            git push origin HEAD:master
-          fi
-
-      - name: Build release notes
-        id: notes
+          mkdir -p rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
+          cat > rpmbuild/SPECS/symmetra.spec << 'EOF'
+          Name: symmetra
+          Version: ${{ github.ref_name }}
+          Release: 1
+          Summary: GPU-accelerated TypeScript server runtime
+          License: MIT
+          
+          %description
+          GPU-accelerated TypeScript server runtime
+          
+          %prep
+          %build
+          %install
+          mkdir -p %{buildroot}/usr/local/bin
+          cp ${{ github.workspace }}/linux-build/sym %{buildroot}/usr/local/bin/
+          chmod +x %{buildroot}/usr/local/bin/sym
+          
+          %files
+          /usr/local/bin/sym
+          
+          %changelog
+          EOF
+          rpmbuild -bb rpmbuild/SPECS/symmetra.spec --define "_topdir $(pwd)/rpmbuild"
+          mv rpmbuild/RPMS/x86_64/*.rpm symmetra-${{ github.ref_name }}-linux-x64.rpm
+      
+      - name: Calculate checksums
         run: |
-          cat > /tmp/release-notes.md << 'NOTES'
-          ## Quick Install
-
-          **Windows (PowerShell):**
-          ```powershell
-          iwr https://symmetra.dev/install.ps1 | iex
-          ```
-
-          **Linux (bash):**
-          ```bash
-          curl -fsSL https://symmetra.dev/install.sh | bash
-          ```
-
-          ## Downloads
-
-          | Platform | Format | Notes |
-          |----------|--------|-------|
-          | Windows  | ZIP (portable) | Extract and run install.ps1 |
-          | Linux    | .deb | Debian/Ubuntu 20.04+ |
-          | Linux    | .rpm | Fedora/RHEL 8+ |
-          | Linux    | .snap | Universal (classic confinement) |
-          | Linux    | Binary | Raw executable |
-
-          All files include a matching `.sha256` checksum. Download `SHA256SUMS.txt` to verify all at once:
-
-          ```bash
-          sha256sum -c SHA256SUMS.txt
-          ```
-
-          ## Requirements
-
-          - **NVIDIA GPU:** RTX 2070 or newer (sm_75+)
-          - **CUDA Driver:** Version 525 or later
-          - **OS:** Windows 10 build 19041+ or Ubuntu 20.04+ / Fedora 38+
-
-          ## Learn More
-
-          - [Getting Started](https://symmetra.dev/docs/getting-started)
-          - [API Reference](https://symmetra.dev/docs/api)
-          - [GitHub](https://github.com/JvanDyk/symmetra)
-          NOTES
-          echo "notes_file=/tmp/release-notes.md" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release on public repo
+          sha256sum symmetra-*.* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            symmetra-${{ github.ref_name }}-windows-x64.zip
+            symmetra-${{ github.ref_name }}-linux-x64.deb
+            symmetra-${{ github.ref_name }}-linux-x64.rpm
+            SHA256SUMS.txt
+          draft: false
+          prerelease: false
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          # Create or overwrite the release on the public repo
-          gh release create "v${VERSION}" \
-            --repo "JvanDyk/symmetra" \
-            --title "Symmetra ${VERSION}" \
-            --notes-file "${{ steps.notes.outputs.notes_file }}" \
-            release-files/*
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

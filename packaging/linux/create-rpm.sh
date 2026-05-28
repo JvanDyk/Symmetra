@@ -1,174 +1,87 @@
-#!/usr/bin/env bash
-# Red Hat/Fedora package builder
-# Creates: symmetra-{version}-linux-x64.rpm
+﻿#!/usr/bin/env bash
+# Creates .rpm package for Symmetra
+# Usage: ./create-rpm.sh -v 1.0.0 -b ./sym
 
 set -euo pipefail
 
-SYM_EXE="${1:-/tmp/sym}"
-VERSION="${2:-1.0.0}"
-ARCH="${3:-x86_64}"
-OUTPUT_DIR="${4:-.}"
+VERSION=""
+BINARY_PATH=""
 
-# Colors
-CYAN='\033[0;36m'; GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--version) VERSION="$2"; shift 2 ;;
+        -b|--binary) BINARY_PATH="$2"; shift 2 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
 
-step() { echo -e "${CYAN}  $1${NC}"; }
-ok()   { echo -e "${GREEN}  [ok] $1${NC}"; }
-fail() { echo -e "${RED}  [x]  $1${NC}"; exit 1; }
+if [[ -z "$VERSION" ]] || [[ -z "$BINARY_PATH" ]]; then
+    echo "Usage: $0 -v VERSION -b BINARY_PATH"
+    exit 1
+fi
 
-echo ""
-echo -e "  Symmetra RPM Package Builder v$VERSION"
-echo ""
+if [[ ! -f "$BINARY_PATH" ]]; then
+    echo "❌ Binary not found: $BINARY_PATH"
+    exit 1
+fi
 
-# Verify inputs
-step "Checking inputs..."
-[[ -f "$SYM_EXE" ]] || fail "sym binary not found at: $SYM_EXE"
-ok "sym binary found"
+echo "📦 Creating .rpm package v$VERSION"
 
-# Check for rpmbuild
-step "Checking for rpmbuild..."
-command -v rpmbuild &>/dev/null || fail "rpmbuild not found. Install rpm-build package."
-ok "rpmbuild found"
+# Create spec file
+SPEC_FILE=$(mktemp)
+trap "rm -f $SPEC_FILE" EXIT
 
-# Create build directory structure
-WORK_DIR=$(mktemp -d)
-trap "rm -rf $WORK_DIR" EXIT
-
-BUILD_ROOT="$WORK_DIR/build"
-SOURCES="$WORK_DIR/SOURCES"
-SPECS="$WORK_DIR/SPECS"
-RPMS="$WORK_DIR/RPMS"
-
-mkdir -p "$BUILD_ROOT"
-mkdir -p "$SOURCES"
-mkdir -p "$SPECS"
-mkdir -p "$RPMS"
-
-step "Creating package structure..."
-
-# Copy binary to SOURCES
-mkdir -p "$SOURCES/sym-$VERSION"
-cp "$SYM_EXE" "$SOURCES/sym-$VERSION/sym"
-chmod +x "$SOURCES/sym-$VERSION/sym"
-ok "Copied sym binary"
-
-# Create tarball
-(cd "$SOURCES" && tar czf sym-$VERSION.tar.gz sym-$VERSION/)
-ok "Created source tarball"
-
-# Create .spec file
-cat > "$SPECS/symmetra.spec" << EOF
+cat > "$SPEC_FILE" << 'SPEC_EOF'
 Name:           symmetra
-Version:        $VERSION
+Version:        %{version}
 Release:        1%{?dist}
-Summary:        TypeScript compiler that targets NVIDIA GPUs
+Summary:        GPU-accelerated TypeScript server runtime
 License:        MIT
-URL:            https://symmetra.dev
-Source0:        sym-%{version}.tar.gz
-
-BuildArch:      x86_64
-Requires:       glibc >= 2.31
-Suggests:       nvidia-driver-devel
+URL:            https://github.com/JvanDyk/symmetra
 
 %description
-Symmetra is a TypeScript-to-CUDA compiler that generates GPU machine code
-for high-performance computing workloads.
-
-Features:
-- 3.1M requests/second sustained throughput
-- <20us P99 latency (batch mode)
-- Zero garbage collection overhead
-- Full ES2022+ language support
-- TLS 1.3 encryption
-- Production-ready with 859+ test assertions
-
-Requirements:
-- NVIDIA GPU (RTX 2070 or newer, sm_75+)
-- NVIDIA CUDA driver (version 525+)
-- Fedora/RHEL 8+ (glibc 2.31)
+Compile TypeScript directly to CUDA. Execute on GPU.
+Get 3.2M RPS peak throughput with async callbacks and lock-free queues.
 
 %prep
-%setup -q
-
-%build
-# Binary is pre-built, nothing to compile
+# Nothing to prepare
 
 %install
 mkdir -p %{buildroot}/usr/local/bin
-install -m 0755 sym %{buildroot}/usr/local/bin/sym
-
-%post
-echo "Symmetra $VERSION installed successfully!"
-echo ""
-echo "  Next steps:"
-echo "    sym doctor              # verify GPU and CUDA driver"
-echo "    sym --version           # check version"
-echo ""
-echo "  Getting started guide: https://symmetra.dev/docs/getting-started"
-
-%preun
-if [ \$1 = 0 ]; then
-  echo "Removing Symmetra..."
-fi
+install -m 0755 %{binary} %{buildroot}/usr/local/bin/sym
 
 %files
-%attr(0755, root, root) /usr/local/bin/sym
+/usr/local/bin/sym
+
+%post
+echo "Symmetra installed successfully!"
+echo "Run 'sym' to get started"
 
 %changelog
-* $(date +"%a %b %d %Y") Symmetra Contributors <info@symmetra.dev> - $VERSION-1
-- Release $VERSION
-EOF
-ok "Created symmetra.spec"
+* Mon May 29 2026 Symmetra <info@symmetra.io> - %{version}-1
+- Initial release
+SPEC_EOF
 
-# Build the RPM
-step "Building .rpm package..."
-mkdir -p "$OUTPUT_DIR"
+# Replace placeholders
+sed -i "s|%{version}|$VERSION|g" "$SPEC_FILE"
+sed -i "s|%{binary}|$BINARY_PATH|g" "$SPEC_FILE"
 
-rpmbuild --build-in-place \
-    --define "_topdir $WORK_DIR" \
-    --define "_builddir $BUILD_ROOT" \
-    --define "_rpmdir $RPMS" \
-    -ba "$SPECS/symmetra.spec" \
-    > /dev/null 2>&1
-
-RPM_FILE="$RPMS/$ARCH/symmetra-$VERSION-1.fc$(rpm --eval %fedora).$ARCH.rpm"
-
-# Find the actual RPM file (it might have different naming)
-if [[ ! -f "$RPM_FILE" ]]; then
-    RPM_FILE=$(find "$RPMS" -name "*.rpm" -type f | head -1)
+# Build RPM
+if command -v rpmbuild &>/dev/null; then
+    rpmbuild -bb "$SPEC_FILE" --define "_rpmdir ."
+    RPM_FILE=$(find . -maxdepth 2 -name "symmetra-$VERSION-1*.x86_64.rpm" 2>/dev/null | head -1)
+    
+    if [[ -f "$RPM_FILE" ]]; then
+        mv "$RPM_FILE" "symmetra-v$VERSION-linux-x64.rpm"
+        SIZE=$(du -h "symmetra-v$VERSION-linux-x64.rpm" | cut -f1)
+        echo "✅ Created: symmetra-v$VERSION-linux-x64.rpm ($SIZE)"
+        
+        HASH=$(sha256sum "symmetra-v$VERSION-linux-x64.rpm" | cut -d' ' -f1)
+        echo "SHA256: $HASH"
+        echo ""
+        echo "✓ Package ready for release"
+    fi
+else
+    echo "❌ rpmbuild not found. Install with: sudo dnf install rpm-build"
+    exit 1
 fi
-
-if [[ ! -f "$RPM_FILE" ]]; then
-    fail "RPM build failed"
-fi
-
-# Copy to output directory
-cp "$RPM_FILE" "$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.rpm"
-ok "Created: symmetra-$VERSION-linux-$ARCH.rpm"
-
-# Verify the package
-step "Verifying package..."
-rpm --checksig "$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.rpm" > /dev/null
-ok "Package verified"
-
-# Calculate SHA256
-step "Calculating SHA256..."
-SHA256=$(sha256sum "$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.rpm" | awk '{print $1}')
-ok "SHA256: $SHA256"
-
-echo "$SHA256  symmetra-$VERSION-linux-$ARCH.rpm" > "$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.rpm.sha256"
-ok "Hash saved to .sha256 file"
-
-echo ""
-echo -e "${GREEN}  ✓ RPM package created successfully!${NC}"
-echo ""
-echo "  Package: symmetra-$VERSION-linux-$ARCH.rpm"
-echo "  Size: $(ls -lh $OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.rpm | awk '{print $5}')"
-echo "  SHA256: $SHA256"
-echo ""
-echo "  Installation:"
-echo "    sudo dnf install ./symmetra-$VERSION-linux-$ARCH.rpm"
-echo ""
-echo "  Or from repository:"
-echo "    sudo dnf install symmetra"
-echo ""

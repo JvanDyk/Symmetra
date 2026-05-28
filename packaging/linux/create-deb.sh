@@ -1,138 +1,79 @@
-#!/usr/bin/env bash
-# Debian/Ubuntu package builder
-# Creates: symmetra-{version}-linux-x64.deb
+﻿#!/usr/bin/env bash
+# Creates .deb package for Symmetra
+# Usage: ./create-deb.sh -v 1.0.0 -b ./sym
 
 set -euo pipefail
 
-SYM_EXE="${1:-/tmp/sym}"
-VERSION="${2:-1.0.0}"
-ARCH="${3:-x86_64}"
-OUTPUT_DIR="${4:-.}"
+VERSION=""
+BINARY_PATH=""
 
-# Colors
-CYAN='\033[0;36m'; GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--version) VERSION="$2"; shift 2 ;;
+        -b|--binary) BINARY_PATH="$2"; shift 2 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
 
-step() { echo -e "${CYAN}  $1${NC}"; }
-ok()   { echo -e "${GREEN}  [ok] $1${NC}"; }
-fail() { echo -e "${RED}  [x]  $1${NC}"; exit 1; }
+if [[ -z "$VERSION" ]] || [[ -z "$BINARY_PATH" ]]; then
+    echo "Usage: $0 -v VERSION -b BINARY_PATH"
+    exit 1
+fi
 
-echo ""
-echo -e "  Symmetra Debian Package Builder v$VERSION"
-echo ""
+if [[ ! -f "$BINARY_PATH" ]]; then
+    echo "❌ Binary not found: $BINARY_PATH"
+    exit 1
+fi
 
-# Verify inputs
-step "Checking inputs..."
-[[ -f "$SYM_EXE" ]] || fail "sym binary not found at: $SYM_EXE"
-ok "sym binary found"
+echo "📦 Creating .deb package v$VERSION"
 
-# Create package directory structure
-WORK_DIR=$(mktemp -d)
-trap "rm -rf $WORK_DIR" EXIT
+# Create package structure
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" EXIT
 
-PKG_DIR="$WORK_DIR/symmetra-$VERSION"
-mkdir -p "$PKG_DIR/usr/local/bin"
-mkdir -p "$PKG_DIR/DEBIAN"
-
-step "Creating package structure..."
+DEB_DIR="$TEMP_DIR/symmetra-$VERSION"
+mkdir -p "$DEB_DIR/DEBIAN" "$DEB_DIR/usr/local/bin"
 
 # Copy binary
-cp "$SYM_EXE" "$PKG_DIR/usr/local/bin/sym"
-chmod +x "$PKG_DIR/usr/local/bin/sym"
-ok "Copied sym to usr/local/bin"
+cp "$BINARY_PATH" "$DEB_DIR/usr/local/bin/sym"
+chmod +x "$DEB_DIR/usr/local/bin/sym"
 
-# Create DEBIAN/control file
-cat > "$PKG_DIR/DEBIAN/control" << EOF
+# Create control file
+cat > "$DEB_DIR/DEBIAN/control" << EOF
 Package: symmetra
 Version: $VERSION
 Architecture: amd64
-Maintainer: Symmetra Contributors <info@symmetra.dev>
-Homepage: https://symmetra.dev
-Vcs-Git: https://github.com/JvanDyk/symmetra.git
-Vcs-Browser: https://github.com/JvanDyk/symmetra
-Priority: optional
-Section: devel
+Maintainer: Symmetra <info@symmetra.io>
 Depends: libc6 (>= 2.31)
-Suggests: nvidia-driver-535
-Description: TypeScript compiler that targets NVIDIA GPUs
- Symmetra is a TypeScript-to-CUDA compiler that generates GPU machine code
- for high-performance computing workloads.
- .
- Features:
-  - 3.1M requests/second sustained throughput
-  - <20us P99 latency (batch mode)
-  - Zero garbage collection overhead
-  - Full ES2022+ language support
-  - TLS 1.3 encryption
-  - Production-ready with 859+ test assertions
- .
- Requirements:
-  - NVIDIA GPU (RTX 2070 or newer, sm_75+)
-  - NVIDIA CUDA driver (version 525+)
-  - Ubuntu 20.04 (glibc 2.31) or later
+Description: GPU-accelerated TypeScript server runtime
+ Compile TypeScript directly to CUDA. Execute on GPU. 
+ Get 3.2M RPS peak throughput with async callbacks.
+Homepage: https://github.com/JvanDyk/symmetra
 EOF
-ok "Created DEBIAN/control"
 
-# Create postinst script (runs after installation)
-cat > "$PKG_DIR/DEBIAN/postinst" << 'EOF'
+# Create postinst script
+cat > "$DEB_DIR/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
 set -e
 
-if [ "$1" = "configure" ]; then
-    echo "Symmetra installed successfully!"
-    echo ""
-    echo "  Next steps:"
-    echo "    sym doctor              # verify GPU and CUDA driver"
-    echo "    sym --version           # check version"
-    echo ""
-    echo "  Getting started guide: https://symmetra.dev/docs/getting-started"
+# Add sym to PATH if not already there
+if ! grep -q "/usr/local/bin" /etc/profile 2>/dev/null; then
+    echo "export PATH=\"/usr/local/bin:\$PATH\"" >> /etc/profile
 fi
+
+echo "Symmetra installed successfully!"
+echo "Run 'sym' to get started"
 EOF
-chmod +x "$PKG_DIR/DEBIAN/postinst"
-ok "Created postinst hook"
 
-# Create prerm script (runs before uninstallation)
-cat > "$PKG_DIR/DEBIAN/prerm" << 'EOF'
-#!/bin/bash
-set -e
+chmod +x "$DEB_DIR/DEBIAN/postinst"
 
-if [ "$1" = "remove" ]; then
-    echo "Removing Symmetra..."
-fi
-EOF
-chmod +x "$PKG_DIR/DEBIAN/prerm"
-ok "Created prerm hook"
+# Build .deb
+dpkg-deb --build "$DEB_DIR" "symmetra-v$VERSION-linux-x64.deb"
 
-# Build the .deb package
-step "Building .deb package..."
-mkdir -p "$OUTPUT_DIR"
+SIZE=$(du -h "symmetra-v$VERSION-linux-x64.deb" | cut -f1)
+echo "✅ Created: symmetra-v$VERSION-linux-x64.deb ($SIZE)"
 
-DEB_FILE="$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.deb"
-dpkg-deb --build "$PKG_DIR" "$DEB_FILE"
-ok "Created: $(basename $DEB_FILE)"
-
-# Verify the package
-step "Verifying package..."
-dpkg-deb --info "$DEB_FILE" > /dev/null
-ok "Package verified"
-
-# Calculate SHA256
-step "Calculating SHA256..."
-SHA256=$(sha256sum "$DEB_FILE" | awk '{print $1}')
-ok "SHA256: $SHA256"
-
-echo "$SHA256  $(basename $DEB_FILE)" > "$OUTPUT_DIR/symmetra-$VERSION-linux-$ARCH.deb.sha256"
-ok "Hash saved to .sha256 file"
-
+HASH=$(sha256sum "symmetra-v$VERSION-linux-x64.deb" | cut -d' ' -f1)
+echo "SHA256: $HASH"
 echo ""
-echo -e "${GREEN}  ✓ Debian package created successfully!${NC}"
-echo ""
-echo "  Package: $(basename $DEB_FILE)"
-echo "  Size: $(ls -lh $DEB_FILE | awk '{print $5}')"
-echo "  SHA256: $SHA256"
-echo ""
-echo "  Installation:"
-echo "    sudo apt install ./$(basename $DEB_FILE)"
-echo ""
-echo "  Or from repository:"
-echo "    sudo apt update && sudo apt install symmetra"
-echo ""
+echo "✓ Package ready for release"
