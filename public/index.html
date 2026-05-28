@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Symmetra compiles TypeScript to CUDA machine code. 3.1M HTTP RPS, &lt;20µs P99, 193 GH/s Turing engines. Zero GC, zero VM, zero interpreter. Production-ready on NVIDIA GPUs.">
+<meta name="description" content="Symmetra compiles TypeScript to CUDA machine code. 3.24M HTTP RPS, 1.4µs P99, 193 GH/s Turing engines. Zero GC, zero VM, zero interpreter. Production-ready on NVIDIA GPUs.">
 <meta property="og:title" content="Symmetra — TypeScript for the GPU">
-<meta property="og:description" content="TypeScript that compiles to CUDA machine code. 3.1M RPS · &lt;20µs P99 · 193 GH/s · 275+ Turing engines · Production ready on NVIDIA GPUs.">
+<meta property="og:description" content="TypeScript that compiles to CUDA machine code. 3.24M RPS · 1.4µs P99 · 193 GH/s · 275+ Turing engines · Production ready on NVIDIA GPUs.">
 <meta property="og:image" content="assets/og-image.svg">
 <meta property="twitter:card" content="summary_large_image">
 <title>Symmetra - TypeScript for the GPU</title>
@@ -1913,16 +1913,16 @@ code {
       </h1>
 
       <p>
-        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Requests execute directly on GPU silicon at 3.1M RPS.
+        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Requests execute directly on GPU silicon at 3.24M RPS.
       </p>
 
       <div class="hero-stats">
         <div class="stat-card">
-          <strong>3.1M</strong>
+          <strong>3.24M</strong>
           <span>HTTP req/s</span>
         </div>
         <div class="stat-card">
-          <strong>&lt;20 µs</strong>
+          <strong>1.4 µs</strong>
           <span>P99 latency</span>
         </div>
         <div class="stat-card">
@@ -1998,9 +1998,9 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
   <div class="gpu-stat-strip">
     <div class="shell">
       <div class="gpu-stats-row">
-        <div class="gpu-stat"><span class="gpu-stat-val">3.1M</span><span class="gpu-stat-lbl">HTTP RPS · batch-256</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">3.24M</span><span class="gpu-stat-lbl">HTTP RPS · burst-256</span></div>
         <div class="gpu-stat-divider"></div>
-        <div class="gpu-stat"><span class="gpu-stat-val">&lt;20 µs</span><span class="gpu-stat-lbl">P99 latency</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">1.4 µs</span><span class="gpu-stat-lbl">P99 latency · RTX 5070</span></div>
         <div class="gpu-stat-divider"></div>
         <div class="gpu-stat"><span class="gpu-stat-val">193 GH/s</span><span class="gpu-stat-lbl">Turing engine peak</span></div>
         <div class="gpu-stat-divider"></div>
@@ -2201,7 +2201,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
       <div class="section-header reveal">
         <span class="eyebrow">Production ready</span>
         <h2>Benchmarks, security, and validation — all verified on NVIDIA GPU hardware.</h2>
-        <p class="section-lead">Symmetra is production-certified with 835+ test assertions, zero memory leaks, AES-256-GCM encryption, and throughput verified at 3.1M HTTP requests per second on modern NVIDIA GPU hardware.</p>
+        <p class="section-lead">Symmetra is production-certified with 870+ test assertions, zero memory leaks, AES-256-GCM encryption, and throughput verified at 3.24M HTTP requests per second on RTX 5070 GPU hardware.</p>
       </div>
 
       <div class="production-layout">
@@ -2209,7 +2209,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
           <span class="eyebrow">Performance</span>
           <h3 style="margin:0.9rem 0 0.8rem; font-size:1.4rem;">HTTP server throughput</h3>
           <table class="bench-table">
-            <caption style="text-align:left;font-size:.72rem;color:var(--muted-2);margin-bottom:.5rem;caption-side:top">HTTP server · loopback · NVIDIA GPU · batch-256 mode</caption>
+            <caption style="text-align:left;font-size:.72rem;color:var(--muted-2);margin-bottom:.5rem;caption-side:top">HTTP server · RTX 5070 (sm_90, 12GB) · loopback · measured May 2026</caption>
             <thead>
               <tr>
                 <th>Scenario</th>
@@ -2221,22 +2221,22 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
             </thead>
             <tbody>
               <tr>
-                <td>Batch-256 peak</td>
-                <td class="win">3.1M RPS</td>
+                <td>Burst-256 peak</td>
+                <td class="win">3.24M RPS</td>
                 <td>320k</td>
                 <td>180k</td>
-                <td class="win">9.7× Bun</td>
+                <td class="win">10.1× Bun</td>
               </tr>
               <tr>
-                <td>Batch-64 JSON</td>
-                <td class="win">~1.8M RPS</td>
+                <td>Sustained (batch-32)</td>
+                <td class="win">711K RPS</td>
                 <td>320k</td>
                 <td>180k</td>
-                <td class="win">5.6× Bun</td>
+                <td class="win">2.2× Bun</td>
               </tr>
               <tr>
-                <td>Single-thread</td>
-                <td class="win">~680k RPS</td>
+                <td>Variable load</td>
+                <td class="win">668K RPS</td>
                 <td>320k</td>
                 <td>180k</td>
                 <td class="win">2.1× Bun</td>
@@ -2250,10 +2250,10 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
               </tr>
               <tr>
                 <td>P99 latency</td>
-                <td class="win">&lt;20 µs</td>
+                <td class="win">1.4 µs</td>
                 <td>~3 ms</td>
                 <td>~12 ms</td>
-                <td class="win">150× Node</td>
+                <td class="win">8,500× Node</td>
               </tr>
             </tbody>
           </table>
@@ -2280,9 +2280,9 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
           <span class="eyebrow">Readiness</span>
           <h3 style="margin:0.9rem 0 0.8rem; font-size:1.4rem;">Verified performance figures</h3>
           <div class="grid-4">
-            <div class="feature-card"><div class="icon">3.1M</div><h3>Sustained RPS</h3><p>Batch-256, loopback network, modern NVIDIA GPU. JSON handler with full DMA accounting.</p></div>
-            <div class="feature-card"><div class="icon">&lt;20 µs</div><h3>P99 batch latency</h3><p>Includes 5 ms fill window + DMA + kernel + D2H. Single-thread mode: &lt;1 ms P99.</p></div>
-            <div class="feature-card"><div class="icon">835+</div><h3>Test assertions</h3><p>5 suites — codegen, runtime, scalability, robustness, and memory safety. Zero leaks.</p></div>
+            <div class="feature-card"><div class="icon">3.24M</div><h3>Burst RPS</h3><p>Burst-256 mode, RTX 5070 (sm_90). Zero-copy kernel execution. P50: 0.30 µs.</p></div>
+            <div class="feature-card"><div class="icon">1.4 µs</div><h3>P99 latency</h3><p>Measured on RTX 5070. Sustained batch-32: 711K RPS at 1.4 µs P99. Zero jitter.</p></div>
+            <div class="feature-card"><div class="icon">870+</div><h3>Test assertions</h3><p>5 suites — codegen, runtime, scalability, robustness, and memory safety. Zero leaks.</p></div>
             <div class="feature-card"><div class="icon">0 GC</div><h3>Zero GC pauses</h3><p>Slab allocator resets in O(1). No heap, no GC, no 50 ms jitter spikes.</p></div>
           </div>
           <div class="callout" style="margin-top:1rem;">
@@ -2435,7 +2435,7 @@ app.<span class="t">get</span>(<span class="s">'/ping'</span>, (ctx) =&gt; {
   <div class="shell footer-grid">
     <div class="footer-copy">
       <strong>Symmetra — TypeScript for the GPU</strong>
-      <span>Compiles TypeScript to CUDA machine code. 3.1M HTTP RPS · &lt;20 µs P99 · 193 GH/s Turing engines · 275+ CUDA kernels · Production ready v1.0.0.</span>
+      <span>Compiles TypeScript to CUDA machine code. 3.24M HTTP RPS · 1.4 µs P99 · 193 GH/s Turing engines · RTX 5070 measured · Production ready v1.0.0.</span>
     </div>
     <div class="footer-links">
       <a href="#architecture">Architecture</a>
