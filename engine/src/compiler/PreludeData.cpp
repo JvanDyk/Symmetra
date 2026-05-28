@@ -13,6 +13,17 @@ typedef unsigned char      uint8_t;
 typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
 
+// ── Forward declarations (prevent "identifier undefined" errors) ──────────────
+__device__ long long _symm_now_ms();
+__device__ bool symm_regex_test_i(const char* pattern, const char* str);
+__device__ bool symm_regex_test_m(const char* pattern, const char* str);
+__device__ bool symm_regex_test(const char* pattern, const char* str);
+__device__ bool symm_str_eq(const char* a, const char* b);
+__device__ const char* symm_sha256_hex(const char* input);
+__device__ int strcmp(const char* a, const char* b);
+__device__ float symm_parse_float(const char* s);
+__device__ long long symm_parse_int_radix(const char* s, int radix);
+
 // Request and response structures (in VRAM)
 struct SymmCtx {
     // ── Request fields (filled by batch dispatch or legacy dispatch) ──────────
@@ -361,8 +372,8 @@ __device__ int symm_write_int(char* buf, long long v) {
     return n;
 }
 
-__device__ float _symm_inf() { float v; unsigned u = 0x7F800000u; __builtin_memcpy(&v,&u,4); return v; }
-__device__ float _symm_nan() { float v; unsigned u = 0x7FC00000u; __builtin_memcpy(&v,&u,4); return v; }
+__device__ float _symm_inf() { return 1e30f * 1e30f; }
+__device__ float _symm_nan() { return 0.0f / 0.0f; }
 
 __device__ int symm_write_float(char* buf, float v) {
     if (v != v) { buf[0]='N'; buf[1]='a'; buf[2]='N'; buf[3]=0; return 3; }
@@ -472,13 +483,6 @@ __device__ int symm_str_char_code_at(const char* s, int index) {
     int i = 0;
     while (s[i] && i < index) i++;
     return (s[i]) ? (int)(unsigned char)s[i] : -1;
-}
-
-__device__ const char* symm_str_from_char_code(int code) {
-    static char buf[2];
-    buf[0] = (char)(code & 0xFF);
-    buf[1] = '\0';
-    return buf;
 }
 
 __device__ const char* symm_str_locale_compare(const char* a, const char* b) {
@@ -1185,13 +1189,10 @@ static const char* PRELUDE_FRAG4 = R"(
 #define undefined         nullptr
 
 struct Number {
-    static constexpr float    EPSILON          = 1.1920929e-7f;
-    static constexpr float    MAX_VALUE        = 3.4028235e+38f;
-    static constexpr float    MIN_VALUE        = 1.1754944e-38f;  // smallest positive normal float
-    static constexpr float    POSITIVE_INFINITY = (1.0f / 0.0f);
-    static constexpr float    NEGATIVE_INFINITY = (-1.0f / 0.0f);
-    static constexpr float    NaN              = (0.0f / 0.0f);
-    static constexpr long long MAX_SAFE_INTEGER = 9007199254740991LL;
+    static const float EPSILON;
+    static const float MAX_VALUE;
+    static const float MIN_VALUE;
+    static const long long MAX_SAFE_INTEGER;
     static constexpr long long MIN_SAFE_INTEGER = -9007199254740991LL;
     __device__ static bool isNaN(float v) { return v != v; }
     __device__ static bool isFinite(float v) { float i=_symm_inf(); return v==v && v!=i && v!=-i; }
@@ -2389,11 +2390,12 @@ struct _ObjectIs {
     __device__ static bool is(float a, float b) {
         // NaN case
         if (a != a && b != b) return true;
-        // +0 vs -0 case: same bits = same sign
-        unsigned ua, ub;
-        __builtin_memcpy(&ua, &a, 4);
-        __builtin_memcpy(&ub, &b, 4);
-        return ua == ub;
+        // +0 vs -0 case: compare as integers for sign bit
+        int ia, ib;
+        char* pa = (char*)&a; char* pb = (char*)&b;
+        ia = pa[3] << 24 | pa[2] << 16 | pa[1] << 8 | pa[0];
+        ib = pb[3] << 24 | pb[2] << 16 | pb[1] << 8 | pb[0];
+        return ia == ib;
     }
     __device__ static bool is(const char* a, const char* b) { return symm_str_eq(a, b); }
     template<typename A, typename B> __device__ static bool is(A a, B b) { return a == b; }
