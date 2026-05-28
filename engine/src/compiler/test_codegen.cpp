@@ -10725,10 +10725,11 @@ static void testPhase22Features() {
         ASSERT_CONTAINS(src, "symm_arr_flat");
     });
 
-    // _symm_process struct in prelude
+    // _Process struct in prelude (global variable removed to fix CUDA dynamic initialization errors)
     TEST("_symm_process — process global defined in prelude", {
         auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
-        ASSERT_CONTAINS(src, "_symm_process");
+        // Check for _Process struct (global variable was removed to fix CUDA compilation)
+        ASSERT_CONTAINS(src, "struct _Process");
     });
 }
 
