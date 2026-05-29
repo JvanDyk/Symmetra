@@ -477,6 +477,26 @@ if(SYMM_BUILD_TESTS)
     )
     target_include_directories(phase7_multi_route_test PRIVATE src/)
     message(STATUS "Phase 7 Multi-Route Benchmarking test: ENABLED (run with ./Release/phase7_multi_route_test.exe [workers] [duration_minutes])")
+
+    # ── Phase 8: HTTP Server Foundation (Socket I/O + Request Parsing) ─────────────────
+    add_executable(phase8_http_server_test
+        src/runtime/test_phase8_http_server.cpp
+    )
+    target_include_directories(phase8_http_server_test PRIVATE src/)
+    if(WIN32)
+        target_link_libraries(phase8_http_server_test PRIVATE ws2_32)
+    endif()
+    message(STATUS "Phase 8 HTTP Server Foundation test: ENABLED (run with ./Release/phase8_http_server_test.exe [port] [workers] [duration_minutes])")
+
+    # ── Phase 8: Integrated HTTP Pipeline (Client + Server + GPU) ──────────────────────
+    add_executable(phase8_integration_test
+        src/runtime/test_phase8_integration.cpp
+    )
+    target_include_directories(phase8_integration_test PRIVATE src/)
+    if(WIN32)
+        target_link_libraries(phase8_integration_test PRIVATE ws2_32)
+    endif()
+    message(STATUS "Phase 8 Integrated HTTP Pipeline test: ENABLED (run with ./Release/phase8_integration_test.exe [port] [workers] [duration_minutes])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
