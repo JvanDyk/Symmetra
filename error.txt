@@ -1,0 +1,15 @@
+[AsyncCallback] GPU results ready, count=1, status=0
+[AsyncCallback] Invoking onComplete callback
+[batchLaunch callback] GPU results downloaded, queueing response send
+[batchLaunch callback] Sending responses directly from callback
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1220
+[sendBatchResponses] Response body (first 100 chars): {"error":"download failed"}
+[sendBatchResponses] status=500, bodyLen=27
+[sendBatchResponses] Built response: 136 bytes
+[sendBatchResponses] send() returned: 136
+[sendBatchResponses] Closed fd=1220
+[sendBatchResponses] Done
+[batchLaunch callback] Responses sent
+[batchLaunch callback] Releasing stream

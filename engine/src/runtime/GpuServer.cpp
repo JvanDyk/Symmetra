@@ -796,11 +796,15 @@ void GpuServer::batchLaunch(int routeId,
                 result.responses = ctx->resp_bodies;
                 result.respHeaders = ctx->resp_headers;
 
-                // Queue response sending to I/O thread pool
-                _io->post([this, reqs = ctx->requests, res = result]() mutable {
-                    fprintf(stderr, "[I/O thread] Sending %zu responses\n", reqs.size());
-                    this->sendBatchResponses(reqs, res);
-                });
+                // Send responses directly from callback (CUDA driver callback thread)
+                // Bypass ThreadPool due to potential async-callback synchronization issues
+                fprintf(stderr, "[batchLaunch callback] Sending responses directly from callback\n");
+                fflush(stderr);
+
+                sendBatchResponses(ctx->requests, result);
+
+                fprintf(stderr, "[batchLaunch callback] Responses sent\n");
+                fflush(stderr);
 
                 // Release stream back to pool
                 fprintf(stderr, "[batchLaunch callback] Releasing stream\n");
@@ -837,9 +841,21 @@ void GpuServer::sendBatchResponses(const std::vector<BatchRequest>& requests,
                                    const BatchResult& result) {
     static const char* notFound = "{\"error\":\"Not Found\"}";
 
+    fprintf(stderr, "[sendBatchResponses] Called with %zu requests\n", requests.size());
+    fprintf(stderr, "[sendBatchResponses] result.statuses.size()=%zu, result.responses.size()=%zu\n",
+            result.statuses.size(), result.responses.size());
+    fflush(stderr);
+
     for (size_t i = 0; i < requests.size(); i++) {
         int fd = requests[i].fd;
-        if (fd < 0) continue;   // shouldn't happen, but guard anyway
+        fprintf(stderr, "[sendBatchResponses] Request %zu: fd=%d\n", i, fd);
+        fflush(stderr);
+
+        if (fd < 0) {
+            fprintf(stderr, "[sendBatchResponses] Skipping invalid fd\n");
+            fflush(stderr);
+            continue;
+        }
 
         int status = (i < result.statuses.size())
                          ? result.statuses[i]
@@ -850,11 +866,18 @@ void GpuServer::sendBatchResponses(const std::vector<BatchRequest>& requests,
         if (i < result.responses.size() && !result.responses[i].empty()) {
             body    = result.responses[i].c_str();
             bodyLen = static_cast<int>(result.responses[i].size());
+            fprintf(stderr, "[sendBatchResponses] Response body (first 100 chars): %.100s\n", body);
+            fflush(stderr);
         } else {
             body    = notFound;
             bodyLen = static_cast<int>(strlen(notFound));
             if (status == 200) status = 404;
+            fprintf(stderr, "[sendBatchResponses] Using default notFound response\n");
+            fflush(stderr);
         }
+
+        fprintf(stderr, "[sendBatchResponses] status=%d, bodyLen=%d\n", status, bodyLen);
+        fflush(stderr);
 
         // Custom response headers packed by kernel into resp tail
         const char* extraHdrs = nullptr;
@@ -864,9 +887,20 @@ void GpuServer::sendBatchResponses(const std::vector<BatchRequest>& requests,
         // Batch path always closes after the response — HTTP/1.1 keep-alive is
         // handled by the accept loop for persistent connections (future work).
         std::string resp = buildResponse(status, body, bodyLen, /*keepAlive=*/false, extraHdrs);
-        ::send(fd, resp.c_str(), static_cast<int>(resp.size()), 0);
+        fprintf(stderr, "[sendBatchResponses] Built response: %d bytes\n", (int)resp.size());
+        fflush(stderr);
+
+        int sendRes = ::send(fd, resp.c_str(), static_cast<int>(resp.size()), 0);
+        fprintf(stderr, "[sendBatchResponses] send() returned: %d\n", sendRes);
+        fflush(stderr);
+
         CLOSE_SOCKET(fd);
+        fprintf(stderr, "[sendBatchResponses] Closed fd=%d\n", fd);
+        fflush(stderr);
     }
+
+    fprintf(stderr, "[sendBatchResponses] Done\n");
+    fflush(stderr);
 }
 
 // ── TLS 1.3 PSK-only mode (lightweight encryption) ──────────────────────────

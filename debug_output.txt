@@ -1,0 +1,6 @@
+[AsyncCallback] GPU results ready, count=1, status=0
+[AsyncCallback] Invoking onComplete callback
+[batchLaunch callback] GPU results downloaded, queueing response send
+[batchLaunch callback] About to post response send to I/O pool
+[batchLaunch callback] Response send posted to I/O pool
+[batchLaunch callback] Releasing stream

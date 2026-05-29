@@ -175,11 +175,17 @@ void Codegen::emitHandler(const RouteReg& route, int idx) {
     _out += "// Handler: " + route.method + " " + route.path + "\n";
     _out += "__device__ void symm_handler_" + std::to_string(idx) + "(SymmCtx* ctx) {\n";
 
-    if (route.handler && route.handler->kind == NodeKind::FuncDecl) {
-        auto& fn = std::get<FuncDecl>(route.handler->data);
-        // The handler receives a SymmCtx* — its first param is 'ctx'
-        if (fn.body && fn.body->kind == NodeKind::Block) {
-            emitBlock(std::get<Block>(fn.body->data), 1);
+    if (route.handler) {
+        if (route.handler->kind == NodeKind::FuncDecl) {
+            auto& fn = std::get<FuncDecl>(route.handler->data);
+            // The handler receives a SymmCtx* — its first param is 'ctx'
+            if (fn.body && fn.body->kind == NodeKind::Block) {
+                emitBlock(std::get<Block>(fn.body->data), 1);
+            }
+        } else {
+            // Handler is not a FuncDecl - might be an arrow function or other expression
+            // Try to emit it as an expression statement
+            _out += "    " + emitExpr(route.handler) + ";\n";
         }
     }
 

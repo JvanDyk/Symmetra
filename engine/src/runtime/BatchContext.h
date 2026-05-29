@@ -365,6 +365,13 @@ struct BatchContext {
                                 bodyLen
                             );
                             if (r != CUDA_SUCCESS) {
+                                const char* errstr = nullptr;
+                                cuGetErrorString(r, &errstr);
+                                fprintf(stderr, "[AsyncCallback] cuMemcpyDtoH failed for result %d: %s (error code %d)\n", i, errstr ? errstr : "unknown", r);
+                                fprintf(stderr, "[AsyncCallback] Downloading from GPU %llx to host %p, %d bytes\n",
+                                    (unsigned long long)(ctx->bctx->d_respBuf + (size_t)i * MAX_RESP_BYTES),
+                                    (ctx->resp_bodies + i), bodyLen);
+                                fflush(stderr);
                                 ctx->resp_bodies[i] = "{\"error\":\"download failed\"}";
                                 ctx->resp_statuses[i] = 500;
                             }
