@@ -52,7 +52,8 @@ struct BatchPolicy {
     int minBatchSize = 32;           // 1 warp minimum
 
     // Maximum wait time before launching an under-filled batch.
-    int fillTimeoutUs = 5000;        // 5 ms default
+    // 1000us (1ms) = fast, non-blocking, reasonable batching window
+    int fillTimeoutUs = 1000;        // 1 millisecond = immediate launch
 
     // Maximum number of queued requests per route before we apply back-pressure
     // to the accept thread (i.e. we stop accepting until some queues drain).
