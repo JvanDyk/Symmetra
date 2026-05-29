@@ -449,6 +449,13 @@ if(SYMM_BUILD_TESTS)
     )
     target_include_directories(phase3_kernel_validation_test PRIVATE src/)
     message(STATUS "Phase 3 GPU Kernel Validation test: ENABLED (run with ./Release/phase3_kernel_validation_test.exe [workers] [duration])")
+
+    # ── Phase 4: Real GPU Kernel Execution ────────────────────────────────────────
+    add_executable(phase4_real_gpu_execution_test
+        src/runtime/test_phase4_real_gpu_execution.cpp
+    )
+    target_include_directories(phase4_real_gpu_execution_test PRIVATE src/)
+    message(STATUS "Phase 4 Real GPU Execution test: ENABLED (run with ./Release/phase4_real_gpu_execution_test.exe [workers] [duration])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
