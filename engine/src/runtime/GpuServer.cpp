@@ -798,28 +798,37 @@ void GpuServer::batchLaunch(int routeId,
             requests,
             slot.stream,
             [this, slot](BatchContext::AsyncDownloadContext* ctx) {
-                // This callback runs in a CUDA driver thread when GPU work is complete
-                // All results are now downloaded to host memory
-                fprintf(stderr, "[batchLaunch callback] GPU results downloaded, queueing response send\n");
+                try {
+                    // This callback runs in a CUDA driver thread when GPU work is complete
+                    // All results are now downloaded to host memory
+                    fprintf(stderr, "[batchLaunch callback] GPU results downloaded, queueing response send\n");
 
-                // Convert context to BatchResult format
-                BatchResult result;
-                result.statuses = ctx->resp_statuses;
-                result.responses = ctx->resp_bodies;
-                result.respHeaders = ctx->resp_headers;
+                    // Convert context to BatchResult format
+                    BatchResult result;
+                    result.statuses = ctx->resp_statuses;
+                    result.responses = ctx->resp_bodies;
+                    result.respHeaders = ctx->resp_headers;
 
-                // Send responses directly from callback (CUDA driver callback thread)
-                // Bypass ThreadPool due to potential async-callback synchronization issues
-                fprintf(stderr, "[batchLaunch callback] Sending responses directly from callback\n");
-                fflush(stderr);
+                    // Send responses directly from callback (CUDA driver callback thread)
+                    // Bypass ThreadPool due to potential async-callback synchronization issues
+                    fprintf(stderr, "[batchLaunch callback] Sending responses directly from callback\n");
+                    fflush(stderr);
 
-                sendBatchResponses(ctx->requests, result);
+                    sendBatchResponses(ctx->requests, result);
 
-                fprintf(stderr, "[batchLaunch callback] Responses sent\n");
-                fflush(stderr);
+                    fprintf(stderr, "[batchLaunch callback] Responses sent\n");
+                    fflush(stderr);
+                } catch (const std::exception& e) {
+                    fprintf(stderr, "[batchLaunch callback] EXCEPTION: %s\n", e.what());
+                    fflush(stderr);
+                } catch (...) {
+                    fprintf(stderr, "[batchLaunch callback] UNKNOWN EXCEPTION\n");
+                    fflush(stderr);
+                }
 
-                // Release stream back to pool
+                // CRITICAL: Always release stream, even if sendBatchResponses fails
                 fprintf(stderr, "[batchLaunch callback] Releasing stream\n");
+                fflush(stderr);
                 _streams->release(slot);
 
                 // Context will be freed by downloadResultsAsync
