@@ -1,0 +1,528 @@
+[AsyncBatchLauncher] Started 8 worker threads
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 1ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1268
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1268
+[sendBatchResponses] Done
+[AsyncCallback] GPU results ready, count=1, status=0
+[AsyncCallback] All data downloaded, processing 1 results
+[AsyncCallback] Results processed
+[AsyncCallback] Invoking onComplete callback
+[batchLaunch callback] GPU results downloaded, queueing response send
+[batchLaunch callback] Sending responses directly from callback
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1268
+[sendBatchResponses] Response body (first 100 chars): {"message":"gpu async test","result":63}
+[sendBatchResponses] status=200, bodyLen=40
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: -1
+[sendBatchResponses] Closed fd=1268
+[sendBatchResponses] Done
+[batchLaunch callback] Responses sent
+[batchLaunch callback] Releasing stream
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1304
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1304
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1304
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1304
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1304
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1304
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1304
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1304
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1368
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1368
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1388
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1388
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1388
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1388
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1388
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1388
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1368
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1368
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1428
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1428
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1432
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1432
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1432
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1432
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1436
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1436
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1436
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1436
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1436
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1436
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1436
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1436
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1440
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1440
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1444
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1444
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1448
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1448
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1440
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1440
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1452
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1452
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1436
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1436
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1456
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1456
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1456
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1456
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1460
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1460
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1464
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1464
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1468
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1468
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1464
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1464
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1464
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1464
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1468
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1468
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 0ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=1468
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=1468
+[sendBatchResponses] Done
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
