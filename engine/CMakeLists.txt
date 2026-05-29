@@ -359,6 +359,13 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(profiled_batching_test PRIVATE ${CUDAToolkit_LIBRARIES})
     message(STATUS "Profiled Batching test: ENABLED (run with ./Release/profiled_batching_test.exe [duration] [workers])")
 
+    # ── Stream Blocking Analysis (Shows AsyncBatchLauncher benefit) ───────────
+    add_executable(stream_blocking_test
+        src/runtime/test_stream_blocking.cpp
+    )
+    target_include_directories(stream_blocking_test PRIVATE src/)
+    message(STATUS "Stream Blocking test: ENABLED (demonstrates AsyncBatchLauncher advantage)")
+
     # ── Max Throughput Test (Pure GPU batch performance) ────────────────────────
     add_executable(max_throughput_test
         src/runtime/test_max_throughput.cpp
