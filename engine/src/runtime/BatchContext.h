@@ -291,6 +291,10 @@ struct BatchContext {
         std::vector<std::string> resp_bodies;
         std::vector<std::string> resp_headers;
 
+        // Temporary buffers for async memcopies (freed in callback)
+        std::vector<std::vector<char>> body_download_bufs;
+        std::vector<std::vector<char>> header_download_bufs;
+
         // Requests that this batch is processing
         std::vector<BatchRequest> requests;
 
@@ -336,6 +340,38 @@ struct BatchContext {
             stream
         );
 
+        // Pre-allocate temporary buffers for async downloads (will be freed in callback)
+        ctx->body_download_bufs.resize(actualCount);
+        ctx->header_download_bufs.resize(actualCount);
+
+        for (int i = 0; i < actualCount; i++) {
+            ctx->body_download_bufs[i].resize(MAX_RESP_BYTES);
+            CUresult r = cuMemcpyDtoHAsync(
+                ctx->body_download_bufs[i].data(),
+                (CUdeviceptr)(d_respBuf + (size_t)i * MAX_RESP_BYTES),
+                MAX_RESP_BYTES,
+                stream
+            );
+            if (r != CUDA_SUCCESS) {
+                delete ctx;
+                return r;
+            }
+        }
+
+        for (int i = 0; i < actualCount; i++) {
+            ctx->header_download_bufs[i].resize(256);
+            CUresult r = cuMemcpyDtoHAsync(
+                ctx->header_download_bufs[i].data(),
+                (CUdeviceptr)(d_respBuf + (size_t)i * MAX_RESP_BYTES + RESP_HDR_OFFSET),
+                256,
+                stream
+            );
+            if (r != CUDA_SUCCESS) {
+                delete ctx;
+                return r;
+            }
+        }
+
         if (r1 != CUDA_SUCCESS || r2 != CUDA_SUCCESS) {
             delete ctx;
             return r1 != CUDA_SUCCESS ? r1 : r2;
@@ -350,47 +386,31 @@ struct BatchContext {
                 fprintf(stderr, "[AsyncCallback] GPU results ready, count=%d, status=%d\n", ctx->count, status);
 
                 if (status == CUDA_SUCCESS) {
-                    // GPU work succeeded - download response bodies
-                    // This happens in a CUDA driver thread, not the scheduler
+                    // All memcopies (lens, statuses, bodies, headers) were queued async before callback
+                    // They should all be complete by now since callback fires when stream idle
+                    fprintf(stderr, "[AsyncCallback] All data downloaded, processing %d results\n", ctx->count);
+                    fflush(stderr);
+
+                    // Copy from temporary download buffers into final string buffers, trimming to actual size
                     for (int i = 0; i < ctx->count; i++) {
                         unsigned int bodyLen = ctx->resp_lens[i];
                         bodyLen = std::min(bodyLen, (unsigned int)RESP_HDR_OFFSET);
 
-                        if (bodyLen > 0) {
-                            ctx->resp_bodies[i].resize(bodyLen);
-                            CUresult r = cuMemcpyDtoH(
-                                ctx->resp_bodies[i].data(),
-                                (CUdeviceptr)(ctx->bctx->d_respBuf +
-                                            (size_t)i * MAX_RESP_BYTES),
-                                bodyLen
-                            );
-                            if (r != CUDA_SUCCESS) {
-                                const char* errstr = nullptr;
-                                cuGetErrorString(r, &errstr);
-                                fprintf(stderr, "[AsyncCallback] cuMemcpyDtoH failed for result %d: %s (error code %d)\n", i, errstr ? errstr : "unknown", r);
-                                fprintf(stderr, "[AsyncCallback] Downloading from GPU %llx to host %p, %d bytes\n",
-                                    (unsigned long long)(ctx->bctx->d_respBuf + (size_t)i * MAX_RESP_BYTES),
-                                    (ctx->resp_bodies + i), bodyLen);
-                                fflush(stderr);
-                                ctx->resp_bodies[i] = "{\"error\":\"download failed\"}";
-                                ctx->resp_statuses[i] = 500;
-                            }
+                        if (bodyLen > 0 && i < (int)ctx->body_download_bufs.size()) {
+                            ctx->resp_bodies[i].assign(ctx->body_download_bufs[i].begin(),
+                                                      ctx->body_download_bufs[i].begin() + bodyLen);
                         }
 
-                        // Download custom response headers (last 256 bytes of response buffer)
-                        char h_hdrs[256] = {};
-                        CUresult r = cuMemcpyDtoH(
-                            h_hdrs,
-                            (CUdeviceptr)(ctx->bctx->d_respBuf +
-                                        (size_t)i * MAX_RESP_BYTES + RESP_HDR_OFFSET),
-                            256
-                        );
-                        if (r == CUDA_SUCCESS && h_hdrs[0] != '\0') {
-                            ctx->resp_headers[i] = h_hdrs;
+                        if (i < (int)ctx->header_download_bufs.size() && ctx->header_download_bufs[i][0] != '\0') {
+                            ctx->resp_headers[i] = ctx->header_download_bufs[i].data();
                         }
                     }
+                    fprintf(stderr, "[AsyncCallback] Results processed\n");
+                    fflush(stderr);
                 } else {
                     // GPU error - fill with error responses
+                    fprintf(stderr, "[AsyncCallback] GPU error, status=%d\n", status);
+                    fflush(stderr);
                     for (int i = 0; i < ctx->count; i++) {
                         ctx->resp_statuses[i] = 500;
                         ctx->resp_bodies[i] = "{\"error\":\"GPU computation failed\"}";
