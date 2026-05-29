@@ -1,0 +1,25 @@
+Error compiling server.ts:
+server.ts(364): warning #222-D: floating-point operation result is out of range
+  __device__ float _symm_inf() { return 1e30f * 1e30f; }
+                                              ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+server.ts(1634): warning #222-D: floating-point operation result is out of range
+      __device__ bool isFinite(float v) { float inf = 1e30f * 1e30f; return v != inf && v != -inf && v == v; }
+                                                            ^
+
+server.ts(1762): warning #177-D: variable "group_start" was declared but never referenced
+                      const char* group_start = p;
+                                  ^
+
+server.ts(2956): error: identifier "Router" is undefined
+  __device__ constexpr auto app = Router{};
+                                  ^
+
+server.ts(2956): error: expected a ";"
+  __device__ constexpr auto app = Router{};
+                                        ^
+
+2 errors detected in the compilation of "server.ts".
+

@@ -59,6 +59,30 @@ std::string Codegen::emitShared(const Module& mod) {
     _out += "\n";
     for (auto& stmt : mod.stmts) {
         if (!stmt) continue;
+
+        // Skip serve() calls and Router method calls — these are host-side only
+        if (stmt->kind == NodeKind::ExprStmt) {
+            auto& es = std::get<ExprStmt>(stmt->data);
+            if (es.expr && es.expr->kind == NodeKind::CallExpr) {
+                auto& call = std::get<CallExpr>(es.expr->data);
+                if (call.callee && call.callee->kind == NodeKind::Ident) {
+                    auto& ident = std::get<Ident>(call.callee->data);
+                    if (ident.name == "serve") {
+                        // Skip serve() calls
+                        continue;
+                    }
+                }
+                // Skip app.get/post/put/delete/patch calls
+                if (call.callee && call.callee->kind == NodeKind::MemberExpr) {
+                    auto& mem = std::get<MemberExpr>(call.callee->data);
+                    if (mem.prop == "get" || mem.prop == "post" || mem.prop == "put" ||
+                        mem.prop == "delete" || mem.prop == "patch") {
+                        continue;
+                    }
+                }
+            }
+        }
+
         switch (stmt->kind) {
             case NodeKind::ClassDecl:
             case NodeKind::FuncDecl:
@@ -68,6 +92,14 @@ std::string Codegen::emitShared(const Module& mod) {
                 // Top-level const/let — emit as __device__ constexpr
                 auto& d = std::get<ConstDecl>(stmt->data);
                 if (d.init) {
+                    // Skip Router instances — they're handled by the framework, not GPU
+                    if (d.init->kind == NodeKind::NewExpr) {
+                        auto& ne = std::get<NewExpr>(d.init->data);
+                        if (ne.className == "Router") {
+                            // Skip emitting Router() — it's a host-side object
+                            break;
+                        }
+                    }
                     _out += "__device__ constexpr auto " + d.name +
                             " = " + emitExpr(d.init) + ";\n";
                 }
