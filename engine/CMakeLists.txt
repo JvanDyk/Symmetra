@@ -435,6 +435,13 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(production_benchmark PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
     target_compile_definitions(production_benchmark PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
     message(STATUS "Production Benchmark: ENABLED (run with ./Release/production_benchmark.exe [duration] [workers])")
+
+    # ── Phase 2: GPU Saturation Validation Test ────────────────────────────────
+    add_executable(phase2_saturation_test
+        src/runtime/test_phase2_gpu_saturation.cpp
+    )
+    target_include_directories(phase2_saturation_test PRIVATE src/)
+    message(STATUS "Phase 2 GPU Saturation test: ENABLED (validates 32 workers, 256 streams configuration)")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()

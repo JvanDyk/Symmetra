@@ -1,0 +1,33 @@
+[AsyncBatchLauncher] Started 8 worker threads
+[submitRequest] Request submitted to route 0, queueSize=1
+[submitRequest] First request in queue, timer armed
+[schedulerLoop] Route 0: timeout expired, dequeued 1 requests
+[schedulerLoop] Launching batch with 1 requests on route 0
+[batchLaunch] START: 0ms, batch_size=1
+[batchLaunch] UPLOAD_QUEUED: 1ms, batch_size=1
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=2924
+[sendBatchResponses] Using default notFound response
+[sendBatchResponses] status=500, bodyLen=21
+[sendBatchResponses] Built response: 130 bytes
+[sendBatchResponses] send() returned: 130
+[sendBatchResponses] Closed fd=2924
+[sendBatchResponses] Done
+[AsyncCallback] GPU results ready, count=1, status=0
+[AsyncCallback] All data downloaded, processing 1 results
+[AsyncCallback] Results processed
+[AsyncCallback] Invoking onComplete callback
+[batchLaunch callback] GPU results downloaded, queueing response send
+[batchLaunch callback] Sending responses directly from callback
+[sendBatchResponses] Called with 1 requests
+[sendBatchResponses] result.statuses.size()=1, result.responses.size()=1
+[sendBatchResponses] Request 0: fd=2924
+[sendBatchResponses] Response body (first 100 chars): {"ok":true}
+[sendBatchResponses] status=200, bodyLen=11
+[sendBatchResponses] Built response: 101 bytes
+[sendBatchResponses] send() returned: -1
+[sendBatchResponses] Closed fd=2924
+[sendBatchResponses] Done
+[batchLaunch callback] Responses sent
+[batchLaunch callback] Releasing stream

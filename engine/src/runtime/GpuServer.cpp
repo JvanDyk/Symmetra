@@ -140,9 +140,10 @@ GpuServer::GpuServer(const CompiledModule& mod,
                 std::printf("[symm] Dispatcher shards: %d parallel threads\n", NUM_DISPATCHER_SHARDS);
             }
 
-            // Create async batch launcher with 8 worker threads
+            // Create async batch launcher with 32 worker threads
+            // Phase 2: Increased workers for GPU saturation testing
             // Workers launch batches to streams without blocking scheduler
-            _batchLauncher = std::make_unique<AsyncBatchLauncher>(8);
+            _batchLauncher = std::make_unique<AsyncBatchLauncher>(32);
 
             // Set the actual launch function
             _batchLauncher->setLaunchFn(

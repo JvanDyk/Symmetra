@@ -35,10 +35,10 @@ namespace symm {
 
 struct ServerOptions {
     int  port      = 8080;
-    int  streams   = 128;  // CUDA stream pool size — Phase 3: 4x expansion for throughput
+    int  streams   = 256;  // CUDA stream pool size — Phase 2: 2x expansion for GPU saturation testing
     // ioThreads must be >= streams for full GPU utilisation; each thread blocks on
     // cudaStreamSynchronize() while holding a stream slot.  Default matches streams.
-    int  ioThreads = 128;
+    int  ioThreads = 256;
     bool verbose   = false;
 
     // useBatch: prefer the warp-aligned batch dispatch path (symm_dispatch_batch).
