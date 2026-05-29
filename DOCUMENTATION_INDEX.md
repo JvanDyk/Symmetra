@@ -41,6 +41,35 @@ Complete documentation for understanding and building with the Symmetra engine.
 - Error handling & connection pooling
 - 4 working examples
 
+### GPU Acceleration Status
+**→ [GPU_PHASE1_STATUS.md](GPU_PHASE1_STATUS.md)** ⭐ CURRENT STATUS
+- Framework completion status
+- Benchmark results (50M RPS stub)
+- Critical NVCC blocker with 4 solutions
+- Phase 1-5 roadmap to 50K+ RPS
+- Implementation timeline
+
+**→ [GPU_ACCELERATION_ROADMAP.md](GPU_ACCELERATION_ROADMAP.md)** (500+ lines)
+- Detailed 5-phase implementation guide
+- Code changes required (line-by-line)
+- Phase 1: GPU Kernel Enable (2h) → 12K RPS
+- Phase 4: Pipelining (2h) → 40K-60K RPS
+- Phase 5: Persistent Kernels (3h) → 50K+ RPS
+- Testing & validation procedures
+
+**→ [SESSION_SUMMARY_MAY29.md](SESSION_SUMMARY_MAY29.md)**
+- Today's work summary (May 29, 2026)
+- Benchmarks executed (CPU stub verified)
+- NVCC blocker with immediate solutions
+- Next steps checklist (5-20 minutes to Phase 1)
+
+### Performance Analysis
+**→ [BENCHMARK_ANALYSIS_REPORT.md](BENCHMARK_ANALYSIS_REPORT.md)** (350+ lines)
+- Detailed performance metrics
+- Bottleneck analysis
+- Optimization roadmap
+- Phase-by-phase expectations
+
 ### Overview of All Documentation
 **→ [DOCUMENTATION_SUMMARY.md](DOCUMENTATION_SUMMARY.md)**
 - Maps all created files

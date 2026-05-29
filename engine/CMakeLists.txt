@@ -73,8 +73,6 @@ set(ENGINE_SOURCES
     src/runtime/GpuStream.cpp
     # SSP GPU-Accelerated Encryption
     src/runtime/SSPLayer.cpp
-    # NOTE: chacha20_poly1305_optimized.cu requires NVCC fix on Windows (CUDA 13.2)
-    # Once resolved, add: src/gpu/chacha20_poly1305_optimized.cu
     # Compute backend abstraction layer
     src/runtime/ComputeBackendFactory.cpp
     src/runtime/backends/CudaBackend.cpp
@@ -148,10 +146,11 @@ macro(encrypt_cuda_kernel SRC_REL OUT_STEM ARRAY_NAME)
     list(APPEND ENCRYPTED_KERNEL_HDRS "${_hdr}")
 endmacro()
 
-encrypt_cuda_kernel(src/kernels/genesis.cu      genesis  SYMM_GENESIS_PTX)
-encrypt_cuda_kernel(src/runtime/HttpKernels.cu  http     SYMM_HTTP_PTX)
-encrypt_cuda_kernel(src/runtime/IoKernel.cu     io       SYMM_IO_PTX)
-encrypt_cuda_kernel(src/kernels/TextKernel.cu   text     SYMM_TEXT_PTX)
+encrypt_cuda_kernel(src/kernels/genesis.cu                genesis  SYMM_GENESIS_PTX)
+encrypt_cuda_kernel(src/runtime/HttpKernels.cu            http     SYMM_HTTP_PTX)
+encrypt_cuda_kernel(src/runtime/IoKernel.cu               io       SYMM_IO_PTX)
+encrypt_cuda_kernel(src/kernels/TextKernel.cu             text     SYMM_TEXT_PTX)
+encrypt_cuda_kernel(src/gpu/chacha20_poly1305_optimized.cu chacha20 SYMM_CHACHA20_PTX)
 
 add_custom_target(gen_encrypted_kernels DEPENDS ${ENCRYPTED_KERNEL_HDRS})
 
