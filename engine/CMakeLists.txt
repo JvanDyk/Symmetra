@@ -463,6 +463,13 @@ if(SYMM_BUILD_TESTS)
     )
     target_include_directories(phase5_sustained_load_test PRIVATE src/)
     message(STATUS "Phase 5 Sustained Load test: ENABLED (run with ./Release/phase5_sustained_load_test.exe [workers] [duration_minutes])")
+
+    # ── Phase 6: Real GPU Kernel Execution Validation ──────────────────────────────────
+    add_executable(phase6_real_kernel_execution_test
+        src/runtime/test_phase6_real_kernel_execution.cpp
+    )
+    target_include_directories(phase6_real_kernel_execution_test PRIVATE src/)
+    message(STATUS "Phase 6 Real Kernel Execution test: ENABLED (run with ./Release/phase6_real_kernel_execution_test.exe [workers] [duration_minutes])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
