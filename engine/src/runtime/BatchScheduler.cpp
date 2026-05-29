@@ -44,14 +44,20 @@ void BatchScheduler::submitRequest(BatchRequest req) {
     // Back-pressure happens at TCP level (kernel socket buffer), not here.
     if (!q.pending.tryEnqueue(std::move(req))) {
         // Queue overflow — request dropped
-        // In production, the client will timeout and retry elsewhere
+        fprintf(stderr, "[submitRequest] QUEUE OVERFLOW on routeId=%d, queueSize=%d\n", rid, q.count());
+        fflush(stderr);
         return;
     }
+
+    fprintf(stderr, "[submitRequest] Request submitted to route %d, queueSize=%d\n", rid, q.count());
+    fflush(stderr);
 
     // Record first arrival time (atomic, lock-free)
     if (q.count() == 1) {
         q.firstArrivalUs.store(nowUs(), std::memory_order_relaxed);
         q.timerArmed.store(true, std::memory_order_relaxed);
+        fprintf(stderr, "[submitRequest] First request in queue, timer armed\n");
+        fflush(stderr);
     }
 }
 
@@ -109,7 +115,11 @@ void BatchScheduler::schedulerLoop() {
                         int paddedSize = alignToBatchBoundary(cnt);
                         batch.reserve(paddedSize);
                         q.pending.tryDequeueBatch(batch, cnt);
+                        fprintf(stderr, "[schedulerLoop] Route %d: timeout expired, dequeued %zu requests\n", rid, batch.size());
+                        fflush(stderr);
                         if (!batch.empty()) {
+                            fprintf(stderr, "[schedulerLoop] Launching batch with %zu requests on route %d\n", batch.size(), rid);
+                            fflush(stderr);
                             launchBatch(rid, batch);
                         }
                         q.firstArrivalUs.store(0, std::memory_order_relaxed);
