@@ -672,11 +672,21 @@ void GpuServer::acceptLoopBatch() {
 void GpuServer::batchLaunch(int routeId,
                              const std::vector<BatchRequest>& requests,
                              BatchResult& result) {
+    auto t_start = std::chrono::high_resolution_clock::now();
     static int batch_counter = 0;
     static FILE* debug_log = nullptr;
     if (!debug_log) {
         debug_log = fopen("D:\\GITHUB\\SYMMETRA\\batch_debug.log", "w");
     }
+
+    auto log_time = [&](const char* phase) {
+        auto t_now = std::chrono::high_resolution_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_start).count();
+        fprintf(stderr, "[batchLaunch] %s: %lldms, batch_size=%zu\n", phase, ms, requests.size());
+        fflush(stderr);
+    };
+
+    log_time("START");
 
     int batch_id = ++batch_counter;
     if (debug_log) {
@@ -719,6 +729,8 @@ void GpuServer::batchLaunch(int routeId,
         h_paths.data(),  h_methods.data(),
         h_auths.data(),  h_ctypes.data(), h_uas.data(),
         count, slot.stream);
+
+    log_time("UPLOAD_QUEUED");
 
     if (ur != CUDA_SUCCESS) {
         const char* msg = nullptr;
