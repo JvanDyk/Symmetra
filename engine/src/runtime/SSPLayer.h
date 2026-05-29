@@ -20,6 +20,7 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <functional>
 
 namespace symm {
 
@@ -144,6 +145,55 @@ struct SSPSession {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Batch Accumulator (Phase 3 Optimization)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Batch accumulator for collecting requests before GPU kernel launch
+ * Amortizes kernel launch overhead across multiple messages
+ *
+ * Phase 3: Collects requests until batch is full or flush is called
+ */
+template<typename T>
+class BatchAccumulator {
+public:
+    explicit BatchAccumulator(uint32_t max_batch_size = 256)
+        : max_batch_size_(max_batch_size) {
+        items_.reserve(max_batch_size);
+    }
+
+    void add(const T& item) {
+        items_.push_back(item);
+        if (items_.size() >= max_batch_size_) {
+            // Auto-flush when full
+            flush();
+        }
+    }
+
+    void flush() {
+        if (!items_.empty() && on_flush_) {
+            on_flush_(items_);
+            items_.clear();
+        }
+    }
+
+    bool is_full() const {
+        return items_.size() >= max_batch_size_;
+    }
+
+    uint32_t size() const {
+        return items_.size();
+    }
+
+    // Callback for flush event
+    std::function<void(const std::vector<T>&)> on_flush_;
+
+private:
+    uint32_t max_batch_size_;
+    std::vector<T> items_;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // SSP Layer
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -213,6 +263,25 @@ public:
 private:
     // GPU buffer management
     std::unique_ptr<GPUBatchBuffer> gpu_buffer_;
+
+    // Phase 3: Batch accumulation for kernel launch optimization
+    struct EncryptRequest {
+        const SSPSession* session;
+        const uint8_t* plaintext;
+        uint32_t plaintext_len;
+        uint8_t* ciphertext;
+        uint32_t* ciphertext_len;
+        uint8_t* tag;
+    };
+
+    struct DecryptRequest {
+        const SSPSession* session;
+        const uint8_t* ciphertext;
+        uint32_t ciphertext_len;
+        const uint8_t* tag;
+        uint8_t* plaintext;
+        uint32_t* plaintext_len;
+    };
 
     // Session storage
     std::unordered_map<uint64_t, SSPSession> sessions_;
