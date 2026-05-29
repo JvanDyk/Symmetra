@@ -73,6 +73,7 @@ set(ENGINE_SOURCES
     src/runtime/GpuStream.cpp
     # SSP GPU-Accelerated Encryption
     src/runtime/SSPLayer.cpp
+    src/runtime/SSPHTTPDispatcher.cpp
     # Compute backend abstraction layer
     src/runtime/ComputeBackendFactory.cpp
     src/runtime/backends/CudaBackend.cpp
@@ -562,6 +563,19 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(ssp_batch_collection_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
     target_link_libraries(ssp_batch_collection_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP Batch Collection test: ENABLED (run with ./Release/ssp_batch_collection_test.exe)")
+
+    # ── SSP HTTP Dispatcher Test (Phase 3 Integration) ───────────────────────────────────────
+    add_executable(ssp_http_dispatcher_test
+        src/runtime/test_ssp_http_dispatcher.cpp
+        src/runtime/SSPHTTPDispatcher.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(ssp_http_dispatcher_test gen_encrypted_kernels)
+    target_include_directories(ssp_http_dispatcher_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(ssp_http_dispatcher_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "SSP HTTP Dispatcher test: ENABLED (run with ./Release/ssp_http_dispatcher_test.exe)")
 
     # ── GPU Acceleration Integration Test ───────────────────────────────────────────────────
     add_executable(ssp_gpu_acceleration_test
