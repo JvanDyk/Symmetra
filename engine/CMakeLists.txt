@@ -470,6 +470,13 @@ if(SYMM_BUILD_TESTS)
     )
     target_include_directories(phase6_real_kernel_execution_test PRIVATE src/)
     message(STATUS "Phase 6 Real Kernel Execution test: ENABLED (run with ./Release/phase6_real_kernel_execution_test.exe [workers] [duration_minutes])")
+
+    # ── Phase 7: Multi-Route Load Distribution Benchmarking ────────────────────────────
+    add_executable(phase7_multi_route_test
+        src/runtime/test_phase7_multi_route_benchmarking.cpp
+    )
+    target_include_directories(phase7_multi_route_test PRIVATE src/)
+    message(STATUS "Phase 7 Multi-Route Benchmarking test: ENABLED (run with ./Release/phase7_multi_route_test.exe [workers] [duration_minutes])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
