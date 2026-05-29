@@ -11,6 +11,7 @@
 #include "genesis_enc.h"
 #include "http_enc.h"
 #include "io_enc.h"
+#include "chacha20_enc.h"  // SSP GPU-Accelerated ChaCha20-Poly1305
 
 namespace symm::protect {
 
@@ -55,6 +56,13 @@ KernelHandles loadKernels() {
 
     h.http_mod = loadBlob(SYMM_HTTP_PTX, SYMM_HTTP_PTX_size);
     h.io_mod   = loadBlob(SYMM_IO_PTX,   SYMM_IO_PTX_size);
+
+    // SSP GPU-Accelerated Encryption: Load ChaCha20-Poly1305 kernel
+    h.chacha20_mod = loadBlob(SYMM_CHACHA20_PTX, SYMM_CHACHA20_PTX_size);
+    cuModuleGetFunction(&h.chacha20_encrypt_batch, h.chacha20_mod,
+                        SYMM_STR("chacha20_poly1305_encrypt_batch_kernel"));
+    cuModuleGetFunction(&h.chacha20_decrypt_batch, h.chacha20_mod,
+                        SYMM_STR("chacha20_poly1305_decrypt_batch_kernel"));
 
     g_kernels = h;
     return h;

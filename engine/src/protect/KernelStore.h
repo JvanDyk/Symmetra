@@ -9,6 +9,11 @@ struct KernelHandles {
 
     CUmodule  http_mod    = nullptr;  // GPU HTTP routing
     CUmodule  io_mod      = nullptr;  // GPU I/O helpers
+
+    // SSP GPU-Accelerated Encryption
+    CUmodule  chacha20_mod = nullptr;
+    CUfunction chacha20_encrypt_batch = nullptr;
+    CUfunction chacha20_decrypt_batch = nullptr;
 };
 
 // Decrypt all embedded kernel blobs and load them into CUDA modules.

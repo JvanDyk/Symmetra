@@ -531,27 +531,36 @@ if(SYMM_BUILD_TESTS)
     add_executable(ssp_http_integration_test
         src/runtime/test_ssp_http_integration.cpp
         src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
     )
-    target_include_directories(ssp_http_integration_test PRIVATE src/)
-    target_link_libraries(ssp_http_integration_test PRIVATE CUDA::cudart)
+    add_dependencies(ssp_http_integration_test gen_encrypted_kernels)
+    target_include_directories(ssp_http_integration_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(ssp_http_integration_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP HTTP Server Integration test: ENABLED (run with ./Release/ssp_http_integration_test.exe)")
 
     # ── SSP Performance Benchmark (Day 5) ──────────────────────────────────────────────────
     add_executable(ssp_performance_benchmark
         src/runtime/test_ssp_performance_benchmark.cpp
         src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
     )
-    target_include_directories(ssp_performance_benchmark PRIVATE src/)
-    target_link_libraries(ssp_performance_benchmark PRIVATE CUDA::cudart)
+    add_dependencies(ssp_performance_benchmark gen_encrypted_kernels)
+    target_include_directories(ssp_performance_benchmark PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(ssp_performance_benchmark PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP Performance Benchmark: ENABLED (run with ./Release/ssp_performance_benchmark.exe)")
 
     # ── GPU Acceleration Integration Test ───────────────────────────────────────────────────
     add_executable(ssp_gpu_acceleration_test
         src/runtime/test_gpu_acceleration_integration.cpp
         src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
     )
-    target_include_directories(ssp_gpu_acceleration_test PRIVATE src/)
-    target_link_libraries(ssp_gpu_acceleration_test PRIVATE CUDA::cudart)
+    add_dependencies(ssp_gpu_acceleration_test gen_encrypted_kernels)
+    target_include_directories(ssp_gpu_acceleration_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(ssp_gpu_acceleration_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP GPU Acceleration Integration Test: ENABLED (run with ./Release/ssp_gpu_acceleration_test.exe)")
 
     # ── Socket I/O Bottleneck Analysis (Isolate Network Constraints) ──────────────────────
