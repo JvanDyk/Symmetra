@@ -442,6 +442,13 @@ if(SYMM_BUILD_TESTS)
     )
     target_include_directories(phase2_saturation_test PRIVATE src/)
     message(STATUS "Phase 2 GPU Saturation test: ENABLED (validates 32 workers, 256 streams configuration)")
+
+    # ── Phase 3: GPU Kernel Validation (Simulated GPU Workload) ──────────────────
+    add_executable(phase3_kernel_validation_test
+        src/runtime/test_phase3_gpu_kernel_validation.cpp
+    )
+    target_include_directories(phase3_kernel_validation_test PRIVATE src/)
+    message(STATUS "Phase 3 GPU Kernel Validation test: ENABLED (run with ./Release/phase3_kernel_validation_test.exe [workers] [duration])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
