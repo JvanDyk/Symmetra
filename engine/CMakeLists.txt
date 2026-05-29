@@ -497,6 +497,20 @@ if(SYMM_BUILD_TESTS)
         target_link_libraries(phase8_integration_test PRIVATE ws2_32)
     endif()
     message(STATUS "Phase 8 Integrated HTTP Pipeline test: ENABLED (run with ./Release/phase8_integration_test.exe [port] [workers] [duration_minutes])")
+
+    # ── Phase 8: GPU-First with CPU Fallback (Heavy GPU Work) ────────────────────────
+    add_executable(phase8_gpu_first_test
+        src/runtime/test_phase8_gpu_first.cpp
+    )
+    target_include_directories(phase8_gpu_first_test PRIVATE src/)
+    message(STATUS "Phase 8 GPU-First test: ENABLED (run with ./Release/phase8_gpu_first_test.exe [workers] [duration_minutes])")
+
+    # ── Phase 8: GPU-Realistic Latency (Real Timing Constraints) ──────────────────────
+    add_executable(phase8_gpu_realistic_test
+        src/runtime/test_phase8_gpu_realistic.cpp
+    )
+    target_include_directories(phase8_gpu_realistic_test PRIVATE src/)
+    message(STATUS "Phase 8 GPU-Realistic test: ENABLED (run with ./Release/phase8_gpu_realistic_test.exe [workers] [duration_minutes] [gpu_latency_us])")
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
