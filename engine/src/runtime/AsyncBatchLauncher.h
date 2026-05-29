@@ -26,8 +26,8 @@ namespace symm {
 struct BatchWorkItem {
     int routeId;
     std::vector<BatchRequest> requests;
-    BatchResult* result_out;  // pointer to result buffer (allocated by caller)
-    std::function<void()> onComplete;  // callback when batch launch finishes
+    std::shared_ptr<BatchResult> result;  // shared ownership of result buffer
+    std::function<void(const std::vector<BatchRequest>&, const BatchResult&)> onComplete;
 };
 
 class AsyncBatchLauncher {

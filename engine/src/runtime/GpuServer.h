@@ -25,6 +25,7 @@
 #include "BatchScheduler.h"
 #include "BatchContext.h"
 #include "RouteCache.h"
+#include "AsyncBatchLauncher.h"
 #include "parser/SymmParser.h"
 #include "protect/Aes256.h"
 
@@ -78,6 +79,7 @@ private:
 
     std::unique_ptr<StreamPool>  _streams;
     std::unique_ptr<ThreadPool>  _io;
+    std::unique_ptr<AsyncBatchLauncher> _batchLauncher;  // Non-blocking batch dispatch
 
     // Per-stream pinned host memory for async D2H response copy (single-thread path)
     std::vector<void*> _h_resps;

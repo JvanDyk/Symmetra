@@ -47,9 +47,9 @@ void AsyncBatchLauncher::workerLoop() {
         }
 
         // Launch batch (this may block on stream availability, which is OK on worker thread)
-        if (_launchFn) {
+        if (_launchFn && item.result) {
             try {
-                _launchFn(item.routeId, item.requests, *item.result_out);
+                _launchFn(item.routeId, item.requests, *item.result);
             } catch (const std::exception& e) {
                 fprintf(stderr, "[AsyncBatchLauncher] Launch failed: %s\n", e.what());
                 fflush(stderr);
@@ -60,9 +60,9 @@ void AsyncBatchLauncher::workerLoop() {
         }
 
         // Invoke completion callback if provided
-        if (item.onComplete) {
+        if (item.onComplete && item.result) {
             try {
-                item.onComplete();
+                item.onComplete(item.requests, *item.result);
             } catch (...) {
                 fprintf(stderr, "[AsyncBatchLauncher] Completion callback failed\n");
                 fflush(stderr);

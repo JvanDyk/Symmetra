@@ -129,13 +129,38 @@ GpuServer::GpuServer(const CompiledModule& mod,
             policy.maxQueueDepth      = 4096;
             policy.maxRoutes          = std::max((int)routes.size() + 1, 256);
 
-            // The launch callback captures `this` — called on the scheduler thread.
-            // It acquires a stream slot, runs the GPU batch, downloads results,
-            // and sends responses back to clients.
+            // Create async batch launcher with 8 worker threads
+            // Workers launch batches to streams without blocking scheduler
+            _batchLauncher = std::make_unique<AsyncBatchLauncher>(8);
+
+            // Set the actual launch function
+            _batchLauncher->setLaunchFn(
+                [this](int routeId, const std::vector<BatchRequest>& reqs, BatchResult& result) {
+                    this->batchLaunch(routeId, reqs, result);
+                }
+            );
+
+            // The scheduler callback posts batches to the launcher (non-blocking)
+            // Instead of calling batchLaunch directly (which blocks on stream.acquire),
+            // we queue it for a worker thread to launch asynchronously.
             auto fn = [this](int routeId,
                              const std::vector<BatchRequest>& reqs,
                              BatchResult& result) {
-                batchLaunch(routeId, reqs, result);
+                // Allocate result buffer on heap with shared ownership
+                auto result_buf = std::make_shared<BatchResult>();
+
+                // Create work item for async launching
+                BatchWorkItem item;
+                item.routeId = routeId;
+                item.requests = reqs;
+                item.result = result_buf;
+                item.onComplete = [this, reqs](const std::vector<BatchRequest>& requests, const BatchResult& res) {
+                    // After GPU batch completes, send responses to clients
+                    this->sendBatchResponses(requests, res);
+                };
+
+                // Post batch for async launching — returns immediately (non-blocking)
+                _batchLauncher->postBatch(std::move(item));
             };
 
             _scheduler = std::make_unique<BatchScheduler>(std::move(fn), policy);

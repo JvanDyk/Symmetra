@@ -63,6 +63,7 @@ set(ENGINE_SOURCES
     src/runtime/ThreadPool.cpp
     src/runtime/GpuWorker.cpp
     src/runtime/BatchScheduler.cpp  # Batch dispatch scheduling
+    src/runtime/AsyncBatchLauncher.cpp  # Non-blocking async batch launching
     src/runtime/DebugRingBuffer.cpp  # GPU debug logging
     src/runtime/DateNow.cpp  # Timestamp support
     # High-priority runtime features
