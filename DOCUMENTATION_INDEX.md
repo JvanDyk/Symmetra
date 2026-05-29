@@ -1,331 +1,143 @@
-# Symmetra Documentation Index
+﻿# Symmetra Documentation Index
 
-**Latest Update**: May 24, 2026 | **Phase**: 15 Complete | **Status**: ✅ Production Ready (Internal APIs)
-
----
-
-## 🚀 Quick Start
-
-### For Users
-1. **Website**: [`public/index.html`](public/index.html) — Start here for overview
-2. **Getting Started**: [`public/docs/getting-started.html`](public/docs/getting-started.html) — First server in 5 minutes
-3. **Installation**: See website "Installation" section or CLI `sym doctor`
-
-### For Developers
-1. **Architecture**: [`public/docs/engine-architecture-v2.html`](public/docs/engine-architecture-v2.html) — Technical deep dive
-2. **Language Coverage**: [`public/docs/js-ts-coverage.html`](public/docs/js-ts-coverage.html) — Feature matrix
-3. **Source Code**: [`engine/src/`](engine/src/) — Read the implementation
-
-### For DevOps/SREs
-1. **Production Readiness**: [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md) — Deployment guide
-2. **Security**: [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md) — Threat model
-3. **Session Summary**: [`SESSION_COMPLETION_SUMMARY.md`](SESSION_COMPLETION_SUMMARY.md) — What's ready
+Complete documentation for understanding and building with the Symmetra engine.
 
 ---
 
-## 📚 Documentation by Topic
+## 📚 All Documentation Files
 
-### Website & Marketing
+### For Getting Started Quickly
+**→ [QUICK_START_NODEJS.md](QUICK_START_NODEJS.md)** ⭐ START HERE
+- 5-minute quick start
+- Copy-paste code examples
+- Common patterns
+- Troubleshooting
+- API cheat sheet
 
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`public/index.html`](public/index.html) | Main consolidated website (hero, features, benchmarks, install) | Everyone | ✅ Live |
-| [`WEBSITE_README.md`](WEBSITE_README.md) | Site structure, maintenance, accessibility, deployment | Site admins | ✅ Complete |
+### For Understanding the Architecture
+**→ [ARCHITECTURE_AND_EXECUTION_MODES.md](ARCHITECTURE_AND_EXECUTION_MODES.md)** (600+ lines)
+- Executive summary
+- 4-layer system architecture
+- Three execution modes explained
+- What actually runs (XOR busywork)
+- Performance characteristics
+- Installation & deployment
+- FAQ
 
-### Getting Started
+### For Building Applications
+**→ [NODEJS_INTEGRATION_GUIDE.md](NODEJS_INTEGRATION_GUIDE.md)** (500+ lines)
+- Connection understanding
+- 6 common patterns with full code
+- API reference
+- Performance expectations
+- Troubleshooting
+- Best practices
+- Production deployment
 
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`public/docs/getting-started.html`](public/docs/getting-started.html) | First server tutorial, examples | New users | ✅ Available |
-| Installation info | CLI install commands (windows/linux) | All users | ✅ In website |
+### For Implementation
+**→ [nodejs-symmetra-app-template.js](nodejs-symmetra-app-template.js)** (600+ lines)
+- Production-ready SymmetraClient class
+- All methods: send(), sendBatch(), streamBatch(), loadTest()
+- Error handling & connection pooling
+- 4 working examples
 
-### Technical Documentation
-
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`public/docs/engine-architecture-v2.html`](public/docs/engine-architecture-v2.html) | Compiler pipeline, SIMT model, memory mgmt, concurrency | Developers, architects | ✅ Complete |
-| [`public/docs/js-ts-coverage.html`](public/docs/js-ts-coverage.html) | Supported language features, built-ins, incompatibilities | Developers | ✅ Complete |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Phase-by-phase development roadmap | Project managers | ✅ Complete |
-
-### Security & TLS
-
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md) | Threat model, security issues, production recommendations | Security, ops | ✅ Complete |
-| [`TLS_IMPROVEMENTS.md`](TLS_IMPROVEMENTS.md) | Technical changelog, code examples, test suite | Security, developers | ✅ Complete |
-| Security features in website | Overview of path traversal, rate limiting, timeouts, etc. | All | ✅ In website |
-
-### Production & Operations
-
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md) | Complete deployment checklist, tier assessment, rollback procedures | DevOps, SREs, decision makers | ✅ Complete |
-| [`SESSION_COMPLETION_SUMMARY.md`](SESSION_COMPLETION_SUMMARY.md) | What was delivered, metrics, next steps | All stakeholders | ✅ Complete |
-| Performance benchmarks | 1.2M req/s, 50µs exec, comparisons vs. Node/Bun/Deno | Everyone | ✅ In website & architecture |
-| Feature validation | 700+ tests, coverage report | QA, tech leads | ✅ In validation report |
-
-### Project History
-
-| Document | Purpose | Audience | Status |
-|----------|---------|----------|--------|
-| [`README.md`](README.md) | Project overview, quick start | Everyone | ✅ Main repo |
-| [`CHAMPION_HISTORY.md`](CHAMPION_HISTORY.md) | Development milestones, decisions | Project team | ✅ Archive |
-| [`RELEASE.md`](RELEASE.md) | Release notes, version history | Users, devs | ✅ Archive |
-| [`FEATURE_VALIDATION_REPORT.md`](FEATURE_VALIDATION_REPORT.md) | Test coverage details | QA | ✅ Archive |
+### Overview of All Documentation
+**→ [DOCUMENTATION_SUMMARY.md](DOCUMENTATION_SUMMARY.md)**
+- Maps all created files
+- Key insights documented
+- Honest findings about performance
+- Testing validation
 
 ---
 
-## 🎯 Find What You Need
+## 🎯 Quick Navigation by Use Case
 
-### "How do I...?"
+### "I want to understand what Symmetra is"
+1. Read: ARCHITECTURE_AND_EXECUTION_MODES.md → Executive Summary
+2. Key insight: It's a batch processing engine, not a traditional API server
 
-**...install Symmetra?**
-→ Website "Installation" section or [`getting-started.html`](public/docs/getting-started.html)
+### "I want to build a Node.js application right now"
+1. Start: QUICK_START_NODEJS.md (5 minutes)
+2. Copy: nodejs-symmetra-app-template.js to your project
+3. Choose pattern from: NODEJS_INTEGRATION_GUIDE.md
 
-**...write my first server?**
-→ [`getting-started.html`](public/docs/getting-started.html) tutorial
+### "I want to understand the performance numbers"
+1. Read: ARCHITECTURE_AND_EXECUTION_MODES.md → Performance Characteristics
+2. Read: NODEJS_INTEGRATION_GUIDE.md → Performance Expectations
+3. Key finding: 3.88M RPS is in-memory only; real HTTP+TLS = 644 RPS
 
-**...understand the architecture?**
-→ [`engine-architecture-v2.html`](public/docs/engine-architecture-v2.html)
-
-**...check if a feature is supported?**
-→ [`js-ts-coverage.html`](public/docs/js-ts-coverage.html)
-
-**...deploy to production?**
-→ [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md)
-
-**...understand the security?**
-→ [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md)
-
-**...see the benchmarks?**
-→ Website "Benchmarks" section or architecture document
-
-**...know if we're production ready?**
-→ [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md) or [`SESSION_COMPLETION_SUMMARY.md`](SESSION_COMPLETION_SUMMARY.md)
-
-**...understand the TLS implementation?**
-→ [`TLS_IMPROVEMENTS.md`](TLS_IMPROVEMENTS.md) for details, [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md) for assessment
+### "I'm deploying to production"
+1. Read: ARCHITECTURE_AND_EXECUTION_MODES.md → Deployment Guide
+2. Read: NODEJS_INTEGRATION_GUIDE.md → Production Deployment
 
 ---
 
-## 📊 Phase 15 Completion Status
+## ✅ What's Documented
 
-### Critical Features (14/14 ✅)
+### Architecture
+- ✅ 4-layer system design
+- ✅ Request flow (generation → batching → execution → HTTP)
+- ✅ Dispatcher and AsyncBatchLauncher
+- ✅ GPU kernel loading and execution
 
-| # | Feature | Status | Document | Code |
-|---|---------|--------|----------|------|
-| 1 | Exception handling | ✅ | architecture-v2 | `Codegen.cpp` |
-| 2 | BigInt literals | ✅ | coverage | `Parser.cpp` |
-| 3 | Map/Set equality | ✅ | coverage | `Codegen.cpp` |
-| 4 | JSON.parse | ✅ | coverage | `Codegen.cpp` |
-| 5 | 700+ tests | ✅ | validation-report | `test_codegen.cpp` |
-| 6 | Architecture docs | ✅ | architecture-v2 | (doc only) |
-| 7 | Path traversal | ✅ | readiness | `GpuServer.cpp` |
-| 8 | Body size cap | ✅ | readiness | `GpuServer.cpp` |
-| 9 | Exec timeout | ✅ | readiness | `GpuServer.cpp` |
-| 10 | Rate limiting | ✅ | readiness | `GpuServer.cpp` |
-| 11 | TLS encryption | ✅ | security docs | `Aes256.h`, `GpuServer.cpp` |
-| 12 | Console.log | ✅ | architecture-v2 | `DebugRingBuffer.h`, `Codegen.cpp` |
-| 13 | Security hardening | ✅ | readiness | Multiple files |
-| 14 | Production readiness | ✅ | readiness | (doc only) |
+### Execution Modes
+- ✅ CPU-Fast (Phase 7): 3.88M RPS in-memory, 644 RPS real HTTP
+- ✅ Balanced (Hybrid): 614K RPS (documented limitations)
+- ✅ GPU-Optimized (Phase 8): 300K RPS with simulated GPU work
 
-### Performance Metrics
+### Performance
+- ✅ In-memory benchmarks
+- ✅ Real HTTP performance
+- ✅ Latency distribution (p50, p95, p99)
+- ✅ Socket I/O overhead breakdown
+- ✅ TLS encryption overhead
 
-| Metric | Value | Source |
-|--------|-------|--------|
-| Peak throughput | 1.2M req/s | Architecture v2, website |
-| GPU execution | ~50µs | Architecture v2, website |
-| GC pauses | 0 ms | All docs |
-| Cold start | ~60ms | Website benchmarks |
-| Speedup vs. Bun | 4.4×–10.5× | Website benchmarks |
-| Test coverage | 700+ | Validation report |
+### Honest Assessment
+- ✅ What XOR busywork actually is
+- ✅ Why 3.88M → 644 RPS (socket I/O overhead)
+- ✅ Balanced mode architectural limitations
+- ✅ When to use each mode
 
 ---
 
-## 🔒 Security Status
+## 🚀 Getting Started (Copy-Paste)
 
-### Implemented
-✅ TLS 1.3 PSK-only mode (AES-256-GCM)  
-✅ HMAC-SHA256 key derivation  
-✅ Secure random generation (system entropy)  
-✅ Path traversal prevention  
-✅ Request body size limits (64 KB)  
-✅ Execution timeouts (5 seconds)  
-✅ Per-IP rate limiting (100 tok/s)  
+### Step 1: Start Engine
+`ash
+cd D:\GITHUB\SYMMETRA\engine\build\Release
+.\phase7_multi_route_test.exe 256 3
+`
 
-### Assessment
-- **Internal APIs**: ✅ Safe to deploy
-- **Public APIs**: ⚠️ Conditional (hardware TLS termination OR OpenSSL upgrade)
-- **Threat model**: See `TLS_SECURITY_ASSESSMENT.md`
-- **Improvements**: See `TLS_IMPROVEMENTS.md`
+### Step 2: Create app.js
+`javascript
+const SymmetraClient = require('./nodejs-symmetra-app-template.js');
 
----
+const client = new SymmetraClient({
+  host: 'localhost',
+  port: 8443,
+  rejectUnauthorized: false
+});
 
-## 🚨 Known Limitations
+(async () => {
+  const response = await client.send({
+    path: '/api/test',
+    body: { message: 'Hello Symmetra' }
+  });
+  
+  console.log('Response:', response.statusCode);
+  console.log('Latency:', response.latency, 'ms');
+})();
+`
 
-### Build Verification
-⏳ Pending CUDA 13.1/13.2 toolchain alignment
-- Cannot verify compilation until resolved
-- Fix: Update CMakeLists.txt to 13.1 or upgrade CUDA to 13.2
-
-### TLS (MVP-Grade)
-⚠️ Simplified crypto (safe for internal APIs)
-- Use hardware TLS termination OR upgrade to OpenSSL for public APIs
-- See `TLS_SECURITY_ASSESSMENT.md` for details
-
-### Future (Phase 16+)
-❌ Multi-GPU scaling  
-❌ Persistent storage  
-❌ Hot module reloading  
-❌ Perfect forward secrecy (DHE)  
+### Step 3: Run
+`ash
+node app.js
+`
 
 ---
 
-## 📦 How to Deploy
+**📚 Start with QUICK_START_NODEJS.md and you'll be up and running in 5 minutes.**
 
-### Public/Website
-```bash
-# Deploy the entire public/ directory
-cp -r public/* /var/www/html/
+**📖 Full technical documentation in ARCHITECTURE_AND_EXECUTION_MODES.md**
 
-# Or use CDN
-aws s3 sync public/ s3://my-bucket/
-
-# Or Docker
-docker run -v $PWD/public:/usr/share/nginx/html nginx:latest
-```
-
-### Engine Installation
-```bash
-# Windows
-winget install symmetra.sym
-
-# Linux
-curl -fsSL https://symmetra.dev/install.sh | bash
-
-# Verify
-sym doctor
-```
-
-### First Server
-```bash
-# Create server.ts
-cat > server.ts <<EOF
-import { Router } from '@symmetra/http';
-const app = new Router();
-app.get('/ping', (ctx) => ctx.json({ ok: true }));
-export default app;
-EOF
-
-# Run it
-sym ./server.ts
-```
-
----
-
-## 🎯 Recommended Reading Order
-
-### For Decision Makers
-1. Website hero (1 min)
-2. Website benchmarks (2 min)
-3. [`SESSION_COMPLETION_SUMMARY.md`](SESSION_COMPLETION_SUMMARY.md) (5 min)
-4. [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md) (10 min)
-
-### For Developers
-1. Website features (2 min)
-2. [`getting-started.html`](public/docs/getting-started.html) (10 min)
-3. [`engine-architecture-v2.html`](public/docs/engine-architecture-v2.html) (30 min)
-4. [`js-ts-coverage.html`](public/docs/js-ts-coverage.html) (20 min)
-5. Source code in `engine/src/` (60+ min)
-
-### For DevOps/SREs
-1. Website security section (5 min)
-2. [`PRODUCTION_READINESS_STATUS.md`](PRODUCTION_READINESS_STATUS.md) (15 min)
-3. [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md) (15 min)
-4. [`TLS_IMPROVEMENTS.md`](TLS_IMPROVEMENTS.md) (10 min)
-5. Operational guides (30+ min)
-
-### For Security Team
-1. [`TLS_SECURITY_ASSESSMENT.md`](TLS_SECURITY_ASSESSMENT.md) (20 min)
-2. [`TLS_IMPROVEMENTS.md`](TLS_IMPROVEMENTS.md) (20 min)
-3. Website security section (5 min)
-4. `engine/src/runtime/GpuServer.cpp` lines 750–850 (30 min)
-
----
-
-## 🔗 Cross-References
-
-### Website Sections Link To
-- Architecture Guide: For technical details
-- Getting Started: For tutorials
-- GitHub: For source code
-
-### Architecture Guide Links To
-- Language Coverage: For feature details
-- Benchmarks: For performance
-- GitHub: For code examples
-
-### Production Readiness Guide Links To
-- TLS Security Assessment: For threat model
-- Website: For feature overview
-- Implementation Plan: For history
-
----
-
-## 📝 Maintenance
-
-### Updating Documentation
-
-When features change:
-1. Update `public/index.html` — main site
-2. Update `public/docs/engine-architecture-v2.html` — technical details
-3. Update `PRODUCTION_READINESS_STATUS.md` — status
-4. Update this index if structure changes
-
-### Before Going Public
-1. ✅ Fix CUDA build issue
-2. ✅ Run full test suite
-3. ✅ Benchmark on your GPU
-4. ✅ Update installation guide
-5. ✅ Plan TLS upgrade (if needed)
-
----
-
-## 📞 Support & Issues
-
-- **GitHub Issues**: https://github.com/symmetra/symmetra/issues
-- **GitHub Discussions**: https://github.com/symmetra/symmetra/discussions
-- **Security Advisories**: https://github.com/symmetra/symmetra/security
-
----
-
-## 📋 Document Version Control
-
-| Document | Version | Last Updated | Phase |
-|----------|---------|--------------|-------|
-| `index.html` | 3.0 | 2026-05-24 | 15 |
-| `engine-architecture-v2.html` | 2.0 | 2026-05-24 | 15 |
-| `TLS_SECURITY_ASSESSMENT.md` | 1.0 | 2026-05-24 | 15 |
-| `TLS_IMPROVEMENTS.md` | 1.0 | 2026-05-24 | 15 |
-| `PRODUCTION_READINESS_STATUS.md` | 1.0 | 2026-05-24 | 15 |
-| `SESSION_COMPLETION_SUMMARY.md` | 1.0 | 2026-05-24 | 15 |
-| `WEBSITE_README.md` | 1.0 | 2026-05-24 | 15 |
-| `DOCUMENTATION_INDEX.md` | 1.0 | 2026-05-24 | 15 |
-
----
-
-## 🎯 Phase 15 Summary
-
-✅ **Status**: Complete  
-✅ **Features**: 14/14 critical features implemented  
-✅ **Security**: All hardening complete (with honest MVP assessment)  
-✅ **Documentation**: Comprehensive, cross-linked, production-ready  
-✅ **Website**: Consolidated, responsive, professional  
-⏳ **Build**: Pending CUDA toolchain fix  
-
-**Next Phase**: Phase 16 — Multi-GPU scaling, persistent storage, clustering
-
----
-
-*Last updated: May 24, 2026*  
-*Symmetra GPU Engine v1.0 — Production Ready for Internal APIs*
+**💻 Implementation patterns in NODEJS_INTEGRATION_GUIDE.md**
