@@ -61,11 +61,9 @@ void BatchScheduler::submitRequest(BatchRequest req) {
     }
 
     // Signal scheduler to wake immediately and evaluate batches
-    // This eliminates the 200µs polling delay
-    {
-        std::lock_guard<std::mutex> lock(_signalMutex);
-        _requestSignal.notify_one();
-    }
+    // No lock needed for notify_one() — it's thread-safe
+    // Lock-free signaling eliminates contention bottleneck
+    _requestSignal.notify_one();
 }
 
 // ── Scheduler loop ────────────────────────────────────────────────────────────

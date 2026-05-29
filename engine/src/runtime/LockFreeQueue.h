@@ -16,6 +16,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <thread>
 
 namespace symm {
 
@@ -32,7 +33,9 @@ public:
 
     // Non-blocking enqueue — returns false if queue full
     // Safe for multiple concurrent producers
+    // Uses exponential backoff on contention to prevent CPU waste
     bool tryEnqueue(const T& item) {
+        int backoff = 1;  // Start with minimal backoff
         while (true) {
             uint64_t tail = _tail.load(std::memory_order_relaxed);
             uint64_t next_tail = tail + 1;
@@ -50,7 +53,13 @@ public:
                 _buffer[tail % Capacity] = item;
                 return true;
             }
-            // CAS failed - another thread got this slot, retry
+
+            // CAS failed - exponential backoff to reduce contention
+            // Yield thread to allow other threads to make progress
+            for (int i = 0; i < backoff; i++) {
+                std::this_thread::yield();
+            }
+            backoff = std::min(backoff * 2, 128);  // Cap at 128 yields
         }
     }
 
