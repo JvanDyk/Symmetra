@@ -551,6 +551,18 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(ssp_performance_benchmark PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP Performance Benchmark: ENABLED (run with ./Release/ssp_performance_benchmark.exe)")
 
+    # ── SSP Phase 3: Batch Collection Test ───────────────────────────────────────────────────
+    add_executable(ssp_batch_collection_test
+        src/runtime/test_ssp_batch_collection.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(ssp_batch_collection_test gen_encrypted_kernels)
+    target_include_directories(ssp_batch_collection_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(ssp_batch_collection_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "SSP Batch Collection test: ENABLED (run with ./Release/ssp_batch_collection_test.exe)")
+
     # ── GPU Acceleration Integration Test ───────────────────────────────────────────────────
     add_executable(ssp_gpu_acceleration_test
         src/runtime/test_gpu_acceleration_integration.cpp
