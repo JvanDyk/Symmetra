@@ -21,6 +21,8 @@
 #include <atomic>
 #include <functional>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include "LockFreeQueue.h"
 
 namespace symm {
@@ -52,8 +54,9 @@ struct BatchPolicy {
     int minBatchSize = 32;           // 1 warp minimum
 
     // Maximum wait time before launching an under-filled batch.
-    // 1000us (1ms) = fast, non-blocking, reasonable batching window
-    int fillTimeoutUs = 1000;        // 1 millisecond = immediate launch
+    // 1ms = allow minimal request accumulation without blocking
+    // This is the key balance: wait long enough for batching, but not so long for latency
+    int fillTimeoutUs = 1000;        // 1 millisecond = minimal latency + light batching
 
     // Maximum number of queued requests per route before we apply back-pressure
     // to the accept thread (i.e. we stop accepting until some queues drain).
@@ -138,10 +141,12 @@ private:
     BatchLaunchFn _launchFn;
     BatchPolicy   _policy;
 
-    std::vector<RouteQueue> _queues;    // one per route slot (lock-free)
+    std::vector<RouteQueue> _queues;         // one per route slot (lock-free)
     std::thread             _thread;
     std::atomic<bool>       _stop{false};
     std::atomic<bool>       _running{false};
+    std::condition_variable _requestSignal;  // event-based wakeup on new request
+    std::mutex              _signalMutex;
 
     Metrics _metrics;
 };

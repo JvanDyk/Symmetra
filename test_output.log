@@ -1,0 +1,39 @@
+
+╔════════════════════════════════════════════════════════════════════════╗
+║  Lightning Load Test - GPU Max Throughput                              ║
+║  Duration: 60 seconds                                                  ║
+║  Parallel Workers: 32 threads                                          ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+🔥 Warmup (5 seconds)...
+  ✓ Warmup complete - 1905 requests processed
+
+⚡ Running load test (60 seconds)...
+
+╔════════════════════════════════════════════════════════════════════════╗
+║  RESULTS                                                                ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+Throughput:
+  ✓ Requests/sec (RPS):  658 RPS
+  ✓ Total requests:       39453 successful, 0 failed
+  ✓ Total time:           60.00 seconds
+
+Latency (milliseconds):
+  • Minimum:              0.07 ms
+  • Average:              24.35 ms
+  • P50 (median):         23.04 ms
+  • P95:                  38.53 ms
+  • P99:                  45.38 ms
+  • Maximum:              115.02 ms
+
+Performance vs Expected:
+  ❌ BELOW TARGET: 658 RPS (target: 100K+ RPS)
+
+Historical Baseline (RTX 5070, pre-async):
+  • Sustained: 711K RPS
+  • Peak burst: 3.2M RPS
+  • Expected with async: 100K-300K RPS
+
+╔════════════════════════════════════════════════════════════════════════╗
+

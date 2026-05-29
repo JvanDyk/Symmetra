@@ -59,6 +59,13 @@ void BatchScheduler::submitRequest(BatchRequest req) {
         fprintf(stderr, "[submitRequest] First request in queue, timer armed\n");
         fflush(stderr);
     }
+
+    // Signal scheduler to wake immediately and evaluate batches
+    // This eliminates the 200µs polling delay
+    {
+        std::lock_guard<std::mutex> lock(_signalMutex);
+        _requestSignal.notify_one();
+    }
 }
 
 // ── Scheduler loop ────────────────────────────────────────────────────────────
@@ -129,9 +136,12 @@ void BatchScheduler::schedulerLoop() {
             }
         }
 
-        // Sleep briefly (non-blocking poll interval)
-        // Use 100-500µs to balance CPU utilization with latency
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
+        // Event-based wait: wake immediately on new request, or timeout after 1ms
+        // This eliminates the 200µs polling delay and ensures fast response to bursts
+        {
+            std::unique_lock<std::mutex> lock(_signalMutex);
+            _requestSignal.wait_for(lock, std::chrono::microseconds(_policy.fillTimeoutUs));
+        }
     }
 
     // Drain: flush all remaining queued requests before exiting

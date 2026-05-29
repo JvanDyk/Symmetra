@@ -1,0 +1,3 @@
+symmetra: esbuild exited with error (status 1)
+  Check syntax errors in: D:\GITHUB\SYMMETRA\turing_lightning_server.ts
+symmetra: esbuild failed on 'D:\GITHUB\SYMMETRA\turing_lightning_server.ts'
