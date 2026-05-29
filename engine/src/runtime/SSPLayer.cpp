@@ -587,83 +587,69 @@ bool SSPLayer::encryptBatch(
         return false;
     }
 
-    // Prepare GPU batch input
-    // Copy plaintexts, keys, nonces to GPU
-    uint8_t* gpu_plaintexts_host = new uint8_t[batch_size * SSP_MAX_MESSAGE_SIZE];
-    uint8_t* gpu_keys_host = new uint8_t[batch_size * SSP_KEY_SIZE];
-    uint8_t* gpu_nonces_host = new uint8_t[batch_size * SSP_NONCE_SIZE];
-    uint32_t* gpu_lengths_host = new uint32_t[batch_size];
+    // Phase 2 Optimization: Use pinned host memory (UVA) for zero-copy access
+    // GPU can directly access pinned memory via Unified Virtual Addressing
+    uint8_t* h_plaintexts = gpu_buffer_->getPinnedPlaintexts();
+    uint8_t* h_keys = gpu_buffer_->getPinnedKeys();
+    uint8_t* h_nonces = gpu_buffer_->getPinnedNonces();
+    uint32_t* h_lengths = gpu_buffer_->getPinnedLengths();
+    uint8_t* h_ciphertexts = gpu_buffer_->getPinnedCiphertexts();
+    uint8_t* h_tags = gpu_buffer_->getPinnedTags();
 
-    // Populate GPU batch data
+    // Populate pinned memory buffers directly
+    // (No temporary allocations - directly use GPU-accessible pinned memory)
     for (uint32_t i = 0; i < batch_size; i++) {
-        // Copy plaintext
+        // Validate message size
         if (plaintext_lengths[i] > SSP_MAX_MESSAGE_SIZE) {
-            delete[] gpu_plaintexts_host;
-            delete[] gpu_keys_host;
-            delete[] gpu_nonces_host;
-            delete[] gpu_lengths_host;
             return false;
         }
-        std::memcpy(gpu_plaintexts_host + i * SSP_MAX_MESSAGE_SIZE,
+
+        // Copy plaintext to pinned buffer
+        std::memcpy(h_plaintexts + i * SSP_MAX_MESSAGE_SIZE,
                     plaintexts[i], plaintext_lengths[i]);
 
-        // Copy key
-        std::memcpy(gpu_keys_host + i * SSP_KEY_SIZE,
+        // Copy key to pinned buffer
+        std::memcpy(h_keys + i * SSP_KEY_SIZE,
                     sessions[i].session_key, SSP_KEY_SIZE);
 
-        // Generate nonce (counter-based)
-        uint8_t* nonce = gpu_nonces_host + i * SSP_NONCE_SIZE;
+        // Generate nonce in pinned buffer (counter-based)
+        uint8_t* nonce = h_nonces + i * SSP_NONCE_SIZE;
         std::memset(nonce, 0, SSP_NONCE_SIZE);
-        // Simple counter-based nonce: first 4 bytes = sequence number
         uint32_t seq = sessions[i].sequence_number;
         nonce[0] = (seq >> 0) & 0xFF;
         nonce[1] = (seq >> 8) & 0xFF;
         nonce[2] = (seq >> 16) & 0xFF;
         nonce[3] = (seq >> 24) & 0xFF;
 
-        // Store length
-        gpu_lengths_host[i] = plaintext_lengths[i];
+        // Store message length
+        h_lengths[i] = plaintext_lengths[i];
     }
 
-    // Call GPU kernel
+    // Call GPU kernel using pinned memory (direct GPU access via UVA, no PCIe copy)
     cudaError_t err = chacha20_poly1305_encrypt_batch(
-        gpu_plaintexts_host,
-        (uint8_t*)gpu_buffer_->getCiphertexts(),
-        gpu_keys_host,
-        gpu_nonces_host,
-        gpu_lengths_host,
+        h_plaintexts,
+        h_ciphertexts,
+        h_keys,
+        h_nonces,
+        h_lengths,
         batch_size,
-        (uint8_t*)gpu_buffer_->getTags()
+        h_tags
     );
 
     if (err != cudaSuccess) {
-        delete[] gpu_plaintexts_host;
-        delete[] gpu_keys_host;
-        delete[] gpu_nonces_host;
-        delete[] gpu_lengths_host;
         return false;
     }
 
-    // Synchronize to ensure completion
+    // Synchronize to ensure GPU completion
     gpu_buffer_->synchronize();
 
-    // Copy results back to host
-    uint8_t* gpu_ciphertexts_host = new uint8_t[batch_size * SSP_MAX_MESSAGE_SIZE];
-    uint8_t* gpu_tags_host = new uint8_t[batch_size * SSP_TAG_SIZE];
-
-    // In actual implementation: use GPU buffer's copyFromGPU
-    // For now: direct copy
-    cudaMemcpy(gpu_ciphertexts_host, gpu_buffer_->getCiphertexts(),
-               batch_size * SSP_MAX_MESSAGE_SIZE, cudaMemcpyDeviceToHost);
-    cudaMemcpy(gpu_tags_host, gpu_buffer_->getTags(),
-               batch_size * SSP_TAG_SIZE, cudaMemcpyDeviceToHost);
-
-    // Copy results to output buffers
+    // Phase 2: Results already in pinned memory (h_ciphertexts, h_tags)
+    // Copy directly to output buffers (single-step, no intermediate staging)
     for (uint32_t i = 0; i < batch_size; i++) {
         uint32_t msg_len = plaintext_lengths[i];
-        std::memcpy(ciphertexts[i], gpu_ciphertexts_host + i * SSP_MAX_MESSAGE_SIZE, msg_len);
+        std::memcpy(ciphertexts[i], h_ciphertexts + i * SSP_MAX_MESSAGE_SIZE, msg_len);
         ciphertext_lengths[i] = msg_len;
-        std::memcpy(tags[i], gpu_tags_host + i * SSP_TAG_SIZE, SSP_TAG_SIZE);
+        std::memcpy(tags[i], h_tags + i * SSP_TAG_SIZE, SSP_TAG_SIZE);
     }
 
     // Update metrics
@@ -672,14 +658,7 @@ bool SSPLayer::encryptBatch(
         total_bytes_encrypted += len;
     }
 
-    // Cleanup
-    delete[] gpu_plaintexts_host;
-    delete[] gpu_keys_host;
-    delete[] gpu_nonces_host;
-    delete[] gpu_lengths_host;
-    delete[] gpu_ciphertexts_host;
-    delete[] gpu_tags_host;
-
+    // No cleanup needed - using pinned memory from gpu_buffer_
     return true;
 }
 
@@ -702,21 +681,87 @@ bool SSPLayer::decryptBatch(
         return false;
     }
 
-    // Similar to encryptBatch but with decryption
-    // ... (implementation similar to encryptBatch)
+    // Phase 2 Optimization: Use pinned host memory (UVA) for zero-copy access
+    uint8_t* h_ciphertexts = gpu_buffer_->getPinnedPlaintexts();  // Reuse plaintext buffer for input
+    uint8_t* h_keys = gpu_buffer_->getPinnedKeys();
+    uint8_t* h_nonces = gpu_buffer_->getPinnedNonces();
+    uint32_t* h_lengths = gpu_buffer_->getPinnedLengths();
+    uint8_t* h_plaintexts = gpu_buffer_->getPinnedCiphertexts();   // Reuse ciphertext buffer for output
+    uint8_t* h_tags = gpu_buffer_->getPinnedTags();
+    bool* h_verify_results = new bool[batch_size];
 
-    verify_results.assign(batch_size, true);  // Placeholder
+    // Populate pinned memory buffers
     for (uint32_t i = 0; i < batch_size; i++) {
-        plaintext_lengths[i] = ciphertext_lengths[i];
-        std::memcpy(plaintexts[i], ciphertexts[i], ciphertext_lengths[i]);
+        if (ciphertext_lengths[i] > SSP_MAX_MESSAGE_SIZE) {
+            delete[] h_verify_results;
+            return false;
+        }
+
+        // Copy ciphertext to pinned buffer
+        std::memcpy(h_ciphertexts + i * SSP_MAX_MESSAGE_SIZE,
+                    ciphertexts[i], ciphertext_lengths[i]);
+
+        // Copy key to pinned buffer
+        std::memcpy(h_keys + i * SSP_KEY_SIZE,
+                    sessions[i].session_key, SSP_KEY_SIZE);
+
+        // Generate nonce in pinned buffer
+        uint8_t* nonce = h_nonces + i * SSP_NONCE_SIZE;
+        std::memset(nonce, 0, SSP_NONCE_SIZE);
+        uint32_t seq = sessions[i].sequence_number;
+        nonce[0] = (seq >> 0) & 0xFF;
+        nonce[1] = (seq >> 8) & 0xFF;
+        nonce[2] = (seq >> 16) & 0xFF;
+        nonce[3] = (seq >> 24) & 0xFF;
+
+        // Store message length
+        h_lengths[i] = ciphertext_lengths[i];
+
+        // Copy authentication tag
+        std::memcpy(h_tags + i * SSP_TAG_SIZE, tags[i], SSP_TAG_SIZE);
     }
 
+    // Call GPU kernel for decryption using pinned memory (direct GPU access via UVA)
+    cudaError_t err = chacha20_poly1305_decrypt_batch(
+        h_ciphertexts,
+        h_plaintexts,
+        h_keys,
+        h_nonces,
+        h_lengths,
+        batch_size,
+        h_tags,
+        h_verify_results
+    );
+
+    if (err != cudaSuccess) {
+        delete[] h_verify_results;
+        return false;
+    }
+
+    // Synchronize to ensure GPU completion
+    gpu_buffer_->synchronize();
+
+    // Copy results to output buffers and verification results
+    bool all_verified = true;
+    for (uint32_t i = 0; i < batch_size; i++) {
+        uint32_t msg_len = ciphertext_lengths[i];
+        std::memcpy(plaintexts[i], h_plaintexts + i * SSP_MAX_MESSAGE_SIZE, msg_len);
+        plaintext_lengths[i] = msg_len;
+        verify_results[i] = h_verify_results[i];
+        if (!h_verify_results[i]) {
+            all_verified = false;
+        }
+    }
+
+    delete[] h_verify_results;
+
+    // Update metrics
     total_messages_decrypted += batch_size;
     for (auto len : ciphertext_lengths) {
         total_bytes_decrypted += len;
     }
 
-    return true;
+    return all_verified;
 }
 
 void SSPLayer::printStats() const
