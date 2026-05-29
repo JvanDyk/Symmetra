@@ -338,6 +338,16 @@ if(SYMM_BUILD_TESTS)
     target_compile_definitions(http_load_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
     message(STATUS "HTTP Load tests: ENABLED (run with ./Release/http_load_test.exe [duration] [workers])")
 
+    # ── Real Batching Test (Direct BatchScheduler + concurrent workers) ────────
+    add_executable(real_batching_test
+        src/runtime/test_real_batching.cpp
+        src/runtime/BatchScheduler.cpp
+    )
+    target_include_directories(real_batching_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(real_batching_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(real_batching_test PRIVATE ${CUDAToolkit_LIBRARIES})
+    message(STATUS "Real Batching test: ENABLED (run with ./Release/real_batching_test.exe [duration] [workers])")
+
     # ── Max Throughput Test (Pure GPU batch performance) ────────────────────────
     add_executable(max_throughput_test
         src/runtime/test_max_throughput.cpp
