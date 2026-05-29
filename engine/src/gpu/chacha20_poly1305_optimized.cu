@@ -168,7 +168,7 @@ __device__ static void poly1305_mac(
  * blockIdx.x = message index
  * threadIdx.x = byte offset within message
  */
-__global__ void chacha20_poly1305_encrypt_batch_kernel(
+extern "C" __global__ void chacha20_poly1305_encrypt_batch_kernel(
     const uint8_t* __restrict__ plaintexts,       // [batch_size][MAX_MESSAGE_SIZE]
     uint8_t* __restrict__ ciphertexts,            // [batch_size][MAX_MESSAGE_SIZE]
     const uint8_t* __restrict__ keys,             // [batch_size][32]
@@ -203,7 +203,7 @@ __global__ void chacha20_poly1305_encrypt_batch_kernel(
  * Batch decryption kernel
  * Symmetric to encryption + MAC verification
  */
-__global__ void chacha20_poly1305_decrypt_batch_kernel(
+extern "C" __global__ void chacha20_poly1305_decrypt_batch_kernel(
     const uint8_t* __restrict__ ciphertexts,
     uint8_t* __restrict__ plaintexts,
     const uint8_t* __restrict__ keys,
