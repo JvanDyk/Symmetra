@@ -366,6 +366,60 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(stream_blocking_test PRIVATE src/)
     message(STATUS "Stream Blocking test: ENABLED (demonstrates AsyncBatchLauncher advantage)")
 
+    # ── Profiled Dispatch Test (Bottleneck breakdown) ─────────────────────────
+    add_executable(profiled_dispatch_test
+        src/runtime/test_profiled_dispatch.cpp
+        src/runtime/BatchScheduler.cpp
+    )
+    target_include_directories(profiled_dispatch_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(profiled_dispatch_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(profiled_dispatch_test PRIVATE ${CUDAToolkit_LIBRARIES})
+    message(STATUS "Profiled Dispatch test: ENABLED (measures scheduler overhead)")
+
+    # ── Sharded Batching Test (Queue contention reduction) ───────────────────────
+    add_executable(sharded_batching_test
+        src/runtime/test_sharded_batching.cpp
+        src/runtime/BatchScheduler.cpp
+    )
+    target_include_directories(sharded_batching_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(sharded_batching_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(sharded_batching_test PRIVATE ${CUDAToolkit_LIBRARIES})
+    message(STATUS "Sharded Batching test: ENABLED (tests contention reduction)")
+
+    # ── Direct Launch Test (AsyncBatchLauncher overhead analysis) ────────────────
+    add_executable(direct_launch_test
+        src/runtime/test_direct_launch.cpp
+        src/runtime/AsyncBatchLauncher.cpp
+    )
+    target_include_directories(direct_launch_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(direct_launch_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(direct_launch_test PRIVATE ${CUDAToolkit_LIBRARIES})
+    message(STATUS "Direct Launch test: ENABLED (measures AsyncBatchLauncher overhead)")
+
+    # ── Submission Overhead Test (Isolate bottleneck) ───────────────────────────
+    add_executable(submission_overhead_test
+        src/runtime/test_submission_overhead.cpp
+    )
+    target_include_directories(submission_overhead_test PRIVATE src/)
+    message(STATUS "Submission Overhead test: ENABLED (isolates component overhead)")
+
+    # ── Decentralized Batching Benchmark (OLD vs NEW architecture) ───────────────
+    add_executable(decentralized_batching_test
+        src/runtime/test_decentralized_batching.cpp
+        src/runtime/BatchScheduler.cpp
+    )
+    target_include_directories(decentralized_batching_test PRIVATE src/ ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_definitions(decentralized_batching_test PRIVATE "SYMM_OBFKEY=${SYMM_OBFKEY_VAL}")
+    target_link_libraries(decentralized_batching_test PRIVATE ${CUDAToolkit_LIBRARIES})
+    message(STATUS "Decentralized Batching test: ENABLED (compares old vs new architecture)")
+
+    # ── Parameter Tuning Framework (Find optimal config for 1M+ RPS) ───────────────
+    add_executable(tuning_framework_test
+        src/runtime/test_tuning_framework.cpp
+    )
+    target_include_directories(tuning_framework_test PRIVATE src/)
+    message(STATUS "Tuning Framework test: ENABLED (systematically optimizes parameters)")
+
     # ── Max Throughput Test (Pure GPU batch performance) ────────────────────────
     add_executable(max_throughput_test
         src/runtime/test_max_throughput.cpp

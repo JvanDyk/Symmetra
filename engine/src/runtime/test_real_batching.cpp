@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
     BatchPolicy policy;
     policy.preferredBatchSize = 256;
     policy.minBatchSize = 32;
-    policy.fillTimeoutUs = 1000;  // 1ms timeout with event-driven wakeup
+    policy.fillTimeoutUs = 1000;  // 1ms optimal balance for throughput
     policy.maxQueueDepth = 4096;
     policy.maxRoutes = 256;
 

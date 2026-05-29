@@ -26,6 +26,8 @@
 #include "BatchContext.h"
 #include "RouteCache.h"
 #include "AsyncBatchLauncher.h"
+#include "DispatcherShards.h"
+#include "ThreadLocalBatchBuffer.h"
 #include "parser/SymmParser.h"
 #include "protect/Aes256.h"
 
@@ -33,10 +35,10 @@ namespace symm {
 
 struct ServerOptions {
     int  port      = 8080;
-    int  streams   = 32;   // CUDA stream pool size
+    int  streams   = 128;  // CUDA stream pool size — Phase 3: 4x expansion for throughput
     // ioThreads must be >= streams for full GPU utilisation; each thread blocks on
     // cudaStreamSynchronize() while holding a stream slot.  Default matches streams.
-    int  ioThreads = 32;
+    int  ioThreads = 128;
     bool verbose   = false;
 
     // useBatch: prefer the warp-aligned batch dispatch path (symm_dispatch_batch).
@@ -135,12 +137,15 @@ private:
     std::vector<std::string> readDebugLogs();
     void clearDebugLogs();
 
-    // ── Batch dispatch infrastructure ─────────────────────────────────────────
-    // One BatchContext per stream slot — allocated once at startup, reused forever.
-    // _scheduler owns the thread that fires batches; valid only when dispatchBatch
-    // is available and useBatch is true.
+    // ── Batch dispatch infrastructure (NEW: Decentralized Architecture) ────────
+    // Dispatcher shards replace central BatchScheduler for better scalability
+    std::unique_ptr<DispatcherShards> _dispatcher;  // 8 dispatcher threads (tuned optimal)
+    static constexpr int NUM_DISPATCHER_SHARDS = 8;  // Optimal via parameter sweep
+    static constexpr int BUFFER_TIMEOUT_MS = 1;     // Aggressive flush (1ms)
+
+    // Legacy batch context (kept for backward compatibility, not used in new path)
     std::vector<BatchContext>           _batchCtxs;
-    std::unique_ptr<BatchScheduler>     _scheduler;
+    std::unique_ptr<BatchScheduler>     _scheduler;  // OLD: kept but not used
 
     int _listenFd = -1;
     std::atomic<bool> _running{ false };

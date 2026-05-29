@@ -129,6 +129,17 @@ GpuServer::GpuServer(const CompiledModule& mod,
             policy.maxQueueDepth      = 4096;
             policy.maxRoutes          = std::max((int)routes.size() + 1, 256);
 
+            // Create dispatcher shards (NEW ARCHITECTURE)
+            // 16 parallel dispatcher threads, eliminates central scheduler bottleneck
+            _dispatcher = std::make_unique<DispatcherShards>(NUM_DISPATCHER_SHARDS);
+            _dispatcher->setLaunchFn([this](int routeId, const std::vector<BatchRequest>& reqs, BatchResult& result) {
+                this->batchLaunch(routeId, reqs, result);
+            });
+
+            if (opts.verbose) {
+                std::printf("[symm] Dispatcher shards: %d parallel threads\n", NUM_DISPATCHER_SHARDS);
+            }
+
             // Create async batch launcher with 8 worker threads
             // Workers launch batches to streams without blocking scheduler
             _batchLauncher = std::make_unique<AsyncBatchLauncher>(8);
@@ -188,12 +199,25 @@ GpuServer::GpuServer(const CompiledModule& mod,
 }
 
 GpuServer::~GpuServer() {
-    // Drain and stop the batch scheduler before freeing VRAM backing it.
+    // Drain and stop the new dispatcher shards (non-blocking, fast)
+    if (_dispatcher) {
+        _dispatcher->stop();
+        _dispatcher.reset();
+    }
+
+    // Drain and stop the legacy batch scheduler (for backward compatibility)
     // stop() blocks until all in-flight batches have sent their responses.
     if (_scheduler) {
         _scheduler->stop();
         _scheduler.reset();
     }
+
+    // Stop async batch launcher
+    if (_batchLauncher) {
+        _batchLauncher->stop();
+        _batchLauncher.reset();
+    }
+
     for (auto& bctx : _batchCtxs) bctx.free();
     _batchCtxs.clear();
 
@@ -668,7 +692,7 @@ void GpuServer::acceptLoopBatch() {
             continue;
         }
 
-        // Hand off to the batch scheduler.
+        // NEW ARCHITECTURE: Decentralized batching with thread-local buffers
         // IMPORTANT: do NOT close connFd here — it is now owned by the BatchRequest.
         BatchRequest br;
         br.fd            = connFd;
@@ -683,9 +707,28 @@ void GpuServer::acceptLoopBatch() {
         br.contentType   = req.contentType;
         br.userAgent     = req.userAgent;
 
-        fprintf(log, "[acceptLoopBatch] Submitting request to scheduler\n");
-        fflush(log);
-        _scheduler->submitRequest(std::move(br));
+        // Get thread-local buffer (one per accept thread, zero synchronization)
+        // Using TUNED OPTIMAL parameters: 8 shards, 1ms timeout
+        auto& buf = getLocalBatchBuffer(
+            256,                      // preferredBatchSize
+            BUFFER_TIMEOUT_MS,        // timeoutMs (optimally tuned to 1ms)
+            [this](std::vector<BatchRequest>&& batch) {
+                // Callback: when buffer flushes, post batch to dispatcher shard
+                if (batch.empty()) return;
+                int worker_id = static_cast<int>(std::hash<std::thread::id>()(std::this_thread::get_id()));
+                int shard = worker_id % NUM_DISPATCHER_SHARDS;
+                _dispatcher->postBatch(shard, std::move(batch));
+            }
+        );
+
+        // Fast path: accumulate request in thread-local buffer (no synchronization)
+        bool isFull = buf.submitRequest(std::move(br));
+
+        // If buffer is full, force flush immediately
+        if (isFull) {
+            buf.forceFlush();
+        }
+
         // connFd is now owned by the BatchRequest — do NOT use it below
     }
 }
