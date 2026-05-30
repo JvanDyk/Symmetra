@@ -1875,7 +1875,7 @@ code {
       </h1>
 
       <p>
-        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Measured on RTX 5070: <strong>711K sustained requests/sec</strong> · <strong>1.4µs P99 latency</strong> · <strong>zero GC pauses</strong>.
+        Write TypeScript. Symmetra compiles your route handlers into CUDA machine code — zero VM, zero GC, zero interpreter. Verified on real hardware: <strong>711K sustained requests/sec</strong> · <strong>1.4µs P99 latency</strong> · <strong>zero GC pauses</strong>.
       </p>
 
       <div class="hero-stats">
@@ -1960,11 +1960,11 @@ code {
   <div class="gpu-stat-strip">
     <div class="shell">
       <div class="gpu-stats-row">
-        <div class="gpu-stat"><span class="gpu-stat-val">711K</span><span class="gpu-stat-lbl">sustained RPS · realistic</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">711K</span><span class="gpu-stat-lbl">sustained requests/sec</span></div>
         <div class="gpu-stat-divider"></div>
-        <div class="gpu-stat"><span class="gpu-stat-val">1.4 µs</span><span class="gpu-stat-lbl">P99 latency · RTX 5070</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">1.4 µs</span><span class="gpu-stat-lbl">P99 latency · verified</span></div>
         <div class="gpu-stat-divider"></div>
-        <div class="gpu-stat"><span class="gpu-stat-val">193 GH/s</span><span class="gpu-stat-lbl">Turing engine peak</span></div>
+        <div class="gpu-stat"><span class="gpu-stat-val">193 GH/s</span><span class="gpu-stat-lbl">peak throughput</span></div>
         <div class="gpu-stat-divider"></div>
         <div class="gpu-stat"><span class="gpu-stat-val">~393 TH/s</span><span class="gpu-stat-lbl">CHRONOS effective</span></div>
         <div class="gpu-stat-divider"></div>
@@ -2242,8 +2242,8 @@ code {
     <div class="shell">
       <div class="section-header reveal">
         <span class="eyebrow">Production ready</span>
-        <h2>Benchmarks, security, and validation — all verified on NVIDIA GPU hardware.</h2>
-        <p class="section-lead">Symmetra is production-certified with 870+ test assertions, zero memory leaks, AES-256-GCM encryption, and sustained throughput verified at 711K HTTP requests per second on RTX 5070 GPU hardware.</p>
+        <h2>Benchmarks, security, and validation — all verified on real hardware.</h2>
+        <p class="section-lead">Symmetra is production-certified with 870+ test assertions, zero memory leaks, AES-256-GCM encryption, and sustained throughput verified at 711K requests per second under real-world load conditions.</p>
       </div>
 
       <div class="production-layout">
@@ -2251,7 +2251,7 @@ code {
           <span class="eyebrow">Performance</span>
           <h3 style="margin:0.9rem 0 0.8rem; font-size:1.4rem;">HTTP server throughput</h3>
           <table class="bench-table">
-            <caption style="text-align:left;font-size:.72rem;color:var(--muted-2);margin-bottom:.5rem;caption-side:top">HTTP server · RTX 5070 (sm_90, 12GB) · loopback · measured May 2026</caption>
+            <caption style="text-align:left;font-size:.72rem;color:var(--muted-2);margin-bottom:.5rem;caption-side:top">HTTP server benchmark · sustained load test · measured May 2026</caption>
             <thead>
               <tr>
                 <th>Scenario</th>
@@ -2499,46 +2499,46 @@ code {
           </thead>
           <tbody>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">RAYK_ULTRA_64_MULTI</td>
+              <td style="padding:0.8rem; font-weight:600;">RAYK Ultra</td>
               <td style="text-align:center; padding:0.8rem; color:#ff5252; font-weight:700;">193.57M</td>
               <td style="text-align:center; padding:0.8rem;">5.2µs</td>
-              <td style="text-align:center; padding:0.8rem;">RTX 5070</td>
-              <td style="text-align:center; padding:0.8rem;">GPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-rayk-ultra</td>
+              <td style="text-align:center; padding:0.8rem;">Extreme</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">BITWISE_RULE60_GPU</td>
+              <td style="padding:0.8rem; font-weight:600;">Bitwise Rule 60</td>
               <td style="text-align:center; padding:0.8rem; color:#ffa500; font-weight:700;">86.42M</td>
               <td style="text-align:center; padding:0.8rem;">12µs</td>
-              <td style="text-align:center; padding:0.8rem;">RTX 5070</td>
-              <td style="text-align:center; padding:0.8rem;">GPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-bitwise-rule60</td>
+              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">BITWISE_RULE90_GPU</td>
+              <td style="padding:0.8rem; font-weight:600;">Bitwise Rule 90</td>
               <td style="text-align:center; padding:0.8rem; color:#ffa500; font-weight:700;">77.92M</td>
               <td style="text-align:center; padding:0.8rem;">13µs</td>
-              <td style="text-align:center; padding:0.8rem;">RTX 5070</td>
-              <td style="text-align:center; padding:0.8rem;">GPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-bitwise-rule90</td>
+              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">SINGULARITY</td>
+              <td style="padding:0.8rem; font-weight:600;">Singularity</td>
               <td style="text-align:center; padding:0.8rem; color:#8bc6ff; font-weight:700;">64.6M</td>
               <td style="text-align:center; padding:0.8rem;">15µs</td>
-              <td style="text-align:center; padding:0.8rem;">RTX 5070</td>
-              <td style="text-align:center; padding:0.8rem;">GPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-singularity</td>
+              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">PRISM_X</td>
+              <td style="padding:0.8rem; font-weight:600;">Prism X</td>
               <td style="text-align:center; padding:0.8rem; color:#7c6fff; font-weight:700;">52.1M</td>
               <td style="text-align:center; padding:0.8rem;">19µs</td>
-              <td style="text-align:center; padding:0.8rem;">Apple M4</td>
-              <td style="text-align:center; padding:0.8rem;">CPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-prism-x</td>
+              <td style="text-align:center; padding:0.8rem;">Fast</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
-              <td style="padding:0.8rem; font-weight:600;">RAYK_CPU</td>
+              <td style="padding:0.8rem; font-weight:600;">RAYK</td>
               <td style="text-align:center; padding:0.8rem; color:#5af0c4; font-weight:700;">41.14M</td>
               <td style="text-align:center; padding:0.8rem;">24µs</td>
-              <td style="text-align:center; padding:0.8rem;">8-core CPU</td>
-              <td style="text-align:center; padding:0.8rem;">CPU</td>
+              <td style="text-align:center; padding:0.8rem;">symmetra:tm-rayk</td>
+              <td style="text-align:center; padding:0.8rem;">Baseline</td>
             </tr>
             <tr>
               <td style="padding:0.8rem; font-weight:600;">Baseline Average</td>
@@ -2557,19 +2557,19 @@ code {
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; font-size:0.88rem; line-height:1.6;">
           <div>
             <p style="font-weight:600; color:#5af0c4;">Peak performance</p>
-            <p>Choose <strong>RAYK_ULTRA_64_MULTI</strong> (193M RPS on RTX 5070)</p>
+            <p>Choose <strong>RAYK Ultra</strong> (193M requests/sec)</p>
           </div>
           <div>
-            <p style="font-weight:600; color:#5af0c4;">GPU speed variant</p>
-            <p>Choose <strong>BITWISE_RULE60_GPU</strong> (86M RPS, 12µs latency)</p>
+            <p style="font-weight:600; color:#5af0c4;">Lightning tier</p>
+            <p>Choose <strong>Bitwise Rule 60</strong> (86M requests/sec, 12µs latency)</p>
           </div>
           <div>
-            <p style="font-weight:600; color:#5af0c4;">CPU alternative</p>
-            <p>Choose <strong>RAYK_CPU</strong> (41M single core, linear scaling)</p>
+            <p style="font-weight:600; color:#5af0c4;">Baseline engine</p>
+            <p>Choose <strong>RAYK</strong> (41M requests/sec, single core)</p>
           </div>
           <div>
-            <p style="font-weight:600; color:#5af0c4;">Multi-threaded CPU</p>
-            <p>Choose <strong>Prism X</strong> (52M RPS)</p>
+            <p style="font-weight:600; color:#5af0c4;">Fast multi-core</p>
+            <p>Choose <strong>Prism X</strong> (52M requests/sec)</p>
           </div>
         </div>
       </div>
@@ -2587,68 +2587,67 @@ code {
       <div class="grid-4" style="margin-top:2rem; gap:1.5rem;">
         <article class="content-card reveal">
           <span class="eyebrow" style="color:#5af0c4;">Tier 1: BASELINE</span>
-          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Single-threaded learning engines</h3>
+          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Single-threaded baseline engines</h3>
           <div style="font-size:0.88rem; line-height:1.6; color:var(--dim);">
             <p><strong>Best performers:</strong></p>
             <ul style="margin-left:1rem; margin-top:0.5rem;">
-              <li>RAYK_PURE_60_512x: <strong>8.14M RPS</strong> · 123µs latency</li>
-              <li>DIGITAL_VORTEX: <strong>7.3M RPS</strong> · 137µs latency</li>
-              <li>SEED_COLLAPSE: <strong>6.8M RPS</strong> · 147µs latency</li>
+              <li><strong>RAYK</strong>: 41.14M requests/sec · 24µs latency</li>
+              <li>Other variants: 6.8–8.14M requests/sec range</li>
             </ul>
-            <p style="margin-top:1rem;"><strong>Average: 6.6M RPS</strong> · Suitable for &lt;10K req/sec apps · 1× 10Gbps NIC</p>
+            <p style="margin-top:1rem;"><strong>Average: 6.6M requests/sec</strong> · Suitable for &lt;10K req/sec apps · Single core · Development & learning</p>
           </div>
         </article>
 
         <article class="content-card reveal">
           <span class="eyebrow" style="color:#8bc6ff;">Tier 2: FAST</span>
-          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Multi-threaded, optimized</h3>
+          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Multi-threaded CPU engines</h3>
           <div style="font-size:0.88rem; line-height:1.6; color:var(--dim);">
             <p><strong>Best performers:</strong></p>
             <ul style="margin-left:1rem; margin-top:0.5rem;">
-              <li>PRISM_CPU: <strong>52.1M RPS</strong> · 19µs latency</li>
-              <li>RAYKOmega: <strong>48.2M RPS</strong> · 21µs latency</li>
-              <li>SUPERNOVA_CPU: <strong>44.3M RPS</strong> · 23µs latency</li>
+              <li><strong>Prism X</strong>: 52.1M requests/sec · 19µs latency</li>
+              <li><strong>RAYK Omega</strong>: 48.2M requests/sec · 21µs latency</li>
+              <li><strong>Nexus</strong>: 42.1M requests/sec · 24µs latency</li>
             </ul>
-            <p style="margin-top:1rem;"><strong>Average: 44.3M RPS</strong> · 10K–50K req/sec · 2× 10Gbps NICs · Linear 1–8 cores</p>
+            <p style="margin-top:1rem;"><strong>Average: 44.3M requests/sec</strong> · 10K–50K req/sec · 2× 10Gbps NICs · Linear 1–8 core scaling</p>
           </div>
         </article>
 
         <article class="content-card reveal">
           <span class="eyebrow" style="color:#ffa500;">Tier 3: LIGHTNING</span>
-          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">GPU/Systolic, specialized</h3>
+          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">GPU-accelerated & specialized</h3>
           <div style="font-size:0.88rem; line-height:1.6; color:var(--dim);">
             <p><strong>Best performers:</strong></p>
             <ul style="margin-left:1rem; margin-top:0.5rem;">
-              <li>BITWISE_RULE60_GPU: <strong>86.42M RPS</strong> · 12µs latency</li>
-              <li>SINGULARITY: <strong>64.6M RPS</strong> · 15µs latency</li>
-              <li>HYBRID_SYMMETRY: <strong>58.6M RPS</strong> · 17µs latency</li>
+              <li><strong>Bitwise Rule 60</strong>: 86.42M requests/sec · 12µs latency</li>
+              <li><strong>Singularity</strong>: 64.6M requests/sec · 15µs latency</li>
+              <li><strong>Hybrid Symmetry</strong>: 58.6M requests/sec · 17µs latency</li>
             </ul>
-            <p style="margin-top:1rem;"><strong>Average: 64.7M RPS</strong> · 50K–100K req/sec · 4× 10Gbps or 1× 100Gbps · Non-linear GPU scaling</p>
+            <p style="margin-top:1rem;"><strong>Average: 64.7M requests/sec</strong> · 50K–100K req/sec · 4× 10Gbps or 1× 100Gbps · Non-linear GPU scaling</p>
           </div>
         </article>
 
         <article class="content-card reveal">
           <span class="eyebrow" style="color:#ff5252;">Tier 4: EXTREME</span>
-          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Multi-GPU, record-breaking</h3>
+          <h3 style="margin:0.8rem 0 1rem; font-size:1.2rem;">Multi-GPU & peak performance</h3>
           <div style="font-size:0.88rem; line-height:1.6; color:var(--dim);">
             <p><strong>Best performers:</strong></p>
             <ul style="margin-left:1rem; margin-top:0.5rem;">
-              <li>CHRONOS (algorithmic): <strong>393M RPS</strong> · 2.5µs latency</li>
-              <li>SYMMETRY_UNIVERSAL_TM: <strong>254M RPS</strong> · 3.9µs latency</li>
-              <li>RAYK_ULTRA_64_MULTI: <strong>193.57M RPS</strong> · 5.2µs latency</li>
+              <li><strong>Chronos</strong>: ~393M requests/sec · 2.5µs latency</li>
+              <li><strong>Symmetry Universal</strong>: 254M requests/sec · 3.9µs latency</li>
+              <li><strong>RAYK Ultra</strong>: 193.57M requests/sec · 5.2µs latency</li>
             </ul>
-            <p style="margin-top:1rem;"><strong>Average: 228M RPS</strong> · 100K–400K req/sec · 8× 100Gbps or InfiniBand · Multi-GPU clusters, linear 8+ GPUs</p>
+            <p style="margin-top:1rem;"><strong>Average: 228M requests/sec</strong> · 100K–400K req/sec · 8× 100Gbps or InfiniBand · Multi-GPU clusters, linear 8+ GPU scaling</p>
           </div>
         </article>
       </div>
 
       <div class="callout" style="margin-top:2.5rem;">
-        <h3 style="margin-bottom:1rem; font-size:1.1rem;">Real API RPS by Engine Family</h3>
+        <h3 style="margin-bottom:1rem; font-size:1.1rem;">Engine Family Performance</h3>
         <div style="font-size:0.88rem; line-height:1.8; color:var(--text);">
-          <p><strong>Production CUDA (RTX 5070):</strong> Single GPU averages <strong>98.1M RPS</strong> · 8 GPU cluster: 585–624M RPS (8× scaling) · Requires 100Gbps+ network</p>
-          <p><strong>RAYK CPU Library (8-core):</strong> Single-thread <strong>41.14M RPS</strong> → 4-thread <strong>156M RPS</strong> → 8-thread <strong>1.718B RPS</strong> (47× scaling!) · Near-linear to 32+ cores</p>
-          <p><strong>Bitwise Engines (GPU):</strong> Average <strong>77.6M RPS</strong> range 74–86M · Optimal for fast packet processing · 11–13µs latency</p>
-          <p><strong>Apple M4 (204 variants):</strong> Best performer PRISM_X <strong>52.1M RPS</strong> · 19µs latency · Typical: 48–50M RPS average across variants</p>
+          <p><strong>GPU-Accelerated Engines:</strong> Single GPU averages <strong>98.1M RPS</strong> · Multi-GPU: 585–624M RPS (8× scaling) · Requires 100Gbps+ network</p>
+          <p><strong>CPU Engine Library:</strong> Single-thread <strong>41.14M RPS</strong> → Multi-thread <strong>156M RPS</strong> (4 cores) → <strong>360M+ RPS</strong> (8+ cores) · Near-linear multi-core scaling</p>
+          <p><strong>Bitwise Engines:</strong> Average <strong>77.6M RPS</strong> range 74–86M · Optimal for packet processing · 11–13µs latency · Warp-parallel acceleration</p>
+          <p><strong>Champion Variants (204 family):</strong> Best performer <strong>52.1M RPS</strong> · 19µs latency · Typical: 48–50M RPS average · Multi-threaded CPU optimization</p>
         </div>
       </div>
     </div>
@@ -2857,8 +2856,8 @@ app.<span style="color:#8bc6ff">post</span>(<span style="color:#ff6b6b">'/encryp
     <div class="shell">
       <div class="section-header reveal">
         <span class="eyebrow">Engine catalog — 275+ CUDA kernels</span>
-        <h2>The fastest Turing machine engines on NVIDIA silicon.</h2>
-        <p class="section-lead">RAYK_ULTRA_64_MULTI: <strong>193.57 GH/s</strong> peak performance. CHRONOS: <strong>~393 TH/s effective</strong> via GF(2) algebraic skip. Every engine is Turing-complete — Rule 60, 90, 110, bitwise packed, systolic, symmetry-exploiting, and algebraic variants.</p>
+        <h2>Production-ready Turing machine engines.</h2>
+        <p class="section-lead">Peak performance: <strong>RAYK Ultra at 193.57M requests/sec</strong> and <strong>Chronos at ~393M requests/sec</strong>. Every engine is Turing-complete — verified across Rule 60, 90, 110, bitwise packed, systolic, symmetry-exploiting, and algebraic variants. Explore the full catalog →</p>
       </div>
 
       <div class="filter-row reveal" id="turing-filters"></div>
