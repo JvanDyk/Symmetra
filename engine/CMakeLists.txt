@@ -577,6 +577,18 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(ssp_http_dispatcher_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "SSP HTTP Dispatcher test: ENABLED (run with ./Release/ssp_http_dispatcher_test.exe)")
 
+    # ── SSP Phase 3 Full Validation Test ──────────────────────────────────────────────────────
+    add_executable(phase3_full_validation_test
+        src/runtime/test_phase3_full_validation.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(phase3_full_validation_test gen_encrypted_kernels)
+    target_include_directories(phase3_full_validation_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(phase3_full_validation_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "Phase 3 Full Validation test: ENABLED (run with ./Release/phase3_full_validation_test.exe)")
+
     # ── GPU Acceleration Integration Test ───────────────────────────────────────────────────
     add_executable(ssp_gpu_acceleration_test
         src/runtime/test_gpu_acceleration_integration.cpp
