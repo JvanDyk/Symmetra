@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Migration guide for updating to the new Symmetra engine naming convention. Learn how old names map to new standardized identifiers.">
+  <title>Migration Guide — Symmetra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
+      color: #e5e7eb;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .header {
+      background: rgba(10, 14, 20, 0.95);
+      border-bottom: 1px solid rgba(116, 152, 255, 0.15);
+      padding: 2rem 1rem;
+      margin-bottom: 3rem;
+    }
+    .header-content {
+      max-width: 1000px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .header-nav {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+    .header-nav a {
+      color: #5af0c4;
+      text-decoration: none;
+    }
+    .header-nav a:hover { color: #fff; }
+    h1 {
+      font-size: 2.2rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header p {
+      color: #9ca3af;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .main {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 1rem 4rem;
+    }
+    .section {
+      margin-bottom: 3rem;
+    }
+    h2 {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+      color: #5af0c4;
+    }
+    h3 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      margin-top: 2rem;
+      color: #8bc6ff;
+    }
+    p {
+      margin-bottom: 1rem;
+      color: #d1d5db;
+      line-height: 1.7;
+    }
+    .mapping-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid rgba(116, 152, 255, 0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .mapping-table th {
+      background: rgba(116, 152, 255, 0.1);
+      padding: 1rem;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(116, 152, 255, 0.2);
+      color: #5af0c4;
+    }
+    .mapping-table td {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(116, 152, 255, 0.1);
+    }
+    .mapping-table tr:last-child td {
+      border-bottom: none;
+    }
+    .old-name {
+      font-family: 'IBM Plex Mono', monospace;
+      color: #ffa500;
+      font-weight: 600;
+    }
+    .new-name {
+      font-family: 'IBM Plex Mono', monospace;
+      color: #5af0c4;
+      font-weight: 600;
+    }
+    .code-block {
+      background: rgba(0, 0, 0, 0.4);
+      border-left: 3px solid #5af0c4;
+      padding: 1rem;
+      margin: 1.5rem 0;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.9rem;
+      color: #d1d5db;
+    }
+    .highlight {
+      background: rgba(90, 240, 196, 0.1);
+      color: #5af0c4;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+    }
+    .callout {
+      background: rgba(124, 111, 255, 0.1);
+      border-left: 4px solid #7c6fff;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      border-radius: 4px;
+    }
+    .callout strong {
+      color: #7c6fff;
+    }
+    ul, ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    li {
+      margin-bottom: 0.5rem;
+    }
+    .tier-group {
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid rgba(116, 152, 255, 0.15);
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      border-radius: 8px;
+    }
+    .tier-badge {
+      display: inline-block;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 1rem;
+      margin-bottom: 1rem;
+    }
+    .tier-baseline { background: rgba(90, 240, 196, 0.2); color: #5af0c4; }
+    .tier-fast { background: rgba(139, 198, 255, 0.2); color: #8bc6ff; }
+    .tier-lightning { background: rgba(255, 165, 0, 0.2); color: #ffa500; }
+    .tier-extreme { background: rgba(255, 82, 82, 0.2); color: #ff5252; }
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      color: #6b7280;
+      border-top: 1px solid rgba(116, 152, 255, 0.1);
+      margin-top: 3rem;
+    }
+    .footer a {
+      color: #5af0c4;
+      text-decoration: none;
+    }
+    @media (max-width: 768px) {
+      h1 { font-size: 1.6rem; }
+      .mapping-table { font-size: 0.9rem; }
+      .mapping-table td, .mapping-table th { padding: 0.7rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-content">
+      <div class="header-nav">
+        <a href="/">Home</a>
+        <a href="/engines.html">Catalog</a>
+        <a href="/migration-guide.html">Migration</a>
+        <a href="/#faq">FAQ</a>
+      </div>
+      <h1>Engine Naming Migration Guide</h1>
+      <p>Learn how to update your code to use the new standardized Turing machine engine names</p>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Overview -->
+    <div class="section">
+      <h2>Overview</h2>
+      <p>Symmetra has standardized engine naming to be more user-friendly and Docker-compatible. All internal platform references (GPU/CPU/Apple/hardware specifics) have been removed from public-facing names.</p>
+      <div class="callout">
+        <strong>New Format:</strong> <span class="highlight">symmetra:tm-{engine-name}:{version}</span><br>
+        <strong>Example:</strong> <span class="highlight">symmetra:tm-rayk-ultra:1.0.0</span>
+      </div>
+    </div>
+
+    <!-- Mapping -->
+    <div class="section">
+      <h2>Engine Name Mapping</h2>
+
+      <div class="tier-group">
+        <span class="tier-badge tier-baseline">BASELINE</span>
+        <h3>Baseline Tier</h3>
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Old Name</th>
+              <th>New Identifier</th>
+              <th>Display Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="old-name">RAYK_CPU</td>
+              <td class="new-name">symmetra:tm-rayk:1.0.0</td>
+              <td>RAYK</td>
+            </tr>
+            <tr>
+              <td class="old-name">RAYK_PURE_60_512x</td>
+              <td class="new-name">symmetra:tm-rayk-pure-60:1.0.0</td>
+              <td>RAYK Pure 60</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tier-group">
+        <span class="tier-badge tier-fast">FAST</span>
+        <h3>Fast Tier (Multi-threaded)</h3>
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Old Name</th>
+              <th>New Identifier</th>
+              <th>Display Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="old-name">PRISM_CPU</td>
+              <td class="new-name">symmetra:tm-prism-x:1.0.0</td>
+              <td>Prism X</td>
+            </tr>
+            <tr>
+              <td class="old-name">RAYKOmega</td>
+              <td class="new-name">symmetra:tm-rayk-omega:1.0.0</td>
+              <td>RAYK Omega</td>
+            </tr>
+            <tr>
+              <td class="old-name">NEXUS</td>
+              <td class="new-name">symmetra:tm-nexus:1.0.0</td>
+              <td>Nexus</td>
+            </tr>
+            <tr>
+              <td class="old-name">SUPERNOVA_CPU</td>
+              <td class="new-name">symmetra:tm-supernova:1.0.0</td>
+              <td>Supernova</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tier-group">
+        <span class="tier-badge tier-lightning">LIGHTNING</span>
+        <h3>Lightning Tier (GPU-Accelerated)</h3>
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Old Name</th>
+              <th>New Identifier</th>
+              <th>Display Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="old-name">BITWISE_RULE60_GPU</td>
+              <td class="new-name">symmetra:tm-bitwise-rule60:1.0.0</td>
+              <td>Bitwise Rule 60</td>
+            </tr>
+            <tr>
+              <td class="old-name">BITWISE_RULE90_GPU</td>
+              <td class="new-name">symmetra:tm-bitwise-rule90:1.0.0</td>
+              <td>Bitwise Rule 90</td>
+            </tr>
+            <tr>
+              <td class="old-name">BITWISE_RULE110_GPU</td>
+              <td class="new-name">symmetra:tm-bitwise-rule110:1.0.0</td>
+              <td>Bitwise Rule 110</td>
+            </tr>
+            <tr>
+              <td class="old-name">SINGULARITY</td>
+              <td class="new-name">symmetra:tm-singularity:1.0.0</td>
+              <td>Singularity</td>
+            </tr>
+            <tr>
+              <td class="old-name">HYBRID_SYMMETRY_SYSTOLIC</td>
+              <td class="new-name">symmetra:tm-hybrid-symmetry:1.0.0</td>
+              <td>Hybrid Symmetry</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tier-group">
+        <span class="tier-badge tier-extreme">EXTREME</span>
+        <h3>Extreme Tier (Multi-GPU)</h3>
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Old Name</th>
+              <th>New Identifier</th>
+              <th>Display Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="old-name">RAYK_ULTRA_64_MULTI</td>
+              <td class="new-name">symmetra:tm-rayk-ultra:1.0.0</td>
+              <td>RAYK Ultra</td>
+            </tr>
+            <tr>
+              <td class="old-name">CHRONOS</td>
+              <td class="new-name">symmetra:tm-chronos:1.0.0</td>
+              <td>Chronos</td>
+            </tr>
+            <tr>
+              <td class="old-name">SYMMETRY_UNIVERSAL_TM</td>
+              <td class="new-name">symmetra:tm-symmetry-universal:1.0.0</td>
+              <td>Symmetry Universal</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- How to Update -->
+    <div class="section">
+      <h2>How to Update Your Code</h2>
+
+      <h3>Configuration Files</h3>
+      <p>Update your <span class="highlight">symmetra.config.yml</span> or environment variables:</p>
+      <div class="code-block">
+# Old format (still supported with warnings)
+engine: RAYK_ULTRA_64_MULTI
+
+# New format (recommended)
+engine: symmetra:tm-rayk-ultra:1.0.0
+
+# Multiple engines
+engines:
+  - symmetra:tm-rayk-ultra:1.0.0
+  - symmetra:tm-bitwise-rule60:1.0.0
+      </div>
+
+      <h3>CLI Commands</h3>
+      <div class="code-block">
+# Old
+symmetra install RAYK_ULTRA_64_MULTI
+
+# New
+symmetra install tm-rayk-ultra
+symmetra install symmetra:tm-rayk-ultra:1.0.0
+      </div>
+
+      <h3>Docker</h3>
+      <div class="code-block">
+# Old approach
+docker run -e ENGINE=RAYK_ULTRA_64_MULTI symmetra
+
+# New approach
+docker pull symmetra:tm-rayk-ultra:1.0.0
+docker run symmetra:tm-rayk-ultra:1.0.0
+      </div>
+
+      <h3>Environment Variables</h3>
+      <div class="code-block">
+# Old
+export SYMMETRA_ENGINE=RAYK_ULTRA_64_MULTI
+
+# New
+export SYMMETRA_ENGINE=symmetra:tm-rayk-ultra:1.0.0
+# or shorter form
+export SYMMETRA_ENGINE=tm-rayk-ultra
+      </div>
+    </div>
+
+    <!-- Backward Compatibility -->
+    <div class="section">
+      <h2>Backward Compatibility</h2>
+      <div class="callout">
+        <strong>Good News:</strong> Old engine names still work internally. Your existing code will continue to run, but you'll see deprecation warnings encouraging you to migrate to the new naming convention.
+      </div>
+
+      <h3>Timeline</h3>
+      <ul>
+        <li><strong>Now (v1.0.0):</strong> New naming available, old names supported with warnings</li>
+        <li><strong>v1.2.0 (Q3 2026):</strong> Deprecation period begins - warnings increase</li>
+        <li><strong>v2.0.0 (Q4 2026):</strong> Old names may not be supported</li>
+      </ul>
+
+      <p>We recommend migrating at your convenience, but there's no rush. The new naming is more user-friendly but functionally equivalent.</p>
+    </div>
+
+    <!-- FAQ -->
+    <div class="section">
+      <h2>FAQ</h2>
+
+      <h3>Can I use both old and new names?</h3>
+      <p>Yes, temporarily. Old names still work but display deprecation warnings. We recommend migrating to the new format when convenient.</p>
+
+      <h3>Do I need to update my version pinning?</h3>
+      <p>No. All engines start at version 1.0.0. You can pin to specific versions using the new format: <span class="highlight">symmetra:tm-rayk-ultra:1.0.0</span></p>
+
+      <h3>What about custom engines?</h3>
+      <p>Custom engines follow the same naming convention: <span class="highlight">symmetra:tm-{your-name}:{version}</span></p>
+
+      <h3>Where do I find the complete mapping?</h3>
+      <p>See the <a href="/engines.html">Engines Catalog</a> for all available engines and their new identifiers. The full technical mapping is in <a href="/ENGINE_NAMING_STANDARD.md">ENGINE_NAMING_STANDARD.md</a></p>
+
+      <h3>Why the change?</h3>
+      <p>The new naming convention is:</p>
+      <ul>
+        <li><strong>User-friendly:</strong> No confusing platform abbreviations (GPU/CPU/Apple)</li>
+        <li><strong>Docker-compatible:</strong> Works with containerization tools</li>
+        <li><strong>Semantic:</strong> Includes version information</li>
+        <li><strong>Consistent:</strong> All engines follow the same format</li>
+      </ul>
+    </div>
+
+    <!-- Examples -->
+    <div class="section">
+      <h2>Migration Examples</h2>
+
+      <h3>Example 1: Simple Engine Swap</h3>
+      <div class="code-block">
+// Old code
+const server = await symmetra.createServer({
+  engine: 'RAYK_ULTRA_64_MULTI'
+});
+
+// New code
+const server = await symmetra.createServer({
+  engine: 'symmetra:tm-rayk-ultra:1.0.0'
+});
+      </div>
+
+      <h3>Example 2: Configuration File</h3>
+      <div class="code-block">
+# symmetra.config.yml (old)
+server:
+  engine: BITWISE_RULE60_GPU
+  workers: 4
+
+# symmetra.config.yml (new)
+server:
+  engine: symmetra:tm-bitwise-rule60:1.0.0
+  workers: 4
+      </div>
+
+      <h3>Example 3: Docker Compose</h3>
+      <div class="code-block">
+# docker-compose.yml (old)
+services:
+  api:
+    image: symmetra:latest
+    environment:
+      - SYMMETRA_ENGINE=RAYK_ULTRA_64_MULTI
+
+# docker-compose.yml (new)
+services:
+  api:
+    image: symmetra:tm-rayk-ultra:1.0.0
+    # or use the base image with env var
+    image: symmetra:latest
+    environment:
+      - SYMMETRA_ENGINE=symmetra:tm-rayk-ultra:1.0.0
+      </div>
+    </div>
+
+    <!-- Support -->
+    <div class="section">
+      <h2>Need Help?</h2>
+      <ul>
+        <li><strong>Questions?</strong> Check the <a href="/#faq">FAQ section</a> on the main site</li>
+        <li><strong>Browse engines:</strong> Visit the <a href="/engines.html">Engine Catalog</a> to explore all options</li>
+        <li><strong>Report issues:</strong> Open an issue on <a href="https://github.com/JvanDyk/symmetra" target="_blank">GitHub</a></li>
+        <li><strong>Get support:</strong> Contact support@symmetra.io</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Engine naming migration guide — Symmetra 1.0.0</p>
+    <p style="margin-top: 1rem;">For the complete technical reference, see <a href="/ENGINE_NAMING_STANDARD.md">ENGINE_NAMING_STANDARD.md</a></p>
+  </div>
+</body>
+</html>
