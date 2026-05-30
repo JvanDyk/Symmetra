@@ -1,26 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="faviconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#7c6fff;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#5af0c4;stop-opacity:1" />
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c6fff"/>
+      <stop offset="100%" stop-color="#5af0c4"/>
     </linearGradient>
   </defs>
-  
-  <rect width="64" height="64" fill="#1a1a2e" rx="8"/>
-  
-  <!-- Hexagon outline -->
-  <polygon points="32,8 52,18 52,38 32,48 12,38 12,18"
-           fill="none"
-           stroke="url(#faviconGradient)"
-           stroke-width="1.5"
-           stroke-linejoin="miter"/>
-  
-  <!-- Sigma glyph -->
-  <text x="32" y="38"
-        font-family="Arial, sans-serif"
-        font-size="24"
-        font-weight="bold"
-        fill="url(#faviconGradient)"
-        text-anchor="middle"
-        dominant-baseline="middle">Σ</text>
+  <!-- Dark background pill so it renders cleanly on any browser chrome -->
+  <rect width="32" height="32" rx="7" fill="#0a0a0f"/>
+  <!-- Hexagon -->
+  <polygon points="16,2 28,9 28,23 16,30 4,23 4,9"
+           fill="none" stroke="url(#g)" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Σ -->
+  <text x="16" y="23" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+        font-size="17" font-weight="700"
+        fill="url(#g)">Σ</text>
 </svg>
