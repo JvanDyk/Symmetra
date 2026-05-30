@@ -663,6 +663,68 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(phase7_distributed_cluster_test PRIVATE src/)
     message(STATUS "Phase 7 Distributed Cluster test: ENABLED (run with ./Release/phase7_distributed_cluster_test.exe)")
 
+    # ── Phase 11: Multi-Algorithm Support ──────────────────────────────────────────────────
+    add_executable(phase11_multi_algorithm_test
+        src/runtime/test_phase11_multi_algorithm.cpp
+        src/runtime/SSPAlgorithmSelector.cpp
+    )
+    target_include_directories(phase11_multi_algorithm_test PRIVATE src/)
+    message(STATUS "Phase 11 Multi-Algorithm Support test: ENABLED (run with ./Release/phase11_multi_algorithm_test.exe)")
+
+    # ── Phase 12: Heterogeneous GPU Clusters ────────────────────────────────────────────────
+    add_executable(phase12_heterogeneous_cluster_test
+        src/runtime/test_phase12_heterogeneous_cluster.cpp
+        src/runtime/SSPHeterogeneousCluster.cpp
+    )
+    target_include_directories(phase12_heterogeneous_cluster_test PRIVATE src/)
+    message(STATUS "Phase 12 Heterogeneous GPU Clusters test: ENABLED (run with ./Release/phase12_heterogeneous_cluster_test.exe)")
+
+    # ── Phase 13: Advanced Caching Layer ─────────────────────────────────────────────────────
+    add_executable(phase13_cache_layer_test
+        src/runtime/test_phase13_cache_layer.cpp
+        src/runtime/SSPCacheLayer.cpp
+    )
+    target_include_directories(phase13_cache_layer_test PRIVATE src/)
+    message(STATUS "Phase 13 Advanced Caching Layer test: ENABLED (run with ./Release/phase13_cache_layer_test.exe)")
+
+    # ── Phase 14: Global Geo-Replication ─────────────────────────────────────────────────────
+    add_executable(phase14_global_cluster_test
+        src/runtime/test_phase14_global_cluster.cpp
+        src/runtime/SSPGlobalCluster.cpp
+    )
+    target_include_directories(phase14_global_cluster_test PRIVATE src/)
+    message(STATUS "Phase 14 Global Geo-Replication test: ENABLED (run with ./Release/phase14_global_cluster_test.exe)")
+
+    # ── Comprehensive Real Benchmarks (All Phases) ──────────────────────────────────────────
+    add_executable(comprehensive_real_benchmarks
+        src/runtime/test_comprehensive_real_benchmarks.cpp
+    )
+    target_include_directories(comprehensive_real_benchmarks PRIVATE src/)
+    message(STATUS "Comprehensive Real Benchmarks: ENABLED (run with ./Release/comprehensive_real_benchmarks.exe)")
+
+    # ── v6.0 End-to-End Integration Test (Measured Performance) ──────────────────────────────
+    add_executable(v6_integration_test
+        src/runtime/test_v6_integration_measured.cpp
+        src/runtime/SSPAlgorithmSelector.cpp
+        src/runtime/SSPHeterogeneousCluster.cpp
+        src/runtime/SSPCacheLayer.cpp
+        src/runtime/SSPGlobalCluster.cpp
+    )
+    target_include_directories(v6_integration_test PRIVATE src/)
+    message(STATUS "v6.0 Integration Test (Measured): ENABLED (run with ./Release/v6_integration_test.exe)")
+
+    # ── REAL GPU Benchmarks (Using Actual CUDA Kernels) ───────────────────────────────────────
+    add_executable(real_gpu_benchmarks
+        src/runtime/test_real_gpu_benchmarks.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(real_gpu_benchmarks gen_encrypted_kernels)
+    target_include_directories(real_gpu_benchmarks PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(real_gpu_benchmarks PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "Real GPU Benchmarks: ENABLED (run with ./Release/real_gpu_benchmarks.exe)")
+
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
