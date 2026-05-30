@@ -198,33 +198,168 @@ Each build generates:
 4. **Docker Images** (if enabled)
    - `symmetra:tm-{name}:{version}`
 
-## Next Steps
+## Test Engines
 
-After building:
+### PowerShell
 
-### Test Engines
+```powershell
+# Test single engine
+./packaging/test-engine.ps1 -EngineName "rayk-ultra" -Version "1.0.0"
+
+# Test all engines sequentially
+./packaging/test-all-engines.ps1 -Version "1.0.0"
+
+# Test all engines in parallel (4 workers)
+./packaging/test-all-engines.ps1 -Version "1.0.0" -Parallel
+
+# Test with performance benchmarks
+./packaging/test-engine.ps1 -EngineName "rayk-ultra" -TestPerformance
+
+# Test Docker container as well
+./packaging/test-engine.ps1 -EngineName "rayk-ultra" -TestDocker
+```
+
+**Parameters:**
+- `-EngineName` (required for single): Engine name to test
+- `-Version` (optional): Version number (default: "1.0.0")
+- `-Parallel` (optional): Enable parallel testing
+- `-MaxParallel` (optional): Number of workers (default: 4)
+- `-TestPerformance` (optional): Run performance benchmarks (default: true)
+- `-TestCorrectness` (optional): Run unit tests (default: true)
+- `-TestDocker` (optional): Test Docker images (default: false)
+
+### Bash
+
 ```bash
 # Test single engine
-./packaging/test-engine.ps1 -EngineName "rayk-ultra"
+./packaging/test-engine.sh -e rayk-ultra -v 1.0.0
 
 # Test all engines
-./packaging/test-all-engines.ps1 -Version "1.0.0"
+./packaging/test-all-engines.sh -v 1.0.0
+
+# Test all engines in parallel
+./packaging/test-all-engines.sh -v 1.0.0 --parallel
+
+# Test with custom job count
+./packaging/test-all-engines.sh -v 1.0.0 --parallel -j 8
+
+# Skip performance tests
+./packaging/test-engine.sh -e rayk-ultra --no-performance
 ```
 
-### Push to Registry
-```bash
-# Push Docker images
+**Parameters:**
+- `-e|--engine` (required for single): Engine name
+- `-v|--version` (optional): Version number (default: "1.0.0")
+- `--parallel` (optional): Enable parallel testing
+- `-j|--jobs` (optional): Number of workers (default: 4)
+- `--no-performance`: Skip performance benchmarks
+- `--no-correctness`: Skip correctness tests
+- `--docker`: Test Docker images
+
+## Push to Registry
+
+### PowerShell
+
+```powershell
+# Push single engine to registry
+./packaging/push-engine.ps1 -EngineName "rayk-ultra" -Version "1.0.0"
+
+# Push all engines to registry
 ./packaging/push-all-engines.ps1 -Version "1.0.0"
 
-# Upload to GitHub Releases
-./packaging/create-release.ps1 -Version "1.0.0"
+# Push to custom registry
+./packaging/push-all-engines.ps1 -Version "1.0.0" -Registry "gcr.io" -Org "myorg"
+
+# Parallel push (4 workers)
+./packaging/push-all-engines.ps1 -Version "1.0.0" -Parallel
+
+# Dry-run to see what would be pushed
+./packaging/push-engine.ps1 -EngineName "rayk-ultra" -DryRun
 ```
 
-### Generate Checksums
+**Parameters:**
+- `-EngineName` (required): Engine name to push
+- `-Version` (optional): Version number (default: "1.0.0")
+- `-Registry` (optional): Docker registry (default: "docker.io")
+- `-Org` (optional): Organization name (default: "symmetra")
+- `-Parallel` (optional): Enable parallel pushes
+- `-MaxParallel` (optional): Number of workers (default: 4)
+- `-DryRun` (optional): Show what would be pushed without pushing
+
+### Bash
+
 ```bash
-# Generate SHA256SUMS
-./packaging/generate-checksums.ps1 -Version "1.0.0"
+# Push single engine
+./packaging/push-engine.sh -e rayk-ultra -v 1.0.0
+
+# Push all engines
+./packaging/push-all-engines.sh -v 1.0.0
+
+# Push to custom registry
+./packaging/push-all-engines.sh -v 1.0.0 -r gcr.io -o myorg
+
+# Parallel push
+./packaging/push-all-engines.sh -v 1.0.0 --parallel -j 8
+
+# Dry-run
+./packaging/push-engine.sh -e rayk-ultra --dry-run
 ```
+
+**Parameters:**
+- `-e|--engine` (required): Engine name
+- `-v|--version` (optional): Version number (default: "1.0.0")
+- `-r|--registry` (optional): Docker registry (default: "docker.io")
+- `-o|--org` (optional): Organization name (default: "symmetra")
+- `--parallel` (optional): Enable parallel pushes
+- `-j|--jobs` (optional): Number of workers (default: 4)
+- `--dry-run`: Show what would be pushed
+
+## Create GitHub Release
+
+### PowerShell
+
+```powershell
+# Create release with automatic notes
+./packaging/create-release.ps1 -Version "1.0.0" -Owner "JvanDyk" -Repo "symmetra"
+
+# Create pre-release
+./packaging/create-release.ps1 -Version "1.0.0-beta.1" -PreRelease
+
+# Create with custom release notes
+./packaging/create-release.ps1 -Version "1.0.0" -ReleaseNotes "Custom release notes here"
+
+# Dry-run to see what would be created
+./packaging/create-release.ps1 -Version "1.0.0" -DryRun
+```
+
+**Parameters:**
+- `-Version` (required): Version number (without 'v' prefix)
+- `-Owner` (optional): GitHub username (default: "JvanDyk")
+- `-Repo` (optional): Repository name (default: "symmetra")
+- `-ReleaseNotes` (optional): Custom release notes
+- `-PreRelease` (optional): Mark as pre-release
+- `-DryRun` (optional): Show what would be created
+
+### Bash
+
+```bash
+# Create release
+./packaging/create-release.sh -v 1.0.0 -o JvanDyk -r symmetra
+
+# Create pre-release
+./packaging/create-release.sh -v 1.0.0-beta.1 --pre-release
+
+# Dry-run
+./packaging/create-release.sh -v 1.0.0 --dry-run
+```
+
+**Parameters:**
+- `-v|--version` (required): Version number
+- `-o|--owner` (optional): GitHub username (default: "JvanDyk")
+- `-r|--repo` (optional): Repository name (default: "symmetra")
+- `-n|--notes` (optional): Custom release notes
+- `--pre-release`: Mark as pre-release
+- `--dry-run`: Show what would be created
 
 ## Configuration
 
@@ -344,6 +479,40 @@ Examples:
 - **1.2.0**: New features (backward compatible)
 - **2.0.0**: Breaking changes
 
+## Complete Workflow Example
+
+Build, test, push, and release all engines:
+
+```powershell
+# 1. Build all engines (parallel, 4 workers)
+./packaging/build-all-engines.ps1 -Version "1.0.0" -Parallel
+
+# 2. Test all engines (parallel)
+./packaging/test-all-engines.ps1 -Version "1.0.0" -Parallel
+
+# 3. Push to registry (parallel)
+./packaging/push-all-engines.ps1 -Version "1.0.0" -Parallel
+
+# 4. Create GitHub release
+./packaging/create-release.ps1 -Version "1.0.0"
+```
+
+Or with Bash:
+
+```bash
+# 1. Build all engines
+./packaging/build-all-engines.sh -v 1.0.0 --parallel
+
+# 2. Test all engines
+./packaging/test-all-engines.sh -v 1.0.0 --parallel
+
+# 3. Push to registry
+./packaging/push-all-engines.sh -v 1.0.0 --parallel
+
+# 4. Create release
+./packaging/create-release.sh -v 1.0.0
+```
+
 ## Support
 
 For issues or questions:
@@ -351,7 +520,19 @@ For issues or questions:
 - Review performance reports in `release-packages/PERFORMANCE_REPORTS/`
 - See [ENGINE_NAMING_STANDARD.md](../ENGINE_NAMING_STANDARD.md) for version info
 
+## Automation Pipeline
+
+The complete pipeline consists of:
+
+1. **Build** — Compile engines from TypeScript → CUDA
+2. **Test** — Unit tests, performance benchmarks, Docker validation
+3. **Package** — Create distribution artifacts (ZIP, tar.gz, DEB, RPM, etc.)
+4. **Push** — Upload Docker images to registry
+5. **Release** — Create GitHub release with all artifacts and checksums
+
+All stages support sequential or parallel execution. Default parallel worker count is 4, configurable with `-MaxParallel` or `-j` flags.
+
 ---
 
 **Last Updated**: May 31, 2026  
-**Version**: 1.0.0
+**Version**: 1.1.0
