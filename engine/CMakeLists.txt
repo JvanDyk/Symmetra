@@ -623,6 +623,32 @@ if(SYMM_BUILD_TESTS)
         target_link_libraries(socket_io_bottleneck_test PRIVATE ws2_32)
     endif()
     message(STATUS "Socket I/O Bottleneck Analysis test: ENABLED (run with ./Release/socket_io_bottleneck_test.exe [duration_secs] [port])")
+
+    # ── Phase 4: Advanced CUDA Stream Pipelining ───────────────────────────────────────────
+    add_executable(phase4_advanced_pipelining_test
+        src/runtime/test_phase4_advanced_pipelining.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(phase4_advanced_pipelining_test gen_encrypted_kernels)
+    target_include_directories(phase4_advanced_pipelining_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(phase4_advanced_pipelining_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "Phase 4 Advanced Pipelining test: ENABLED (run with ./Release/phase4_advanced_pipelining_test.exe)")
+
+    # ── Phase 5: Persistent GPU Kernels ───────────────────────────────────────────────────
+    add_executable(phase5_persistent_kernels_test
+        src/runtime/test_phase5_persistent_kernels.cpp
+        src/runtime/SSPLayer.cpp
+        src/runtime/SSPPersistentKernelDispatcher.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(phase5_persistent_kernels_test gen_encrypted_kernels)
+    target_include_directories(phase5_persistent_kernels_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(phase5_persistent_kernels_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "Phase 5 Persistent Kernels test: ENABLED (run with ./Release/phase5_persistent_kernels_test.exe)")
+
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
