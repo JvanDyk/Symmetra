@@ -649,6 +649,13 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(phase5_persistent_kernels_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "Phase 5 Persistent Kernels test: ENABLED (run with ./Release/phase5_persistent_kernels_test.exe)")
 
+    # ── Phase 6: Multi-GPU Load Distribution ──────────────────────────────────────────────
+    add_executable(phase6_multi_gpu_test
+        src/runtime/test_phase6_multi_gpu.cpp
+    )
+    target_include_directories(phase6_multi_gpu_test PRIVATE src/)
+    message(STATUS "Phase 6 Multi-GPU test: ENABLED (run with ./Release/phase6_multi_gpu_test.exe)")
+
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
