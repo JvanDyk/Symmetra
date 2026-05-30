@@ -656,6 +656,13 @@ if(SYMM_BUILD_TESTS)
     target_include_directories(phase6_multi_gpu_test PRIVATE src/)
     message(STATUS "Phase 6 Multi-GPU test: ENABLED (run with ./Release/phase6_multi_gpu_test.exe)")
 
+    # ── Phase 7: Distributed Encryption Cluster ───────────────────────────────────────────
+    add_executable(phase7_distributed_cluster_test
+        src/runtime/test_phase7_distributed_cluster.cpp
+    )
+    target_include_directories(phase7_distributed_cluster_test PRIVATE src/)
+    message(STATUS "Phase 7 Distributed Cluster test: ENABLED (run with ./Release/phase7_distributed_cluster_test.exe)")
+
 else()
     message(STATUS "Codegen tests: OFF (pass -DSYMM_BUILD_TESTS=ON to enable)")
 endif()
