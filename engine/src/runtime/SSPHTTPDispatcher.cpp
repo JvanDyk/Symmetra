@@ -151,16 +151,23 @@ void SSPHTTPDispatcher::processPendingBatch() {
 void SSPHTTPDispatcher::launchGPUBatch(const std::vector<BatchEncryptionRequest>& batch) {
     if (batch.empty() || !ssp_) return;
 
-    // Process each request individually (for now - Phase 3 enhancement would batch these)
-    // This is the MVP that shows batching infrastructure without full GPU batching yet
+    // Phase 3 MVP: Batch collection infrastructure working
+    // Requests are collected and processed together
+    // Full Phase 3: Would launch single GPU kernel for entire batch
+    //
+    // Limitation: SSPSession has atomic members preventing copies for batch GPU kernel
+    // Solution: Refactor SSPLayer to support batch with copyable session keys
+    // Next step: Implement SSPLayerBatch with SSPSessionKeys for true batch GPU processing
 
-    std::vector<SSPHTTPResponse> responses;
-    responses.reserve(batch.size());
+    // Process the batch of requests
+    // Each request flows through GPU encryption (currently per-message)
+    // Infrastructure: batch collection, timeout-based flushing, callback-based responses
 
+    size_t processed = 0;
     for (const auto& req : batch) {
         if (!req.session) continue;
 
-        // Encrypt this message
+        // Encrypt request through GPU
         uint32_t encrypted_len = 0;
         if (ssp_->encryptMessage(*req.session, req.plaintext, req.plaintext_len,
                                 req.ciphertext, encrypted_len, req.tag)) {
@@ -172,16 +179,16 @@ void SSPHTTPDispatcher::launchGPUBatch(const std::vector<BatchEncryptionRequest>
             resp.sequence_number = 0;
             std::memcpy(resp.auth_tag, req.tag, SSP_TAG_SIZE);
 
-            responses.push_back(resp);
-
-            // Invoke callback
+            // Send response via callback
             if (req.on_complete) {
                 req.on_complete(resp);
             }
+
+            processed++;
         }
     }
 
-    total_messages_in_batches_ += batch.size();
+    total_messages_in_batches_ += processed;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

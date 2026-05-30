@@ -144,6 +144,25 @@ struct SSPSession {
     std::atomic<uint64_t> bytes_encrypted{0};    // Metrics
 };
 
+/**
+ * SSP Session Keys (copyable version for GPU batch processing)
+ * Contains only the cryptographic material, no atomic members
+ * Used for batch GPU kernel calls
+ */
+struct SSPSessionKeys {
+    uint8_t key[SSP_KEY_SIZE];                   // Session key copy
+
+    // Constructor from full session (extracts key material only)
+    explicit SSPSessionKeys(const SSPSession& session) {
+        std::memcpy(key, session.session_key, SSP_KEY_SIZE);
+    }
+
+    // Default constructor
+    SSPSessionKeys() {
+        std::memset(key, 0, SSP_KEY_SIZE);
+    }
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Batch Accumulator (Phase 3 Optimization)
 // ────────────────────────────────────────────────────────────────────────────
