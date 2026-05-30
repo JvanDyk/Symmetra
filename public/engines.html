@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Turing machine engine catalog. Explore 10+ production-ready engines from baseline to extreme performance. Each engine is Turing-complete and optimized for different workload profiles.">
+  <title>Engine Catalog — Symmetra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
+      color: #e5e7eb;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .header {
+      background: rgba(10, 14, 20, 0.95);
+      border-bottom: 1px solid rgba(116, 152, 255, 0.15);
+      padding: 2rem 1rem;
+      margin-bottom: 3rem;
+    }
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .header-nav {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+    .header-nav a {
+      color: #5af0c4;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .header-nav a:hover { color: #fff; }
+    .header-nav a.active { color: #fff; font-weight: 600; }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header p {
+      color: #9ca3af;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem 4rem;
+    }
+    .tier-section {
+      margin-bottom: 4rem;
+      animation: fadeIn 0.6s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .tier-header {
+      margin-bottom: 2rem;
+    }
+    .tier-badge {
+      display: inline-block;
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      letter-spacing: 1px;
+    }
+    .tier-baseline .tier-badge { background: rgba(90, 240, 196, 0.15); color: #5af0c4; }
+    .tier-fast .tier-badge { background: rgba(139, 198, 255, 0.15); color: #8bc6ff; }
+    .tier-lightning .tier-badge { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
+    .tier-extreme .tier-badge { background: rgba(255, 82, 82, 0.15); color: #ff5252; }
+    .tier-header h2 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .tier-header p {
+      color: #9ca3af;
+      max-width: 700px;
+      margin-bottom: 1.5rem;
+    }
+    .tier-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: rgba(116, 152, 255, 0.05);
+      border: 1px solid rgba(116, 152, 255, 0.1);
+      border-radius: 8px;
+    }
+    .stat-item {
+      padding: 0.8rem;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+      letter-spacing: 0.5px;
+    }
+    .stat-value {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #e5e7eb;
+    }
+    .engine-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .engine-card {
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid rgba(116, 152, 255, 0.2);
+      border-radius: 8px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .engine-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, currentColor, transparent);
+      opacity: 0.3;
+    }
+    .tier-baseline .engine-card { border-color: rgba(90, 240, 196, 0.25); }
+    .tier-baseline .engine-card::before { color: #5af0c4; }
+    .tier-fast .engine-card { border-color: rgba(139, 198, 255, 0.25); }
+    .tier-fast .engine-card::before { color: #8bc6ff; }
+    .tier-lightning .engine-card { border-color: rgba(255, 165, 0, 0.25); }
+    .tier-lightning .engine-card::before { color: #ffa500; }
+    .tier-extreme .engine-card { border-color: rgba(255, 82, 82, 0.25); }
+    .tier-extreme .engine-card::before { color: #ff5252; }
+    .engine-card:hover {
+      border-color: rgba(116, 152, 255, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(116, 152, 255, 0.1);
+    }
+    .engine-name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+    .engine-identifier {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-bottom: 1rem;
+      word-break: break-all;
+    }
+    .engine-metric {
+      margin-bottom: 0.8rem;
+    }
+    .engine-metric-label {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.2rem;
+    }
+    .engine-metric-value {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #e5e7eb;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .engine-algorithm {
+      font-size: 0.85rem;
+      color: #d1d5db;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(116, 152, 255, 0.1);
+    }
+    .engine-status {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.3rem 0.6rem;
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border-radius: 3px;
+      margin-top: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      color: #6b7280;
+      border-top: 1px solid rgba(116, 152, 255, 0.1);
+      margin-top: 3rem;
+    }
+    .footer a {
+      color: #5af0c4;
+      text-decoration: none;
+    }
+    .footer a:hover { text-decoration: underline; }
+    @media (max-width: 768px) {
+      h1 { font-size: 1.8rem; }
+      .tier-header h2 { font-size: 1.3rem; }
+      .engine-grid { grid-template-columns: 1fr; }
+      .header-nav { gap: 1rem; font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-content">
+      <div class="header-nav">
+        <a href="/">Home</a>
+        <a href="/#extreme-performance">Benchmarks</a>
+        <a href="/engines.html" class="active">Engines</a>
+        <a href="/#faq">FAQ</a>
+        <a href="https://github.com/JvanDyk/symmetra" target="_blank">GitHub</a>
+      </div>
+      <h1>Turing Machine Engine Catalog</h1>
+      <p>Explore production-ready engines optimized for different performance tiers. Each engine is Turing-complete and benchmarked on real hardware.</p>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- TIER 1: BASELINE -->
+    <div class="tier-section tier-baseline">
+      <div class="tier-header">
+        <div class="tier-badge">Tier 1</div>
+        <h2>Baseline</h2>
+        <p>Single-threaded learning engines designed for development, testing, and educational purposes. Perfect for understanding algorithm behavior before scaling to production.</p>
+        <div class="tier-stats">
+          <div class="stat-item">
+            <div class="stat-label">Average Throughput</div>
+            <div class="stat-value">6.6M req/s</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Use Case</div>
+            <div class="stat-value">Development</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Scaling</div>
+            <div class="stat-value">Single Core</div>
+          </div>
+        </div>
+      </div>
+      <div class="engine-grid">
+        <div class="engine-card">
+          <div class="engine-name">RAYK</div>
+          <div class="engine-identifier">symmetra:tm-rayk:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">41.14M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">24µs</div>
+          </div>
+          <div class="engine-algorithm">Rule 60 baseline engine. Perfect for learning Turing machine fundamentals.</div>
+          <div class="engine-status">Free</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 2: FAST -->
+    <div class="tier-section tier-fast">
+      <div class="tier-header">
+        <div class="tier-badge">Tier 2</div>
+        <h2>Fast</h2>
+        <p>Multi-threaded CPU engines optimized for standard production workloads. These engines provide excellent price-to-performance for APIs handling 10K-50K requests per second.</p>
+        <div class="tier-stats">
+          <div class="stat-item">
+            <div class="stat-label">Average Throughput</div>
+            <div class="stat-value">44.3M req/s</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Use Case</div>
+            <div class="stat-value">Production APIs</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Scaling</div>
+            <div class="stat-value">Up to 8 cores</div>
+          </div>
+        </div>
+      </div>
+      <div class="engine-grid">
+        <div class="engine-card">
+          <div class="engine-name">Prism X</div>
+          <div class="engine-identifier">symmetra:tm-prism-x:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">52.1M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">19µs</div>
+          </div>
+          <div class="engine-algorithm">Champion variant across 204 implementations. Multi-threaded CPU-optimized architecture.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Nexus</div>
+          <div class="engine-identifier">symmetra:tm-nexus:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">42.1M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">24µs</div>
+          </div>
+          <div class="engine-algorithm">Adaptive batching strategy. Production-proven with 99.4% sustained throughput.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">RAYK Omega</div>
+          <div class="engine-identifier">symmetra:tm-rayk-omega:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">48.2M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">21µs</div>
+          </div>
+          <div class="engine-algorithm">Optimized streaming variant of RAYK. Linear multi-core scaling.</div>
+          <div class="engine-status">Free</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 3: LIGHTNING -->
+    <div class="tier-section tier-lightning">
+      <div class="tier-header">
+        <div class="tier-badge">Tier 3</div>
+        <h2>Lightning</h2>
+        <p>GPU-accelerated and specialized engines for high-performance APIs. These engines combine GPU parallelism with optimized algorithms to handle 50K-100K requests per second.</p>
+        <div class="tier-stats">
+          <div class="stat-item">
+            <div class="stat-label">Average Throughput</div>
+            <div class="stat-value">64.7M req/s</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Use Case</div>
+            <div class="stat-value">High-Performance APIs</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Scaling</div>
+            <div class="stat-value">Non-linear (GPU)</div>
+          </div>
+        </div>
+      </div>
+      <div class="engine-grid">
+        <div class="engine-card">
+          <div class="engine-name">Bitwise Rule 60</div>
+          <div class="engine-identifier">symmetra:tm-bitwise-rule60:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">86.42M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">12µs</div>
+          </div>
+          <div class="engine-algorithm">32-bit packed Rule 60 with warp-parallel execution. Optimal for packet processing.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Bitwise Rule 90</div>
+          <div class="engine-identifier">symmetra:tm-bitwise-rule90:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">77.92M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">13µs</div>
+          </div>
+          <div class="engine-algorithm">32-bit packed Rule 90 variant. Fast and deterministic for state machines.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Singularity</div>
+          <div class="engine-identifier">symmetra:tm-singularity:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">64.6M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">15µs</div>
+          </div>
+          <div class="engine-algorithm">Systolic array optimization with auto-router peak performance.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Hybrid Symmetry</div>
+          <div class="engine-identifier">symmetra:tm-hybrid-symmetry:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">58.6M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">17µs</div>
+          </div>
+          <div class="engine-algorithm">D4/radial symmetry exploitation. Enterprise-grade symmetry optimizations.</div>
+          <div class="engine-status">Free</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIER 4: EXTREME -->
+    <div class="tier-section tier-extreme">
+      <div class="tier-header">
+        <div class="tier-badge">Tier 4</div>
+        <h2>Extreme</h2>
+        <p>Multi-GPU and peak-performance engines for hyperscale deployments. These engines scale across multiple GPUs to handle 100K-400K+ requests per second with sub-microsecond latencies.</p>
+        <div class="tier-stats">
+          <div class="stat-item">
+            <div class="stat-label">Average Throughput</div>
+            <div class="stat-value">228M req/s</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Use Case</div>
+            <div class="stat-value">Hyperscale</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Scaling</div>
+            <div class="stat-value">8+ GPUs linear</div>
+          </div>
+        </div>
+      </div>
+      <div class="engine-grid">
+        <div class="engine-card">
+          <div class="engine-name">RAYK Ultra</div>
+          <div class="engine-identifier">symmetra:tm-rayk-ultra:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">193.57M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">5.2µs</div>
+          </div>
+          <div class="engine-algorithm">64× zero-branch multi-SM execution. Peak single-GPU performance on RTX 5070.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Chronos</div>
+          <div class="engine-identifier">symmetra:tm-chronos:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">~393M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">2.5µs</div>
+          </div>
+          <div class="engine-algorithm">GF(2) algebraic skip optimization. Record-breaking throughput via mathematical properties.</div>
+          <div class="engine-status">Free</div>
+        </div>
+        <div class="engine-card">
+          <div class="engine-name">Symmetry Universal</div>
+          <div class="engine-identifier">symmetra:tm-symmetry-universal:1.0.0</div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">Throughput</div>
+            <div class="engine-metric-value">254M req/s</div>
+          </div>
+          <div class="engine-metric">
+            <div class="engine-metric-label">P99 Latency</div>
+            <div class="engine-metric-value">3.9µs</div>
+          </div>
+          <div class="engine-algorithm">D4/radial symmetry at scale. Systolic peak performance.</div>
+          <div class="engine-status">Free</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>All engines are Turing-complete and benchmarked on real hardware under sustained load. Measured May 2026.</p>
+    <p style="margin-top: 1rem;">For installation and deployment guides, visit <a href="https://github.com/JvanDyk/symmetra">GitHub</a> or check the <a href="/">main documentation</a>.</p>
+  </div>
+</body>
+</html>

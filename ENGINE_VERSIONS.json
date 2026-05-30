@@ -1,0 +1,198 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-05-31T00:00:00Z",
+  "engines": {
+    "tm-rayk-ultra": {
+      "displayName": "RAYK Ultra",
+      "family": "RAYK",
+      "latest": "1.0.0",
+      "performanceTier": "extreme",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "193.57M requests/sec",
+          "latencyP99": "5.2µs",
+          "algorithm": "64-zero-branch, multi-SM execution",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-bitwise-rule60": {
+      "displayName": "Bitwise Rule 60",
+      "family": "Bitwise",
+      "latest": "1.0.0",
+      "performanceTier": "lightning",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "86.42M requests/sec",
+          "latencyP99": "12µs",
+          "algorithm": "32-bit packed Rule 60, warp-parallel",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-bitwise-rule90": {
+      "displayName": "Bitwise Rule 90",
+      "family": "Bitwise",
+      "latest": "1.0.0",
+      "performanceTier": "lightning",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "77.92M requests/sec",
+          "latencyP99": "13µs",
+          "algorithm": "32-bit packed Rule 90",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-singularity": {
+      "displayName": "Singularity",
+      "family": "Singularity",
+      "latest": "1.0.0",
+      "performanceTier": "lightning",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "64.6M requests/sec",
+          "latencyP99": "15µs",
+          "algorithm": "Systolic array optimization",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-prism-x": {
+      "displayName": "Prism X",
+      "family": "Prism",
+      "latest": "1.0.0",
+      "performanceTier": "fast",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "52.1M requests/sec",
+          "latencyP99": "19µs",
+          "algorithm": "Multi-threaded CPU-optimized",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-rayk": {
+      "displayName": "RAYK",
+      "family": "RAYK",
+      "latest": "1.0.0",
+      "performanceTier": "baseline",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "41.14M requests/sec",
+          "latencyP99": "24µs",
+          "algorithm": "Rule 60 baseline engine",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-chronos": {
+      "displayName": "Chronos",
+      "family": "Chronos",
+      "latest": "1.0.0",
+      "performanceTier": "extreme",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "~393M requests/sec (effective)",
+          "latencyP99": "2.5µs",
+          "algorithm": "GF(2) algebraic skip",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-nexus": {
+      "displayName": "Nexus",
+      "family": "Nexus",
+      "latest": "1.0.0",
+      "performanceTier": "fast",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "42.1M requests/sec",
+          "latencyP99": "24µs",
+          "algorithm": "Adaptive batching",
+          "changelog": "Initial production release"
+        }
+      ]
+    },
+    "tm-hybrid-symmetry": {
+      "displayName": "Hybrid Symmetry",
+      "family": "Hybrid",
+      "latest": "1.0.0",
+      "performanceTier": "lightning",
+      "status": "stable",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released": "2026-05-30",
+          "status": "stable",
+          "throughput": "58.6M requests/sec",
+          "latencyP99": "17µs",
+          "algorithm": "D4/radial symmetry",
+          "changelog": "Initial production release"
+        }
+      ]
+    }
+  },
+  "tiers": {
+    "baseline": {
+      "displayName": "Baseline",
+      "description": "Single-threaded learning engines for development and testing",
+      "averageThroughput": "6.6M requests/sec",
+      "useCase": "Development, testing, education",
+      "engines": ["tm-rayk", "tm-rayk-pure-60"]
+    },
+    "fast": {
+      "displayName": "Fast",
+      "description": "Multi-threaded CPU engines for standard production workloads",
+      "averageThroughput": "44.3M requests/sec",
+      "useCase": "Standard production APIs, 10K-50K req/sec",
+      "engines": ["tm-prism-x", "tm-nexus", "tm-rayk-omega"]
+    },
+    "lightning": {
+      "displayName": "Lightning",
+      "description": "GPU-accelerated and specialized engines for high-performance APIs",
+      "averageThroughput": "64.7M requests/sec",
+      "useCase": "High-performance APIs, 50K-100K req/sec",
+      "engines": ["tm-bitwise-rule60", "tm-bitwise-rule90", "tm-singularity", "tm-hybrid-symmetry"]
+    },
+    "extreme": {
+      "displayName": "Extreme",
+      "description": "Multi-GPU and peak-performance engines for hyperscale deployments",
+      "averageThroughput": "228M requests/sec",
+      "useCase": "Hyperscale APIs, 100K-400K+ req/sec",
+      "engines": ["tm-rayk-ultra", "tm-chronos", "tm-symmetry-universal"]
+    }
+  }
+}
