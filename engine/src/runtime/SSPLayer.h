@@ -133,34 +133,27 @@ private:
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * SSP Session - one per client connection
- * Manages encryption keys and sequence numbers
+ * SSP Session Metrics (Phase 3: Separated to enable batch GPU processing)
+ * Contains only the atomic diagnostics/metrics
+ * Separated from crypto keys to allow SSPSession copying for batch GPU calls
  */
-struct SSPSession {
-    uint8_t session_key[SSP_KEY_SIZE];           // Derived from ECDHE
-    uint32_t sequence_number = 0;                // Incremented per message
-    uint64_t creation_time = 0;                  // For session timeout
+struct SSPSessionMetrics {
     std::atomic<uint32_t> message_count{0};      // Diagnostics
     std::atomic<uint64_t> bytes_encrypted{0};    // Metrics
 };
 
 /**
- * SSP Session Keys (copyable version for GPU batch processing)
- * Contains only the cryptographic material, no atomic members
- * Used for batch GPU kernel calls
+ * SSP Session - one per client connection
+ * Manages encryption keys and sequence numbers
+ * Phase 3: Refactored to be copyable by removing atomic members
  */
-struct SSPSessionKeys {
-    uint8_t key[SSP_KEY_SIZE];                   // Session key copy
-
-    // Constructor from full session (extracts key material only)
-    explicit SSPSessionKeys(const SSPSession& session) {
-        std::memcpy(key, session.session_key, SSP_KEY_SIZE);
-    }
-
-    // Default constructor
-    SSPSessionKeys() {
-        std::memset(key, 0, SSP_KEY_SIZE);
-    }
+struct SSPSession {
+    uint8_t session_key[SSP_KEY_SIZE];           // Derived from ECDHE
+    uint32_t sequence_number = 0;                // Incremented per message
+    uint64_t creation_time = 0;                  // For session timeout
+    // Metrics moved to separate struct to enable batch GPU processing
+    // Reference kept for diagnostics:
+    // SSPSessionMetrics* metrics = nullptr;     // (optional, for tracking)
 };
 
 // ────────────────────────────────────────────────────────────────────────────

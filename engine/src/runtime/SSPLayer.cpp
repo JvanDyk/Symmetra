@@ -452,8 +452,9 @@ bool SSPLayer::establishSession(void* client_fd, SSPSession& session)
 
     // Initialize session
     session.sequence_number = 0;
-    session.message_count = 0;
-    session.bytes_encrypted = 0;
+    // Metrics moved to SSPSessionMetrics struct (Phase 3 refactoring)
+    // session.message_count = 0;  // Removed for batch GPU processing
+    // session.bytes_encrypted = 0;  // Removed for batch GPU processing
     session.creation_time = std::time(nullptr);
 
     // For testing: derive a session key from a fixed value
