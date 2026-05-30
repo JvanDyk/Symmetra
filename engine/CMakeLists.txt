@@ -589,6 +589,19 @@ if(SYMM_BUILD_TESTS)
     target_link_libraries(phase3_full_validation_test PRIVATE CUDA::cudart CUDA::cuda_driver)
     message(STATUS "Phase 3 Full Validation test: ENABLED (run with ./Release/phase3_full_validation_test.exe)")
 
+    # ── Phase 4: Stream Pipeline Test ─────────────────────────────────────────────────────────
+    add_executable(phase4_stream_pipeline_test
+        src/runtime/test_phase4_stream_pipeline.cpp
+        src/runtime/SSPStreamPipelineDispatcher.cpp
+        src/runtime/SSPLayer.cpp
+        src/protect/KernelStore.cpp
+        src/protect/PtxCrypt.cpp
+    )
+    add_dependencies(phase4_stream_pipeline_test gen_encrypted_kernels)
+    target_include_directories(phase4_stream_pipeline_test PRIVATE src/ ${GENERATED_DIR} ${CUDAToolkit_INCLUDE_DIRS})
+    target_link_libraries(phase4_stream_pipeline_test PRIVATE CUDA::cudart CUDA::cuda_driver)
+    message(STATUS "Phase 4 Stream Pipeline test: ENABLED (run with ./Release/phase4_stream_pipeline_test.exe)")
+
     # ── GPU Acceleration Integration Test ───────────────────────────────────────────────────
     add_executable(ssp_gpu_acceleration_test
         src/runtime/test_gpu_acceleration_integration.cpp
