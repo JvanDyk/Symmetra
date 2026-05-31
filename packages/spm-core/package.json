@@ -1,0 +1,25 @@
+{
+  "name": "@symmetra/spm-core",
+  "version": "1.0.0",
+  "description": "Core SPM (Symmetra Package Manager) functionality: transformer, fetcher, cache",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./transformer": "./src/transformer.ts",
+    "./fetcher": "./src/fetcher.ts",
+    "./cache": "./src/cache.ts",
+    "./lockfile": "./src/lockfile.ts"
+  },
+  "files": ["src", "README.md"],
+  "keywords": ["symmetra", "spm", "package-manager", "npm", "transformer"],
+  "author": "Symmetra",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
