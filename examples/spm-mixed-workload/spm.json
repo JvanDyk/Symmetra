@@ -1,0 +1,14 @@
+{
+  "name": "spm-mixed-workload",
+  "version": "1.0.0",
+  "description": "Complete GPU service using multiple npm packages - proves Symmetra replaces Node.js",
+  "spm": {
+    "compatibility": "warn"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.0",
+    "@symmetra/http": "^1.0.0",
+    "@symmetra/crypto": "^1.0.0"
+  }
+}

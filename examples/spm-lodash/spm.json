@@ -1,0 +1,11 @@
+{
+  "name": "spm-lodash-example",
+  "version": "1.0.0",
+  "description": "Demonstrates lodash (pure JS npm package) running on Symmetra GPU",
+  "spm": {
+    "compatibility": "warn"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  }
+}

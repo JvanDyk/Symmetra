@@ -1,0 +1,13 @@
+{
+  "name": "symmify-basic-example",
+  "version": "1.0.0",
+  "description": "Basic example of using @symmetra/symmify with Zod",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@symmetra/symmify": "workspace:*",
+    "zod": "^3.22.0"
+  }
+}
