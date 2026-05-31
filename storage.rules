@@ -1,0 +1,12 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Engine binaries — no direct client access.
+    // Downloads go through the getDownloadUrl Cloud Function which issues
+    // a short-lived signed URL via the Admin SDK (bypasses these rules).
+    match /engines/{allPaths=**} {
+      allow read:  if false;
+      allow write: if false;
+    }
+  }
+}

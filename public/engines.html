@@ -3,500 +3,684 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Turing machine engine catalog. Explore 10+ production-ready engines from baseline to extreme performance. Each engine is Turing-complete and optimized for different workload profiles.">
+  <meta name="description" content="Symmetra Engine Catalog — production-grade Turing machines for GPU computing. Download, benchmark, and explore.">
   <title>Engine Catalog — Symmetra</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0e14;
+      --surface:  rgba(17, 24, 39, 0.85);
+      --border:   rgba(116, 152, 255, 0.18);
+      --border-h: rgba(116, 152, 255, 0.42);
+      --text:     #e5e7eb;
+      --muted:    #9ca3af;
+      --muted2:   #6b7280;
+      --accent-a: #7c6fff;
+      --accent-b: #5af0c4;
+    }
+
     body {
       font-family: 'IBM Plex Sans', sans-serif;
-      background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
-      color: #e5e7eb;
-      line-height: 1.6;
+      background: linear-gradient(160deg, #080c11 0%, #0d1117 60%, #080c11 100%);
+      color: var(--text);
       min-height: 100vh;
+      line-height: 1.6;
     }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
     .header {
-      background: rgba(10, 14, 20, 0.95);
-      border-bottom: 1px solid rgba(116, 152, 255, 0.15);
-      padding: 2rem 1rem;
-      margin-bottom: 3rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8, 12, 17, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
     }
-    .header-content {
-      max-width: 1200px;
+
+    .header-inner {
+      max-width: 1100px;
       margin: 0 auto;
-      text-align: center;
-    }
-    .header-nav {
+      padding: 0 1.25rem;
+      height: 56px;
       display: flex;
-      justify-content: center;
+      align-items: center;
       gap: 2rem;
-      margin-bottom: 2rem;
+    }
+
+    .nav-brand {
+      font-family: 'IBM Plex Mono', monospace;
       font-size: 0.9rem;
-    }
-    .header-nav a {
-      color: #5af0c4;
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-    .header-nav a:hover { color: #fff; }
-    .header-nav a.active { color: #fff; font-weight: 600; }
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-    }
-    .header p {
-      color: #9ca3af;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    .main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 1rem 4rem;
-    }
-    .tier-section {
-      margin-bottom: 4rem;
-      animation: fadeIn 0.6s ease-out;
-    }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .tier-header {
-      margin-bottom: 2rem;
-    }
-    .tier-badge {
-      display: inline-block;
-      padding: 0.4rem 1rem;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
       letter-spacing: 1px;
     }
-    .tier-baseline .tier-badge { background: rgba(90, 240, 196, 0.15); color: #5af0c4; }
-    .tier-fast .tier-badge { background: rgba(139, 198, 255, 0.15); color: #8bc6ff; }
-    .tier-lightning .tier-badge { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
-    .tier-extreme .tier-badge { background: rgba(255, 82, 82, 0.15); color: #ff5252; }
-    .tier-header h2 {
-      font-size: 1.8rem;
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--text); font-weight: 500; }
+
+    .nav-auth {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.82rem;
+    }
+
+    #nav-user-label { color: var(--muted); }
+
+    .btn-nav {
+      padding: 0.35rem 0.85rem;
+      border-radius: 5px;
+      font-size: 0.82rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-nav:hover { border-color: var(--border-h); color: var(--accent-b); }
+
+    .btn-nav-primary {
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      border: none;
+      color: #000;
+      font-weight: 600;
+    }
+
+    .btn-nav-primary:hover { opacity: 0.88; color: #000; }
+
+    /* ── Emulator banner ─────────────────────────────────────────────────── */
+    .emulator-bar {
+      background: rgba(251, 191, 36, 0.07);
+      border-bottom: 1px solid rgba(251, 191, 36, 0.22);
+      text-align: center;
+      padding: 0.4rem 1rem;
+      font-size: 0.76rem;
+      font-family: 'IBM Plex Mono', monospace;
+      color: #fbbf24;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────────────────── */
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 1.5rem;
+    }
+
+    .hero h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 0.5rem;
     }
-    .tier-header p {
-      color: #9ca3af;
-      max-width: 700px;
-      margin-bottom: 1.5rem;
+
+    .hero p { color: var(--muted); max-width: 560px; font-size: 0.95rem; }
+
+    /* ── Auth notice ─────────────────────────────────────────────────────── */
+    .auth-notice {
+      max-width: 1100px;
+      margin: 0 auto 0.5rem;
+      padding: 0 1.25rem;
     }
-    .tier-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
-      padding: 1rem;
-      background: rgba(116, 152, 255, 0.05);
-      border: 1px solid rgba(116, 152, 255, 0.1);
+
+    .auth-notice-inner {
+      background: rgba(124, 111, 255, 0.08);
+      border: 1px solid rgba(124, 111, 255, 0.22);
       border-radius: 8px;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
     }
-    .stat-item {
-      padding: 0.8rem;
+
+    .auth-notice-text {
+      font-size: 0.87rem;
+      color: var(--muted);
     }
-    .stat-label {
-      font-size: 0.75rem;
-      color: #6b7280;
-      text-transform: uppercase;
-      margin-bottom: 0.3rem;
-      letter-spacing: 0.5px;
-    }
-    .stat-value {
-      font-size: 1.3rem;
+
+    .auth-notice-text strong { color: var(--text); }
+
+    .btn-notice-signin {
+      padding: 0.42rem 1rem;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      border: none;
+      border-radius: 5px;
+      color: #000;
       font-weight: 600;
-      color: #e5e7eb;
+      font-size: 0.82rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      cursor: pointer;
+      white-space: nowrap;
     }
-    .engine-grid {
+
+    /* ── Main ────────────────────────────────────────────────────────────── */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1.25rem 4rem;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted2);
+      margin: 2rem 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    #loading-state {
+      padding: 4rem 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent-b);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Engine grid + cards ──────────────────────────────────────────────── */
+    .engines-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.25rem;
     }
+
     .engine-card {
-      background: rgba(17, 24, 39, 0.8);
-      border: 1px solid rgba(116, 152, 255, 0.2);
-      border-radius: 8px;
-      padding: 1.5rem;
-      transition: all 0.3s ease;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.4rem;
       display: flex;
       flex-direction: column;
-      position: relative;
-      overflow: hidden;
+      gap: 1rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .engine-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, currentColor, transparent);
-      opacity: 0.3;
-    }
-    .tier-baseline .engine-card { border-color: rgba(90, 240, 196, 0.25); }
-    .tier-baseline .engine-card::before { color: #5af0c4; }
-    .tier-fast .engine-card { border-color: rgba(139, 198, 255, 0.25); }
-    .tier-fast .engine-card::before { color: #8bc6ff; }
-    .tier-lightning .engine-card { border-color: rgba(255, 165, 0, 0.25); }
-    .tier-lightning .engine-card::before { color: #ffa500; }
-    .tier-extreme .engine-card { border-color: rgba(255, 82, 82, 0.25); }
-    .tier-extreme .engine-card::before { color: #ff5252; }
+
     .engine-card:hover {
-      border-color: rgba(116, 152, 255, 0.5);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(116, 152, 255, 0.1);
+      border-color: var(--border-h);
+      box-shadow: 0 4px 20px rgba(116, 152, 255, 0.07);
     }
+
+    .engine-card.locked { opacity: 0.5; }
+    .engine-card.locked:hover { opacity: 0.62; border-color: var(--border); box-shadow: none; }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
     .engine-name {
-      font-size: 1.2rem;
+      font-size: 1.05rem;
       font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #fff;
+      color: #f9fafb;
     }
-    .engine-identifier {
+
+    .engine-id {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-bottom: 1rem;
+      font-size: 0.68rem;
+      color: var(--muted2);
+      margin-top: 0.2rem;
       word-break: break-all;
     }
-    .engine-metric {
-      margin-bottom: 0.8rem;
+
+    .badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 0.22rem 0.55rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    .engine-metric-label {
-      font-size: 0.75rem;
-      color: #9ca3af;
+
+    .badge-free        { background: rgba(90,240,196,0.12); color: #5af0c4; }
+    .badge-coming-soon { background: rgba(107,114,128,0.14); color: #6b7280; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+
+    .stat {
+      background: rgba(0,0,0,0.22);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .stat-label {
+      font-size: 0.66rem;
+      color: var(--muted2);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 0.2rem;
+      margin-bottom: 0.15rem;
     }
-    .engine-metric-value {
-      font-size: 1.3rem;
+
+    .stat-value {
+      font-size: 0.95rem;
       font-weight: 600;
-      color: #e5e7eb;
       font-family: 'IBM Plex Mono', monospace;
+      color: #f3f4f6;
     }
-    .engine-algorithm {
-      font-size: 0.85rem;
-      color: #d1d5db;
-      margin-top: 1rem;
-      padding-top: 1rem;
-      border-top: 1px solid rgba(116, 152, 255, 0.1);
+
+    .engine-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      flex: 1;
     }
-    .engine-status {
-      display: inline-block;
-      font-size: 0.7rem;
-      padding: 0.3rem 0.6rem;
-      background: rgba(34, 197, 94, 0.15);
-      color: #22c55e;
-      border-radius: 3px;
-      margin-top: 1rem;
-      font-weight: 600;
-      text-transform: uppercase;
+
+    .card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
     }
-    .footer {
+
+    .btn {
+      padding: 0.58rem 1rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: 'IBM Plex Sans', sans-serif;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
       text-align: center;
-      padding: 2rem;
-      color: #6b7280;
-      border-top: 1px solid rgba(116, 152, 255, 0.1);
-      margin-top: 3rem;
     }
-    .footer a {
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-win {
+      background: rgba(124, 111, 255, 0.16);
+      color: #a899ff;
+      border: 1px solid rgba(124, 111, 255, 0.28);
+    }
+
+    .btn-win:hover:not(:disabled) { background: rgba(124, 111, 255, 0.26); }
+
+    .btn-linux {
+      background: rgba(90, 240, 196, 0.1);
       color: #5af0c4;
-      text-decoration: none;
+      border: 1px solid rgba(90, 240, 196, 0.22);
     }
-    .footer a:hover { text-decoration: underline; }
-    @media (max-width: 768px) {
-      h1 { font-size: 1.8rem; }
-      .tier-header h2 { font-size: 1.3rem; }
-      .engine-grid { grid-template-columns: 1fr; }
-      .header-nav { gap: 1rem; font-size: 0.8rem; }
+
+    .btn-linux:hover:not(:disabled) { background: rgba(90, 240, 196, 0.18); }
+
+    .btn-signin-prompt {
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      color: #000;
+      font-weight: 600;
+    }
+
+    .btn-signin-prompt:hover { opacity: 0.88; }
+
+    .btn-coming-soon {
+      background: rgba(107,114,128,0.12);
+      color: var(--muted2);
+      border: 1px solid rgba(107,114,128,0.18);
+      cursor: default;
+    }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(6px);
+      background: rgba(13, 17, 23, 0.97);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 1.2rem;
+      font-size: 0.84rem;
+      color: var(--text);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 999;
+      max-width: 360px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    #toast.show   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error  { border-color: rgba(239,68,68,0.4);    color: #f87171; }
+    #toast.success{ border-color: rgba(90,240,196,0.4);   color: #5af0c4; }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted2);
+    }
+
+    footer a { color: var(--accent-b); }
+    footer a:hover { text-decoration: underline; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.5rem; }
+      .engines-grid { grid-template-columns: 1fr; }
+      #nav-user-label { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="header-content">
-      <div class="header-nav">
-        <a href="/">Home</a>
-        <a href="/#extreme-performance">Benchmarks</a>
-        <a href="/engines.html" class="active">Engines</a>
-        <a href="/#faq">FAQ</a>
-        <a href="https://github.com/JvanDyk/symmetra" target="_blank">GitHub</a>
-      </div>
-      <h1>Turing Machine Engine Catalog</h1>
-      <p>Explore production-ready engines optimized for different performance tiers. Each engine is Turing-complete and benchmarked on real hardware.</p>
+
+<!-- ── Header ───────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <a class="nav-brand" href="/">SYMMETRA</a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/engines" class="active">Engines</a>
+    </nav>
+    <div class="nav-auth">
+      <span id="nav-user-label"></span>
+      <button class="btn-nav btn-nav-primary hidden" id="btn-signin"
+              onclick="location.href='/auth?return=engines'">Sign In</button>
+      <button class="btn-nav hidden" id="btn-signout">Sign Out</button>
     </div>
   </div>
+</header>
 
-  <div class="main">
-    <!-- TIER 1: BASELINE -->
-    <div class="tier-section tier-baseline">
-      <div class="tier-header">
-        <div class="tier-badge">Tier 1</div>
-        <h2>Baseline</h2>
-        <p>Single-threaded learning engines designed for development, testing, and educational purposes. Perfect for understanding algorithm behavior before scaling to production.</p>
-        <div class="tier-stats">
-          <div class="stat-item">
-            <div class="stat-label">Average Throughput</div>
-            <div class="stat-value">6.6M req/s</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Use Case</div>
-            <div class="stat-value">Development</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Scaling</div>
-            <div class="stat-value">Single Core</div>
-          </div>
-        </div>
-      </div>
-      <div class="engine-grid">
-        <div class="engine-card">
-          <div class="engine-name">RAYK</div>
-          <div class="engine-identifier">symmetra:tm-rayk:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">41.14M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">24µs</div>
-          </div>
-          <div class="engine-algorithm">Rule 60 baseline engine. Perfect for learning Turing machine fundamentals.</div>
-          <div class="engine-status">Free</div>
-        </div>
-      </div>
-    </div>
+<!-- ── Emulator indicator ────────────────────────────────────────────────── -->
+<div class="emulator-bar hidden" id="emulator-bar">
+  ⚡ Firebase Emulator — all services are local
+</div>
 
-    <!-- TIER 2: FAST -->
-    <div class="tier-section tier-fast">
-      <div class="tier-header">
-        <div class="tier-badge">Tier 2</div>
-        <h2>Fast</h2>
-        <p>Multi-threaded CPU engines optimized for standard production workloads. These engines provide excellent price-to-performance for APIs handling 10K-50K requests per second.</p>
-        <div class="tier-stats">
-          <div class="stat-item">
-            <div class="stat-label">Average Throughput</div>
-            <div class="stat-value">44.3M req/s</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Use Case</div>
-            <div class="stat-value">Production APIs</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Scaling</div>
-            <div class="stat-value">Up to 8 cores</div>
-          </div>
-        </div>
-      </div>
-      <div class="engine-grid">
-        <div class="engine-card">
-          <div class="engine-name">Prism X</div>
-          <div class="engine-identifier">symmetra:tm-prism-x:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">52.1M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">19µs</div>
-          </div>
-          <div class="engine-algorithm">Champion variant across 204 implementations. Multi-threaded CPU-optimized architecture.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Nexus</div>
-          <div class="engine-identifier">symmetra:tm-nexus:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">42.1M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">24µs</div>
-          </div>
-          <div class="engine-algorithm">Adaptive batching strategy. Production-proven with 99.4% sustained throughput.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">RAYK Omega</div>
-          <div class="engine-identifier">symmetra:tm-rayk-omega:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">48.2M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">21µs</div>
-          </div>
-          <div class="engine-algorithm">Optimized streaming variant of RAYK. Linear multi-core scaling.</div>
-          <div class="engine-status">Free</div>
-        </div>
-      </div>
-    </div>
+<!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <h1>Engine Catalog</h1>
+  <p>Production-grade Turing machines for GPU computing. Benchmarked on RTX&nbsp;5070.</p>
+</section>
 
-    <!-- TIER 3: LIGHTNING -->
-    <div class="tier-section tier-lightning">
-      <div class="tier-header">
-        <div class="tier-badge">Tier 3</div>
-        <h2>Lightning</h2>
-        <p>GPU-accelerated and specialized engines for high-performance APIs. These engines combine GPU parallelism with optimized algorithms to handle 50K-100K requests per second.</p>
-        <div class="tier-stats">
-          <div class="stat-item">
-            <div class="stat-label">Average Throughput</div>
-            <div class="stat-value">64.7M req/s</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Use Case</div>
-            <div class="stat-value">High-Performance APIs</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Scaling</div>
-            <div class="stat-value">Non-linear (GPU)</div>
-          </div>
-        </div>
-      </div>
-      <div class="engine-grid">
-        <div class="engine-card">
-          <div class="engine-name">Bitwise Rule 60</div>
-          <div class="engine-identifier">symmetra:tm-bitwise-rule60:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">86.42M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">12µs</div>
-          </div>
-          <div class="engine-algorithm">32-bit packed Rule 60 with warp-parallel execution. Optimal for packet processing.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Bitwise Rule 90</div>
-          <div class="engine-identifier">symmetra:tm-bitwise-rule90:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">77.92M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">13µs</div>
-          </div>
-          <div class="engine-algorithm">32-bit packed Rule 90 variant. Fast and deterministic for state machines.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Singularity</div>
-          <div class="engine-identifier">symmetra:tm-singularity:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">64.6M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">15µs</div>
-          </div>
-          <div class="engine-algorithm">Systolic array optimization with auto-router peak performance.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Hybrid Symmetry</div>
-          <div class="engine-identifier">symmetra:tm-hybrid-symmetry:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">58.6M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">17µs</div>
-          </div>
-          <div class="engine-algorithm">D4/radial symmetry exploitation. Enterprise-grade symmetry optimizations.</div>
-          <div class="engine-status">Free</div>
-        </div>
-      </div>
-    </div>
+<!-- ── Auth notice (hidden when signed in) ──────────────────────────────── -->
+<div class="auth-notice hidden" id="auth-notice">
+  <div class="auth-notice-inner">
+    <span class="auth-notice-text">
+      <strong>Sign in for free</strong> to download engines and track your usage.
+    </span>
+    <button class="btn-notice-signin"
+            onclick="location.href='/auth?return=engines'">
+      Sign In / Create Account
+    </button>
+  </div>
+</div>
 
-    <!-- TIER 4: EXTREME -->
-    <div class="tier-section tier-extreme">
-      <div class="tier-header">
-        <div class="tier-badge">Tier 4</div>
-        <h2>Extreme</h2>
-        <p>Multi-GPU and peak-performance engines for hyperscale deployments. These engines scale across multiple GPUs to handle 100K-400K+ requests per second with sub-microsecond latencies.</p>
-        <div class="tier-stats">
-          <div class="stat-item">
-            <div class="stat-label">Average Throughput</div>
-            <div class="stat-value">228M req/s</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Use Case</div>
-            <div class="stat-value">Hyperscale</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">Scaling</div>
-            <div class="stat-value">8+ GPUs linear</div>
-          </div>
-        </div>
-      </div>
-      <div class="engine-grid">
-        <div class="engine-card">
-          <div class="engine-name">RAYK Ultra</div>
-          <div class="engine-identifier">symmetra:tm-rayk-ultra:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">193.57M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">5.2µs</div>
-          </div>
-          <div class="engine-algorithm">64× zero-branch multi-SM execution. Peak single-GPU performance on RTX 5070.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Chronos</div>
-          <div class="engine-identifier">symmetra:tm-chronos:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">~393M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">2.5µs</div>
-          </div>
-          <div class="engine-algorithm">GF(2) algebraic skip optimization. Record-breaking throughput via mathematical properties.</div>
-          <div class="engine-status">Free</div>
-        </div>
-        <div class="engine-card">
-          <div class="engine-name">Symmetry Universal</div>
-          <div class="engine-identifier">symmetra:tm-symmetry-universal:1.0.0</div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">Throughput</div>
-            <div class="engine-metric-value">254M req/s</div>
-          </div>
-          <div class="engine-metric">
-            <div class="engine-metric-label">P99 Latency</div>
-            <div class="engine-metric-value">3.9µs</div>
-          </div>
-          <div class="engine-algorithm">D4/radial symmetry at scale. Systolic peak performance.</div>
-          <div class="engine-status">Free</div>
-        </div>
-      </div>
-    </div>
+<!-- ── Catalog ───────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <div id="loading-state"><span class="spinner"></span> Loading catalog…</div>
+
+  <div id="available-section" class="hidden">
+    <div class="section-label">Available Now — Free</div>
+    <div class="engines-grid" id="available-grid"></div>
   </div>
 
-  <div class="footer">
-    <p>All engines are Turing-complete and benchmarked on real hardware under sustained load. Measured May 2026.</p>
-    <p style="margin-top: 1rem;">For installation and deployment guides, visit <a href="https://github.com/JvanDyk/symmetra">GitHub</a> or check the <a href="/">main documentation</a>.</p>
+  <div id="coming-section" class="hidden">
+    <div class="section-label">Coming Soon</div>
+    <div class="engines-grid" id="coming-grid"></div>
   </div>
+
+</main>
+
+<footer>
+  All benchmarks measured on NVIDIA RTX 5070 under sustained load · May 2026 ·
+  <a href="/">symmetra.io</a>
+</footer>
+
+<div id="toast"></div>
+
+<!-- ── Script ────────────────────────────────────────────────────────────── -->
+<script type="module">
+import { auth, db, functions, isLocal } from '/firebase-app.js';
+import {
+  onAuthStateChanged,
+  signOut,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {
+  httpsCallable,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
+
+// ── Emulator indicator ────────────────────────────────────────────────────
+if (isLocal) document.getElementById('emulator-bar').classList.remove('hidden');
+
+// ── Auth state ────────────────────────────────────────────────────────────
+let currentUser = null;
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  renderAuthUI(user);
+});
+
+function renderAuthUI(user) {
+  const lbl      = document.getElementById('nav-user-label');
+  const btnIn    = document.getElementById('btn-signin');
+  const btnOut   = document.getElementById('btn-signout');
+  const notice   = document.getElementById('auth-notice');
+
+  if (user) {
+    lbl.textContent = user.displayName || user.email;
+    btnIn.classList.add('hidden');
+    btnOut.classList.remove('hidden');
+    notice.classList.add('hidden');
+  } else {
+    lbl.textContent = '';
+    btnOut.classList.add('hidden');
+    btnIn.classList.remove('hidden');
+    notice.classList.remove('hidden');
+  }
+}
+
+document.getElementById('btn-signout').addEventListener('click', async () => {
+  await signOut(auth);
+  toast('Signed out.', 'success');
+});
+
+// ── Load catalog ──────────────────────────────────────────────────────────
+async function loadCatalog() {
+  const loadEl = document.getElementById('loading-state');
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'engines'), orderBy('throughputRaw', 'asc')),
+    );
+
+    if (snap.empty) {
+      loadEl.textContent = 'Catalog is empty — run the seed script to populate it.';
+      return;
+    }
+
+    const avail  = [];
+    const coming = [];
+    snap.forEach(d => {
+      const e = { id: d.id, ...d.data() };
+      (e.available ? avail : coming).push(e);
+    });
+
+    loadEl.classList.add('hidden');
+
+    if (avail.length) {
+      document.getElementById('available-grid').innerHTML = avail.map(card).join('');
+      document.getElementById('available-section').classList.remove('hidden');
+    }
+
+    if (coming.length) {
+      document.getElementById('coming-grid').innerHTML = coming.map(card).join('');
+      document.getElementById('coming-section').classList.remove('hidden');
+    }
+
+    document.querySelectorAll('.btn-dl').forEach(b =>
+      b.addEventListener('click', handleDownload),
+    );
+
+  } catch (err) {
+    console.error(err);
+    loadEl.textContent = 'Failed to load catalog. Ensure emulators are running (firebase emulators:start).';
+  }
+}
+
+loadCatalog();
+
+// ── Card renderer ─────────────────────────────────────────────────────────
+function card(e) {
+  const tapeLabel = e.tapeSize > 0 ? `${e.tapeSize} cells` : 'None';
+  const badge     = e.available
+    ? `<span class="badge badge-free">Free</span>`
+    : `<span class="badge badge-coming-soon">Coming Soon</span>`;
+
+  const actions = e.available
+    ? `<button class="btn btn-win btn-dl"
+               data-engine="${e.id}" data-platform="windows"
+               data-label="↓ Windows (.zip)">↓ Windows (.zip)</button>
+       <button class="btn btn-linux btn-dl"
+               data-engine="${e.id}" data-platform="linux"
+               data-label="↓ Linux (.tar.gz)">↓ Linux (.tar.gz)</button>`
+    : `<button class="btn btn-coming-soon" disabled>🔒 Coming Soon</button>`;
+
+  return `
+    <div class="engine-card${e.available ? '' : ' locked'}">
+      <div class="card-head">
+        <div>
+          <div class="engine-name">${esc(e.displayName || e.name)}</div>
+          <div class="engine-id">${esc(e.identifier)}</div>
+        </div>
+        ${badge}
+      </div>
+      <div class="stats-row">
+        <div class="stat">
+          <div class="stat-label">Throughput</div>
+          <div class="stat-value">${esc(e.throughput)} RPS</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">P99 Latency</div>
+          <div class="stat-value">${esc(e.latency)}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">States</div>
+          <div class="stat-value">${e.states}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Tape</div>
+          <div class="stat-value">${tapeLabel}</div>
+        </div>
+      </div>
+      <p class="engine-desc">${esc(e.description)}</p>
+      <div class="card-actions">${actions}</div>
+    </div>`;
+}
+
+// ── Download ──────────────────────────────────────────────────────────────
+async function handleDownload(e) {
+  const btn      = e.currentTarget;
+  const engineId = btn.dataset.engine;
+  const platform = btn.dataset.platform;
+  const label    = btn.dataset.label;
+
+  if (!currentUser) {
+    location.href = '/auth?return=engines';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Preparing…';
+
+  try {
+    const fn  = httpsCallable(functions, 'getDownloadUrl');
+    const res = await fn({ engineId, platform });
+    const { url, filename, engineName } = res.data;
+
+    const a      = document.createElement('a');
+    a.href        = url;
+    a.download    = filename;
+    a.target      = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    toast(`Downloading ${engineName} for ${platform}…`, 'success');
+    btn.textContent = '✓ Downloading';
+    setTimeout(() => { btn.disabled = false; btn.textContent = label; }, 3500);
+
+  } catch (err) {
+    console.error(err);
+    toast(err?.message ?? 'Download failed — please try again.', 'error');
+    btn.disabled    = false;
+    btn.textContent = label;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body>
 </html>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Symmetra</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(116, 152, 255, 0.2);
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .brand-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .brand-sub {
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    h2 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: #f9fafb;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-bottom: 1.75rem;
+    }
+
+    .field {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #9ca3af;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      background: rgba(31, 41, 55, 0.8);
+      border: 1px solid rgba(116, 152, 255, 0.2);
+      border-radius: 6px;
+      color: #f9fafb;
+      font-size: 0.95rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus {
+      border-color: rgba(90, 240, 196, 0.5);
+    }
+
+    input::placeholder {
+      color: #4b5563;
+    }
+
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #f87171;
+      font-size: 0.85rem;
+      padding: 0.65rem 0.9rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .btn-primary {
+      width: 100%;
+      padding: 0.75rem;
+      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
+      border: none;
+      border-radius: 6px;
+      color: #000;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: 'IBM Plex Sans', sans-serif;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      margin-top: 0.5rem;
+    }
+
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .toggle-area {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    .toggle-area button {
+      background: none;
+      border: none;
+      color: #5af0c4;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      padding: 0;
+      margin-left: 0.25rem;
+    }
+
+    .toggle-area button:hover { text-decoration: underline; }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.82rem;
+      color: #6b7280;
+      text-decoration: none;
+    }
+
+    .back-link:hover { color: #9ca3af; }
+
+    .emulator-banner {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 6px;
+      color: #fbbf24;
+      font-size: 0.75rem;
+      font-family: 'IBM Plex Mono', monospace;
+      padding: 0.4rem 0.7rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      display: none;
+    }
+
+    .emulator-banner.visible { display: block; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="brand-name">SYMMETRA</div>
+      <div class="brand-sub">GPU-accelerated TypeScript runtime</div>
+    </div>
+
+    <div class="emulator-banner" id="emulator-banner">⚡ Emulator mode — localhost</div>
+
+    <h2 id="form-title">Sign In</h2>
+    <p class="subtitle" id="form-subtitle">Access the engine catalog and downloads.</p>
+
+    <form id="auth-form" novalidate>
+      <div class="field hidden" id="name-field">
+        <label for="display-name">Display Name</label>
+        <input type="text" id="display-name" placeholder="Your name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+      </div>
+
+      <div class="error-msg" id="error-msg"></div>
+
+      <button type="submit" class="btn-primary" id="submit-btn">Sign In</button>
+    </form>
+
+    <div class="toggle-area">
+      <span id="toggle-label">Don't have an account?</span>
+      <button id="toggle-btn">Create one</button>
+    </div>
+
+    <a class="back-link" id="back-link" href="/engines">← Back to Engine Catalog</a>
+  </div>
+
+  <script type="module">
+    import { auth, isLocal } from '/firebase-app.js';
+    import {
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      updateProfile,
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+    // ── Emulator banner ──────────────────────────────────────────────────────
+    if (isLocal) {
+      document.getElementById('emulator-banner').classList.add('visible');
+    }
+
+    // ── Return URL (e.g. ?return=engines) ───────────────────────────────────
+    const params     = new URLSearchParams(location.search);
+    const returnPage = params.get('return') || 'engines';
+    const returnUrl  = `/${returnPage}`;
+    document.getElementById('back-link').href = returnUrl;
+
+    // ── If already signed in, redirect immediately ───────────────────────────
+    onAuthStateChanged(auth, (user) => {
+      if (user) window.location.href = returnUrl;
+    });
+
+    // ── Mode toggle: sign-in ↔ create-account ───────────────────────────────
+    let mode = 'signin'; // 'signin' | 'create'
+
+    const titleEl    = document.getElementById('form-title');
+    const subtitleEl = document.getElementById('form-subtitle');
+    const nameField  = document.getElementById('name-field');
+    const toggleLbl  = document.getElementById('toggle-label');
+    const toggleBtn  = document.getElementById('toggle-btn');
+    const submitBtn  = document.getElementById('submit-btn');
+    const pwdInput   = document.getElementById('password');
+
+    toggleBtn.addEventListener('click', () => {
+      mode = mode === 'signin' ? 'create' : 'signin';
+      clearError();
+
+      if (mode === 'create') {
+        titleEl.textContent    = 'Create Account';
+        subtitleEl.textContent = 'Free account — no credit card required.';
+        nameField.classList.remove('hidden');
+        submitBtn.textContent  = 'Create Account';
+        toggleLbl.textContent  = 'Already have an account?';
+        toggleBtn.textContent  = 'Sign in';
+        pwdInput.setAttribute('autocomplete', 'new-password');
+      } else {
+        titleEl.textContent    = 'Sign In';
+        subtitleEl.textContent = 'Access the engine catalog and downloads.';
+        nameField.classList.add('hidden');
+        submitBtn.textContent  = 'Sign In';
+        toggleLbl.textContent  = "Don't have an account?";
+        toggleBtn.textContent  = 'Create one';
+        pwdInput.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    // ── Form submit ──────────────────────────────────────────────────────────
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const name     = document.getElementById('display-name').value.trim();
+
+      if (!email || !password) {
+        showError('Email and password are required.');
+        return;
+      }
+
+      submitBtn.disabled    = true;
+      submitBtn.textContent = mode === 'signin' ? 'Signing in…' : 'Creating account…';
+
+      try {
+        if (mode === 'signin') {
+          await signInWithEmailAndPassword(auth, email, password);
+        } else {
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
+          if (name) {
+            await updateProfile(cred.user, { displayName: name });
+          }
+        }
+        // onAuthStateChanged will redirect
+      } catch (err) {
+        showError(friendlyError(err.code));
+        submitBtn.disabled    = false;
+        submitBtn.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+      }
+    });
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.classList.add('visible');
+    }
+
+    function clearError() {
+      const el = document.getElementById('error-msg');
+      el.textContent = '';
+      el.classList.remove('visible');
+    }
+
+    function friendlyError(code) {
+      const map = {
+        'auth/user-not-found':         'No account found with that email.',
+        'auth/wrong-password':         'Incorrect password.',
+        'auth/email-already-in-use':   'An account with that email already exists.',
+        'auth/invalid-email':          'Please enter a valid email address.',
+        'auth/weak-password':          'Password must be at least 6 characters.',
+        'auth/too-many-requests':      'Too many attempts. Please try again later.',
+        'auth/invalid-credential':     'Invalid email or password.',
+        'auth/network-request-failed': 'Network error. Check your connection.',
+      };
+      return map[code] || 'Something went wrong. Please try again.';
+    }
+  </script>
+</body>
+</html>

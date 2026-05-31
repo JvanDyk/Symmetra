@@ -1,0 +1,10 @@
+{
+  "name": "symmetra-seed",
+  "description": "Seeds the Firebase emulator with the engine catalog and placeholder files",
+  "scripts": {
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  }
+}

@@ -32,6 +32,17 @@ sym-tmp-*.js
 # Internal documents
 CHAMPION_HISTORY.md
 
+# Firebase
+*-firebase-adminsdk-*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+functions/lib/
+
+# Seed node_modules are already covered by node_modules/ above
+
 # ── If you accidentally git init in the root and want to publish:
 # Do NOT use git add .
 # Instead: cd public && git init && git add . && git push to the PUBLIC repo
