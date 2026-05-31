@@ -1,0 +1,256 @@
+version: '3.9'
+
+services:
+  # ====================================================================
+  # PostgreSQL
+  # ====================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: symmetra-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-symmetra}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # MongoDB
+  # ====================================================================
+  mongodb:
+    image: mongo:7.0
+    container_name: symmetra-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-mongo123}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-symmetra}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # Zookeeper (required for Kafka)
+  # ====================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: symmetra-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # Kafka
+  # ====================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: symmetra-kafka
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: kafka-broker-api-versions --bootstrap-server localhost:9092
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # Kafka UI (optional, for monitoring)
+  # ====================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: symmetra-kafka-ui
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8080:8080"
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # RabbitMQ
+  # ====================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: symmetra-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - symmetra
+
+  # ====================================================================
+  # MongoDB CRUD Example
+  # ====================================================================
+  symmify-mongo-crud:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: examples/symmify-mongo-crud
+    container_name: symmetra-mongo-crud
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGODB_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-mongo123}@mongodb:27017/symmetra?authSource=admin
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    networks:
+      - symmetra
+    restart: unless-stopped
+
+  # ====================================================================
+  # Kafka Producer Example
+  # ====================================================================
+  symmify-kafka-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: examples/symmify-kafka-example
+    container_name: symmetra-kafka-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      KAFKA_BROKERS: kafka:9092
+      PORT: 3001
+      COMMAND: npm run dev
+    ports:
+      - "3001:3001"
+    networks:
+      - symmetra
+    restart: unless-stopped
+
+  # ====================================================================
+  # Kafka Consumer Example
+  # ====================================================================
+  symmify-kafka-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: examples/symmify-kafka-example
+    container_name: symmetra-kafka-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      KAFKA_BROKERS: kafka:9092
+      COMMAND: npm run consumer
+    networks:
+      - symmetra
+    restart: unless-stopped
+
+  # ====================================================================
+  # RabbitMQ Producer Example
+  # ====================================================================
+  symmify-rabbitmq-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: examples/symmify-rabbitmq-example
+    container_name: symmetra-rabbitmq-producer
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      PORT: 3002
+      COMMAND: npm run dev
+    ports:
+      - "3002:3002"
+    networks:
+      - symmetra
+    restart: unless-stopped
+
+  # ====================================================================
+  # RabbitMQ Consumer Example
+  # ====================================================================
+  symmify-rabbitmq-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_PATH: examples/symmify-rabbitmq-example
+    container_name: symmetra-rabbitmq-consumer
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      COMMAND: npm run consumer
+    networks:
+      - symmetra
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  zookeeper_data:
+  kafka_data:
+  rabbitmq_data:
+
+networks:
+  symmetra:
+    driver: bridge

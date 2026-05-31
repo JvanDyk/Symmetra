@@ -1,0 +1,65 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+
+# Testing
+coverage
+.nyc_output
+*.lcov
+
+# Documentation
+README.md
+docs
+*.md
+
+# Archives
+*.tar
+*.zip
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Project files
+.claude
+.git
+.github
+.gitignore
+examples/
+3D_FONT*
+FirstLight*
+*.html
+*.css
+*.py
+FONT_*
+README_FONT.md
+INTEGRATION_PACKAGES_SUMMARY.md
+TESTING_GUIDE.md
+DELIVERY_SUMMARY.md
+VERIFICATION_REPORT.md
