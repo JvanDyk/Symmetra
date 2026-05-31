@@ -1,0 +1,18 @@
+{
+  "name": "http-api-tutorial",
+  "version": "1.0.0",
+  "description": "HTTP API with UUID generation and crypto hashing - Tutorial Example",
+  "spm": {
+    "compatibility": "warn"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "@symmetra/http": "^1.0.0",
+    "@symmetra/crypto": "^1.0.0"
+  },
+  "scripts": {
+    "dev": "sym server.ts --watch",
+    "build": "sym build server.ts --with-spm",
+    "start": "sym run dist/server.cuda"
+  }
+}

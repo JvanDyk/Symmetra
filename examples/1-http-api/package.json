@@ -1,0 +1,14 @@
+{
+  "name": "http-api-tutorial",
+  "version": "1.0.0",
+  "description": "HTTP API with UUID generation and crypto hashing - Tutorial Example",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.ts",
+    "start": "node server.ts"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "express": "^4.18.2"
+  }
+}
