@@ -1,0 +1,1 @@
+{"name":"@symmetra/compat-querystring","version":"1.0.0","description":"Node.js querystring stubs","type":"module","main":"src/index.ts","exports":{".":{"import":"./src/index.ts"}},"files":["src"],"keywords":["symmetra","gpu","querystring"],"author":"Symmetra","license":"MIT"}

@@ -1,0 +1,1 @@
+{"name":"@symmetra/compat-assert","version":"1.0.0","description":"Node.js assert module","type":"module","main":"src/index.ts","exports":{".":{"import":"./src/index.ts"}},"files":["src"],"keywords":["symmetra","gpu","assert"],"author":"Symmetra","license":"MIT"}

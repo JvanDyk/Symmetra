@@ -1,0 +1,1 @@
+{"name":"@symmetra/compat-fs","version":"1.0.0","description":"Node.js fs module stubs (not suitable for GPU)","type":"module","main":"src/index.ts","exports":{".":{"import":"./src/index.ts"}},"files":["src"],"keywords":["symmetra","gpu","fs","filesystem"],"author":"Symmetra","license":"MIT"}

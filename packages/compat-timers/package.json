@@ -1,0 +1,1 @@
+{"name":"@symmetra/compat-timers","version":"1.0.0","description":"Node.js timers stubs","type":"module","main":"src/index.ts","exports":{".":{"import":"./src/index.ts"}},"files":["src"],"keywords":["symmetra","gpu","timers"],"author":"Symmetra","license":"MIT"}

@@ -1,0 +1,30 @@
+export const argv = ['symmetra'];
+export const argv0 = 'symmetra';
+export const cwd = () => '/gpu';
+export const chdir = (dir: string) => {};
+export const env: Record<string, string> = {};
+export const exit = (code: number = 0) => {};
+export const platform = 'linux';
+export const arch = 'x64';
+export const pid = 1;
+export const ppid = 0;
+export const version = '1.0.0';
+export const versions = { node: '1.0.0', symmetra: '1.0.0' };
+export const stdin = { isTTY: false };
+export const stdout = { isTTY: false, write: (data: string) => data.length };
+export const stderr = { isTTY: false, write: (data: string) => data.length };
+export const uptime = () => 0;
+export const hrtime = () => [0, 0] as [number, number];
+export const memoryUsage = () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 });
+export const cpuUsage = () => ({ user: 0, system: 0 });
+export const nextTick = (fn: () => void) => setTimeout(fn, 0);
+
+export const on = (event: string, listener: any) => {};
+export const once = (event: string, listener: any) => {};
+export const off = (event: string, listener: any) => {};
+export const removeAllListeners = (event?: string) => {};
+export const listeners = (event: string) => [];
+export const emit = (event: string, ...args: any[]) => false;
+export const listenerCount = (event: string) => 0;
+
+export default { argv, argv0, cwd, chdir, env, exit, platform, arch, pid, ppid, version, versions, stdin, stdout, stderr, uptime, hrtime, memoryUsage, cpuUsage, nextTick, on, once, off, removeAllListeners, listeners, emit, listenerCount };

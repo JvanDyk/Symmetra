@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/compat-os",
+  "version": "1.0.0",
+  "description": "Node.js os module stubs for Symmetra GPU runtime",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {".": {"import": "./src/index.ts"}},
+  "files": ["src"],
+  "keywords": ["symmetra", "gpu", "os"],
+  "author": "Symmetra",
+  "license": "MIT"
+}

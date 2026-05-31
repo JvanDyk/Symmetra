@@ -1,0 +1,21 @@
+{
+  "name": "@symmetra/compat-events",
+  "version": "1.0.0",
+  "description": "Node.js events module compatibility layer for Symmetra GPU runtime",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.d.ts"
+    }
+  },
+  "files": ["src", "README.md"],
+  "keywords": ["symmetra", "gpu", "events", "compatibility", "node.js"],
+  "author": "Symmetra",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

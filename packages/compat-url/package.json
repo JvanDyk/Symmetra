@@ -1,0 +1,12 @@
+{
+  "name": "@symmetra/compat-url",
+  "version": "1.0.0",
+  "description": "Node.js url module compatibility layer",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {".": {"import": "./src/index.ts"}},
+  "files": ["src"],
+  "keywords": ["symmetra", "gpu", "url"],
+  "author": "Symmetra",
+  "license": "MIT"
+}

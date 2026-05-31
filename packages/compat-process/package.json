@@ -1,0 +1,1 @@
+{"name":"@symmetra/compat-process","version":"1.0.0","description":"Node.js process object stubs","type":"module","main":"src/index.ts","exports":{".":{"import":"./src/index.ts"}},"files":["src"],"keywords":["symmetra","gpu","process"],"author":"Symmetra","license":"MIT"}
