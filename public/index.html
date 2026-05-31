@@ -2493,8 +2493,6 @@ code {
               <th style="text-align:left; padding:0.8rem; font-weight:700;">Algorithm</th>
               <th style="text-align:center; padding:0.8rem; color:#5af0c4; font-weight:700;">RPS</th>
               <th style="text-align:center; padding:0.8rem;">P99 Latency</th>
-              <th style="text-align:center; padding:0.8rem;">Hardware</th>
-              <th style="text-align:center; padding:0.8rem;">Family</th>
             </tr>
           </thead>
           <tbody>
@@ -2502,50 +2500,36 @@ code {
               <td style="padding:0.8rem; font-weight:600;">RAYK Ultra</td>
               <td style="text-align:center; padding:0.8rem; color:#ff5252; font-weight:700;">193.57M</td>
               <td style="text-align:center; padding:0.8rem;">5.2µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-rayk-ultra</td>
-              <td style="text-align:center; padding:0.8rem;">Extreme</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
               <td style="padding:0.8rem; font-weight:600;">Bitwise Rule 60</td>
               <td style="text-align:center; padding:0.8rem; color:#ffa500; font-weight:700;">86.42M</td>
               <td style="text-align:center; padding:0.8rem;">12µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-bitwise-rule60</td>
-              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
               <td style="padding:0.8rem; font-weight:600;">Bitwise Rule 90</td>
               <td style="text-align:center; padding:0.8rem; color:#ffa500; font-weight:700;">77.92M</td>
               <td style="text-align:center; padding:0.8rem;">13µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-bitwise-rule90</td>
-              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
               <td style="padding:0.8rem; font-weight:600;">Singularity</td>
               <td style="text-align:center; padding:0.8rem; color:#8bc6ff; font-weight:700;">64.6M</td>
               <td style="text-align:center; padding:0.8rem;">15µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-singularity</td>
-              <td style="text-align:center; padding:0.8rem;">Lightning</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
               <td style="padding:0.8rem; font-weight:600;">Prism X</td>
               <td style="text-align:center; padding:0.8rem; color:#7c6fff; font-weight:700;">52.1M</td>
               <td style="text-align:center; padding:0.8rem;">19µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-prism-x</td>
-              <td style="text-align:center; padding:0.8rem;">Fast</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(116,152,255,.1);">
               <td style="padding:0.8rem; font-weight:600;">RAYK</td>
               <td style="text-align:center; padding:0.8rem; color:#5af0c4; font-weight:700;">41.14M</td>
               <td style="text-align:center; padding:0.8rem;">24µs</td>
-              <td style="text-align:center; padding:0.8rem;">symmetra:tm-rayk</td>
-              <td style="text-align:center; padding:0.8rem;">Baseline</td>
             </tr>
             <tr>
               <td style="padding:0.8rem; font-weight:600;">Baseline Average</td>
               <td style="text-align:center; padding:0.8rem; color:#a3e635; font-weight:700;">6.6M</td>
               <td style="text-align:center; padding:0.8rem;">136µs</td>
-              <td style="text-align:center; padding:0.8rem;">Single core</td>
-              <td style="text-align:center; padding:0.8rem;">CPU</td>
             </tr>
           </tbody>
         </table>
@@ -2711,20 +2695,21 @@ code {
 <span style="color:#7c6fff">// Rule 60 Turing machine — baseline engine</span><br>
 app.<span style="color:#8bc6ff">post</span>(<span style="color:#ff6b6b">'/rule60'</span>, (ctx) => {<br>
 &nbsp;&nbsp;<span style="color:#5af0c4">const</span> { generations, width } = ctx.<span style="color:#8bc6ff">body</span>;<br>
-&nbsp;&nbsp;<span style="color:#5af0c4">let</span> state = <span style="color:#a3e635">1</span> << (width / <span style="color:#a3e635">2</span>);<br>
-&nbsp;&nbsp;<span style="color:#5af0c4">const</span> results = [];<br>
+&nbsp;&nbsp;<br>
+&nbsp;&nbsp;<span style="color:#7c6fff">// Start with one live cell in the centre</span><br>
+&nbsp;&nbsp;<span style="color:#5af0c4">let</span> cells: <span style="color:#8bc6ff">number</span>[] = Array(width).<span style="color:#8bc6ff">fill</span>(<span style="color:#a3e635">0</span>);<br>
+&nbsp;&nbsp;cells[Math.<span style="color:#8bc6ff">floor</span>(width / <span style="color:#a3e635">2</span>)] = <span style="color:#a3e635">1</span>;<br>
+&nbsp;&nbsp;<span style="color:#5af0c4">const</span> results: <span style="color:#8bc6ff">number</span>[][] = [];<br>
 &nbsp;&nbsp;<br>
 &nbsp;&nbsp;<span style="color:#5af0c4">for</span> (<span style="color:#5af0c4">let</span> gen = <span style="color:#a3e635">0</span>; gen < generations; gen++) {<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">let</span> next = <span style="color:#a3e635">0</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> next: <span style="color:#8bc6ff">number</span>[] = Array(width).<span style="color:#8bc6ff">fill</span>(<span style="color:#a3e635">0</span>);<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">for</span> (<span style="color:#5af0c4">let</span> i = <span style="color:#a3e635">1</span>; i < width - <span style="color:#a3e635">1</span>; i++) {<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> left = (state >> (i - <span style="color:#a3e635">1</span>)) & <span style="color:#a3e635">1</span>;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> center = (state >> i) & <span style="color:#a3e635">1</span>;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> right = (state >> (i + <span style="color:#a3e635">1</span>)) & <span style="color:#a3e635">1</span>;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> rule = left ^ right;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;next |= rule << i;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> left  = cells[i - <span style="color:#a3e635">1</span>];<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#5af0c4">const</span> right = cells[i + <span style="color:#a3e635">1</span>];<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;next[i] = left !== right ? <span style="color:#a3e635">1</span> : <span style="color:#a3e635">0</span>;<br>
 &nbsp;&nbsp;&nbsp;&nbsp;}<br>
-&nbsp;&nbsp;&nbsp;&nbsp;results.<span style="color:#8bc6ff">push</span>(state);<br>
-&nbsp;&nbsp;&nbsp;&nbsp;state = next;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;results.<span style="color:#8bc6ff">push</span>([...cells]);<br>
+&nbsp;&nbsp;&nbsp;&nbsp;cells = next;<br>
 &nbsp;&nbsp;}<br>
 &nbsp;&nbsp;<span style="color:#5af0c4">return</span> ctx.<span style="color:#8bc6ff">json</span>({ generations, width, results });<br>
 });<br>
