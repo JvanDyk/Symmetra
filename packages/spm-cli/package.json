@@ -1,0 +1,20 @@
+{
+  "name": "spm-cli",
+  "version": "1.0.0",
+  "description": "Symmetra Package Manager (SPM) - CLI tool",
+  "type": "module",
+  "main": "src/cli.ts",
+  "bin": {
+    "spm": "src/cli.ts"
+  },
+  "files": ["src", "bin", "README.md"],
+  "keywords": ["symmetra", "spm", "package-manager", "cli"],
+  "author": "Symmetra",
+  "license": "MIT",
+  "dependencies": {
+    "@symmetra/spm-core": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
