@@ -9,12 +9,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": [
-    {
-      "bucket": "symmetra-38ad8.firebasestorage.app",
-      "rules": "storage.rules"
-    }
-  ],
+  "storage": {
+    "rules": "storage.rules"
+  },
   "functions": [
     {
       "source": "functions",
