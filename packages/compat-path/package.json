@@ -1,0 +1,30 @@
+{
+  "name": "@symmetra/compat-path",
+  "version": "1.0.0",
+  "description": "Node.js path module compatibility layer for Symmetra GPU runtime",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "symmetra",
+    "gpu",
+    "path",
+    "compatibility",
+    "node.js"
+  ],
+  "author": "Symmetra",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
