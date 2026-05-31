@@ -1,0 +1,19 @@
+{
+  "name": "@symmetra/symmify",
+  "version": "1.0.0",
+  "description": "Drop-in Fastify-compatible HTTP framework with Zod-native validation for Symmetra",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "license": "MIT"
+}

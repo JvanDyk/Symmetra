@@ -1,0 +1,20 @@
+{
+  "name": "@symmetra/kafka",
+  "version": "1.0.0",
+  "description": "Kafka plugin for @symmetra/symmify",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@symmetra/symmify": "workspace:*",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "license": "MIT"
+}

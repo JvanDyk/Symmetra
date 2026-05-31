@@ -1,0 +1,22 @@
+{
+  "name": "symmify-rabbitmq-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch producer.ts",
+    "consumer": "tsx consumer.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@symmetra/symmify": "workspace:*",
+    "@symmetra/rabbitmq": "workspace:*",
+    "zod": "^3.22.0",
+    "amqplib": "^0.10.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/amqplib": "^0.10.4",
+    "tsx": "^4.7.0"
+  }
+}

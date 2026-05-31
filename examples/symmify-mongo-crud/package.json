@@ -1,0 +1,21 @@
+{
+  "name": "symmify-mongo-crud-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch app.ts",
+    "start": "node dist/app.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@symmetra/symmify": "workspace:*",
+    "@symmetra/mongo": "workspace:*",
+    "zod": "^3.22.0",
+    "mongodb": "^6.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0"
+  }
+}

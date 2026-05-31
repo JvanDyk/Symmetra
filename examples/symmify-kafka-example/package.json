@@ -1,0 +1,21 @@
+{
+  "name": "symmify-kafka-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch producer.ts",
+    "consumer": "tsx consumer.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@symmetra/symmify": "workspace:*",
+    "@symmetra/kafka": "workspace:*",
+    "zod": "^3.22.0",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0"
+  }
+}
