@@ -48,8 +48,11 @@ const engines = [
     gpuUtilization:   '50%',
     available:        true,
     tier:             'free',
-    storagePathWindows: 'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows.zip',
-    storagePathLinux:   'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux.tar.gz',
+    storagePathWindowsZip: 'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows-x64.zip',
+    storagePathWindowsMsi: 'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows-x64.msi',
+    storagePathLinuxDeb:   'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.deb',
+    storagePathLinuxRpm:   'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.rpm',
+    storagePathLinuxTar:   'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.tar.gz',
     createdAt:        admin.firestore.FieldValue.serverTimestamp(),
   },
   {
@@ -67,8 +70,11 @@ const engines = [
     gpuUtilization:   '65%',
     available:        true,
     tier:             'free',
-    storagePathWindows: 'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows.zip',
-    storagePathLinux:   'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux.tar.gz',
+    storagePathWindowsZip: 'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows-x64.zip',
+    storagePathWindowsMsi: 'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows-x64.msi',
+    storagePathLinuxDeb:   'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.deb',
+    storagePathLinuxRpm:   'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.rpm',
+    storagePathLinuxTar:   'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.tar.gz',
     createdAt:        admin.firestore.FieldValue.serverTimestamp(),
   },
 
@@ -212,25 +218,59 @@ const engines = [
 // Placeholder file content for emulator storage
 // Replace with real binaries when ready to release.
 // ─────────────────────────────────────────────────────────────────────────────
+// All packages are x64 only — CUDA dropped 32-bit in 2018, no modern NVIDIA
+// GPU has a 32-bit driver. macOS excluded (Apple dropped NVIDIA support 2018).
 const placeholderFiles = [
+  // ── tm-simple ────────────────────────────────────────────────────────────
   {
-    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows.zip',
-    content: 'SYMMETRA ENGINE: Simple v1.0.0 (Windows)\n[Replace with actual sym.exe bundle]\n',
+    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows-x64.zip',
+    content: 'SYMMETRA ENGINE: Simple v1.0.0 Windows x64 (ZIP)\n[Replace with sym.exe + README]\n',
     type:    'application/zip',
   },
   {
-    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux.tar.gz',
-    content: 'SYMMETRA ENGINE: Simple v1.0.0 (Linux)\n[Replace with actual sym binary bundle]\n',
+    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-windows-x64.msi',
+    content: 'SYMMETRA ENGINE: Simple v1.0.0 Windows x64 (MSI)\n[Replace with WiX-built installer]\n',
+    type:    'application/x-msi',
+  },
+  {
+    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.deb',
+    content: 'SYMMETRA ENGINE: Simple v1.0.0 Linux x64 (DEB)\n[Replace with dpkg-deb build]\n',
+    type:    'application/vnd.debian.binary-package',
+  },
+  {
+    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.rpm',
+    content: 'SYMMETRA ENGINE: Simple v1.0.0 Linux x64 (RPM)\n[Replace with rpmbuild output]\n',
+    type:    'application/x-rpm',
+  },
+  {
+    path:    'engines/tm-simple/v1.0.0/sym-simple-v1.0.0-linux-x64.tar.gz',
+    content: 'SYMMETRA ENGINE: Simple v1.0.0 Linux x64 (TAR.GZ)\n[Replace with binary + README]\n',
     type:    'application/gzip',
   },
+  // ── tm-moderate ──────────────────────────────────────────────────────────
   {
-    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows.zip',
-    content: 'SYMMETRA ENGINE: Moderate v1.0.0 (Windows)\n[Replace with actual sym.exe bundle]\n',
+    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows-x64.zip',
+    content: 'SYMMETRA ENGINE: Moderate v1.0.0 Windows x64 (ZIP)\n[Replace with sym.exe + README]\n',
     type:    'application/zip',
   },
   {
-    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux.tar.gz',
-    content: 'SYMMETRA ENGINE: Moderate v1.0.0 (Linux)\n[Replace with actual sym binary bundle]\n',
+    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-windows-x64.msi',
+    content: 'SYMMETRA ENGINE: Moderate v1.0.0 Windows x64 (MSI)\n[Replace with WiX-built installer]\n',
+    type:    'application/x-msi',
+  },
+  {
+    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.deb',
+    content: 'SYMMETRA ENGINE: Moderate v1.0.0 Linux x64 (DEB)\n[Replace with dpkg-deb build]\n',
+    type:    'application/vnd.debian.binary-package',
+  },
+  {
+    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.rpm',
+    content: 'SYMMETRA ENGINE: Moderate v1.0.0 Linux x64 (RPM)\n[Replace with rpmbuild output]\n',
+    type:    'application/x-rpm',
+  },
+  {
+    path:    'engines/tm-moderate/v1.0.0/sym-moderate-v1.0.0-linux-x64.tar.gz',
+    content: 'SYMMETRA ENGINE: Moderate v1.0.0 Linux x64 (TAR.GZ)\n[Replace with binary + README]\n',
     type:    'application/gzip',
   },
 ];

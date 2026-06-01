@@ -32,13 +32,14 @@ export const getDownloadUrl = onCall(
     };
 
     // ── Input validation ──
+    const VALID_PLATFORMS = ['windows-zip','windows-msi','linux-deb','linux-rpm','linux-tar'];
     if (typeof engineId !== 'string' || !engineId.trim()) {
       throw new HttpsError('invalid-argument', 'engineId is required.');
     }
-    if (platform !== 'windows' && platform !== 'linux') {
+    if (!VALID_PLATFORMS.includes(platform)) {
       throw new HttpsError(
         'invalid-argument',
-        'platform must be "windows" or "linux".',
+        `platform must be one of: ${VALID_PLATFORMS.join(', ')}.`,
       );
     }
 
@@ -60,15 +61,19 @@ export const getDownloadUrl = onCall(
     }
 
     // ── Resolve storage path ──
-    const storagePath: string | null =
-      platform === 'windows'
-        ? engine.storagePathWindows ?? null
-        : engine.storagePathLinux ?? null;
+    const pathMap: Record<string, string | null> = {
+      'windows-zip': engine.storagePathWindowsZip ?? null,
+      'windows-msi': engine.storagePathWindowsMsi ?? null,
+      'linux-deb':   engine.storagePathLinuxDeb   ?? null,
+      'linux-rpm':   engine.storagePathLinuxRpm   ?? null,
+      'linux-tar':   engine.storagePathLinuxTar   ?? null,
+    };
+    const storagePath = pathMap[platform];
 
     if (!storagePath) {
       throw new HttpsError(
         'not-found',
-        `No ${platform} build is available for this engine yet.`,
+        `No ${platform} package is available for this engine yet.`,
       );
     }
 
