@@ -87,13 +87,17 @@ export const getDownloadUrl = onCall(
     }
 
     // The Storage emulator has no signing credentials, so getSignedUrl() throws.
-    // In emulator mode return a direct emulator URL instead.
+    // In emulator mode, read the firebaseStorageDownloadTokens from file metadata
+    // (set by the seed script) — download tokens bypass security rules.
     let downloadUrl: string;
     if (process.env.FUNCTIONS_EMULATOR) {
+      const [meta]  = await f.getMetadata() as [Record<string, any>];
+      const token   = meta?.metadata?.firebaseStorageDownloadTokens as string | undefined;
       const bucketName = bucket.name;
       downloadUrl =
         `http://127.0.0.1:9199/v0/b/${encodeURIComponent(bucketName)}` +
-        `/o/${encodeURIComponent(storagePath)}?alt=media`;
+        `/o/${encodeURIComponent(storagePath)}?alt=media` +
+        (token ? `&token=${token}` : '');
     } else {
       const [signed] = await f.getSignedUrl({
         action:  'read',

@@ -1,4 +1,5 @@
 'use strict';
+const { randomUUID } = require('crypto');
 /**
  * Symmetra emulator seed
  *
@@ -252,11 +253,18 @@ async function main() {
   console.log('\nUploading placeholder files to Storage emulator...');
   for (const f of placeholderFiles) {
     const file = storage.file(f.path);
+    const token = randomUUID(); // download token — bypasses storage rules
     await file.save(Buffer.from(f.content, 'utf-8'), {
       contentType: f.type,
-      metadata: { placeholder: 'true', seeded: new Date().toISOString() },
+      metadata: {
+        metadata: {
+          firebaseStorageDownloadTokens: token,
+          placeholder: 'true',
+          seeded: new Date().toISOString(),
+        },
+      },
     });
-    console.log(`  ✓ ${f.path}`);
+    console.log(`  ✓ ${f.path}  (token: ${token})`);
   }
 
   console.log('\n✅  Seed complete!\n');
