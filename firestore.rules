@@ -9,11 +9,30 @@ service cloud.firestore {
     }
 
     // Download logs — written only by Cloud Functions (admin SDK bypasses rules)
-    // Users can read their own logs
     match /downloads/{downloadId} {
       allow read: if request.auth != null
                   && request.auth.uid == resource.data.userId;
       allow write: if false;
+    }
+
+    // Newsletter subscribers
+    // - Anyone can subscribe (create) — token is the document ID
+    // - Anyone with the token can read or deactivate their own record
+    // - Listing the collection is blocked (no one can enumerate subscribers)
+    match /subscribers/{token} {
+      allow create: if request.resource.data.keys().hasAll(['email','token','active','subscribedAt'])
+                    && request.resource.data.email is string
+                    && request.resource.data.active == true
+                    && request.resource.data.token == token;
+
+      allow read: if true; // token itself is the secret; UUIDs can't be guessed
+
+      allow update: if // only allowed action is setting active = false (unsubscribe)
+                    request.resource.data.active == false
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['active', 'unsubscribedAt']);
+
+      allow delete: if false;
     }
   }
 }

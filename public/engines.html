@@ -138,44 +138,84 @@
 
     .hero p { color: var(--muted); max-width: 560px; font-size: 0.95rem; }
 
-    /* ── Auth notice ─────────────────────────────────────────────────────── */
-    .auth-notice {
+    /* ── Newsletter ──────────────────────────────────────────────────────── */
+    .newsletter {
       max-width: 1100px;
-      margin: 0 auto 0.5rem;
+      margin: 2.5rem auto 0;
       padding: 0 1.25rem;
     }
 
-    .auth-notice-inner {
-      background: rgba(124, 111, 255, 0.08);
-      border: 1px solid rgba(124, 111, 255, 0.22);
-      border-radius: 8px;
-      padding: 0.85rem 1.25rem;
+    .newsletter-inner {
+      background: rgba(17, 24, 39, 0.7);
+      border: 1px solid rgba(90, 240, 196, 0.18);
+      border-radius: 10px;
+      padding: 2rem 2rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 0.75rem;
+      gap: 1.5rem;
     }
 
-    .auth-notice-text {
-      font-size: 0.87rem;
+    .newsletter-copy h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f9fafb;
+      margin-bottom: 0.3rem;
+    }
+
+    .newsletter-copy p {
+      font-size: 0.83rem;
       color: var(--muted);
+      max-width: 380px;
     }
 
-    .auth-notice-text strong { color: var(--text); }
+    .newsletter-form {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
 
-    .btn-notice-signin {
-      padding: 0.42rem 1rem;
+    .newsletter-input {
+      padding: 0.6rem 0.9rem;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      outline: none;
+      width: 230px;
+      transition: border-color 0.15s;
+    }
+
+    .newsletter-input:focus { border-color: rgba(90, 240, 196, 0.45); }
+    .newsletter-input::placeholder { color: var(--muted2); }
+
+    .newsletter-btn {
+      padding: 0.6rem 1.2rem;
       background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
       border: none;
-      border-radius: 5px;
+      border-radius: 6px;
       color: #000;
       font-weight: 600;
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       font-family: 'IBM Plex Sans', sans-serif;
       cursor: pointer;
       white-space: nowrap;
+      transition: opacity 0.15s;
     }
+
+    .newsletter-btn:hover:not(:disabled) { opacity: 0.88; }
+    .newsletter-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .newsletter-success {
+      font-size: 0.85rem;
+      color: var(--accent-b);
+      display: none;
+    }
+
+    .newsletter-success.visible { display: block; }
 
     /* ── Main ────────────────────────────────────────────────────────────── */
     .main {
@@ -444,19 +484,6 @@
   <p>Production-grade Turing machines for GPU computing. Benchmarked on RTX&nbsp;5070.</p>
 </section>
 
-<!-- ── Auth notice (hidden when signed in) ──────────────────────────────── -->
-<div class="auth-notice hidden" id="auth-notice">
-  <div class="auth-notice-inner">
-    <span class="auth-notice-text">
-      <strong>Sign in for free</strong> to download engines and track your usage.
-    </span>
-    <button class="btn-notice-signin"
-            onclick="location.href='/auth?return=engines'">
-      Sign In / Create Account
-    </button>
-  </div>
-</div>
-
 <!-- ── Catalog ───────────────────────────────────────────────────────────── -->
 <main class="main">
 
@@ -474,6 +501,26 @@
 
 </main>
 
+<!-- ── Newsletter ────────────────────────────────────────────────────────── -->
+<section class="newsletter">
+  <div class="newsletter-inner">
+    <div class="newsletter-copy">
+      <h3>Stay updated on new releases</h3>
+      <p>Get notified when Pro and Enterprise engines launch, plus early API access announcements.</p>
+    </div>
+    <div>
+      <form class="newsletter-form" id="newsletter-form">
+        <input class="newsletter-input" type="email" id="newsletter-email"
+               placeholder="your@email.com" autocomplete="email" required>
+        <button class="newsletter-btn" type="submit" id="newsletter-btn">Notify Me</button>
+      </form>
+      <p class="newsletter-success" id="newsletter-success">
+        ✓ You're on the list! Check your inbox for a confirmation.
+      </p>
+    </div>
+  </div>
+</section>
+
 <footer>
   All benchmarks measured on NVIDIA RTX 5070 under sustained load · May 2026 ·
   <a href="/">symmetra.io</a>
@@ -490,9 +537,11 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   collection,
+  doc,
   getDocs,
   orderBy,
   query,
+  setDoc,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
   httpsCallable,
@@ -510,21 +559,18 @@ onAuthStateChanged(auth, (user) => {
 });
 
 function renderAuthUI(user) {
-  const lbl      = document.getElementById('nav-user-label');
-  const btnIn    = document.getElementById('btn-signin');
-  const btnOut   = document.getElementById('btn-signout');
-  const notice   = document.getElementById('auth-notice');
+  const lbl    = document.getElementById('nav-user-label');
+  const btnIn  = document.getElementById('btn-signin');
+  const btnOut = document.getElementById('btn-signout');
 
   if (user) {
     lbl.textContent = user.displayName || user.email;
     btnIn.classList.add('hidden');
     btnOut.classList.remove('hidden');
-    notice.classList.add('hidden');
   } else {
     lbl.textContent = '';
     btnOut.classList.add('hidden');
     btnIn.classList.remove('hidden');
-    notice.classList.remove('hidden');
   }
 }
 
@@ -681,6 +727,38 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Newsletter subscribe ──────────────────────────────────────────────────
+document.getElementById('newsletter-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email  = document.getElementById('newsletter-email').value.trim().toLowerCase();
+  const btn    = document.getElementById('newsletter-btn');
+  const form   = document.getElementById('newsletter-form');
+  const success= document.getElementById('newsletter-success');
+
+  if (!email) return;
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    // Token = document ID, used as the unsubscribe key
+    const token = crypto.randomUUID();
+    await setDoc(doc(db, 'subscribers', token), {
+      email,
+      token,
+      active:       true,
+      source:       'engines-catalog',
+      subscribedAt: new Date().toISOString(),
+    });
+    form.style.display    = 'none';
+    success.classList.add('visible');
+  } catch (err) {
+    console.error(err);
+    btn.disabled    = false;
+    btn.textContent = 'Notify Me';
+    toast('Could not save — please try again.', 'error');
+  }
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unsubscribe — Symmetra</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(116, 152, 255, 0.18);
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    .brand {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, #7c6fff, #5af0c4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 1px;
+      margin-bottom: 2rem;
+      display: block;
+    }
+
+    .icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #f9fafb;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 0.87rem;
+      color: #9ca3af;
+      margin-bottom: 1.75rem;
+      line-height: 1.5;
+    }
+
+    /* Loading state */
+    .state { display: none; }
+    .state.active { display: block; }
+
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 2px solid rgba(116,152,255,0.2);
+      border-top-color: #5af0c4;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 1rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Manual unsubscribe form (fallback if no token) */
+    .field { margin-bottom: 1rem; text-align: left; }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.4rem;
+    }
+
+    input[type="email"] {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      background: rgba(31, 41, 55, 0.8);
+      border: 1px solid rgba(116, 152, 255, 0.2);
+      border-radius: 6px;
+      color: #f9fafb;
+      font-size: 0.95rem;
+      font-family: 'IBM Plex Sans', sans-serif;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="email"]:focus { border-color: rgba(90, 240, 196, 0.45); }
+    input[type="email"]::placeholder { color: #4b5563; }
+
+    .btn {
+      width: 100%;
+      padding: 0.7rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: 'IBM Plex Sans', sans-serif;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+      margin-top: 0.25rem;
+    }
+
+    .btn-confirm {
+      background: linear-gradient(135deg, #7c6fff, #5af0c4);
+      color: #000;
+    }
+
+    .btn-confirm:hover:not(:disabled) { opacity: 0.88; }
+    .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 1.5rem;
+      font-size: 0.82rem;
+      color: #6b7280;
+      text-decoration: none;
+    }
+
+    .back-link:hover { color: #9ca3af; }
+
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #f87171;
+      font-size: 0.83rem;
+      padding: 0.6rem 0.9rem;
+      margin-bottom: 1rem;
+      display: none;
+      text-align: left;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .emulator-bar {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      color: #fbbf24;
+      background: rgba(251,191,36,0.07);
+      border: 1px solid rgba(251,191,36,0.2);
+      border-radius: 4px;
+      padding: 0.3rem 0.6rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .emulator-bar.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <a class="brand" href="/">SYMMETRA</a>
+
+    <div class="emulator-bar" id="emulator-bar">⚡ Emulator mode</div>
+
+    <!-- Loading -->
+    <div class="state active" id="state-loading">
+      <div class="spinner"></div>
+      <p style="color:#9ca3af; font-size:0.88rem;">Checking your subscription…</p>
+    </div>
+
+    <!-- Success: unsubscribed -->
+    <div class="state" id="state-done">
+      <div class="icon">✓</div>
+      <h1>Unsubscribed</h1>
+      <p class="subtitle">You've been removed from the Symmetra newsletter. You won't receive any further emails.</p>
+      <a class="back-link" href="/engines">← Back to Engine Catalog</a>
+    </div>
+
+    <!-- Already unsubscribed -->
+    <div class="state" id="state-already">
+      <div class="icon">○</div>
+      <h1>Already unsubscribed</h1>
+      <p class="subtitle">This email was already removed from our list. No action needed.</p>
+      <a class="back-link" href="/engines">← Back to Engine Catalog</a>
+    </div>
+
+    <!-- No token — manual email entry -->
+    <div class="state" id="state-manual">
+      <div class="icon">✉</div>
+      <h1>Unsubscribe</h1>
+      <p class="subtitle">Enter your email address and we'll remove you from the Symmetra newsletter.</p>
+      <form id="manual-form" novalidate>
+        <div class="error-msg" id="manual-error"></div>
+        <div class="field">
+          <label for="manual-email">Email address</label>
+          <input type="email" id="manual-email" placeholder="you@example.com" required>
+        </div>
+        <button type="submit" class="btn btn-confirm" id="manual-btn">Unsubscribe Me</button>
+      </form>
+      <a class="back-link" href="/engines">← Back to Engine Catalog</a>
+    </div>
+
+    <!-- Error -->
+    <div class="state" id="state-error">
+      <div class="icon">✗</div>
+      <h1>Link not recognised</h1>
+      <p class="subtitle">This unsubscribe link is invalid or has expired. Enter your email below to unsubscribe manually.</p>
+      <form id="error-form" novalidate>
+        <div class="error-msg" id="error-form-error"></div>
+        <div class="field">
+          <label for="error-email">Email address</label>
+          <input type="email" id="error-email" placeholder="you@example.com" required>
+        </div>
+        <button type="submit" class="btn btn-confirm" id="error-btn">Unsubscribe Me</button>
+      </form>
+      <a class="back-link" href="/engines">← Back to Engine Catalog</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { db, isLocal } from '/firebase-app.js';
+    import {
+      collection,
+      doc,
+      getDoc,
+      getDocs,
+      query,
+      updateDoc,
+      where,
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    if (isLocal) document.getElementById('emulator-bar').classList.add('visible');
+
+    function showState(id) {
+      document.querySelectorAll('.state').forEach(el => el.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    // ── Token-based unsubscribe ───────────────────────────────────────────────
+    const token = new URLSearchParams(location.search).get('token');
+
+    async function unsubscribeByToken(t) {
+      const ref  = doc(db, 'subscribers', t);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        showState('state-error');
+        return;
+      }
+
+      if (!snap.data().active) {
+        showState('state-already');
+        return;
+      }
+
+      await updateDoc(ref, { active: false, unsubscribedAt: new Date().toISOString() });
+      showState('state-done');
+    }
+
+    // ── Email-based unsubscribe (manual fallback) ────────────────────────────
+    async function unsubscribeByEmail(email) {
+      const q    = query(collection(db, 'subscribers'),
+                         where('email', '==', email),
+                         where('active', '==', true));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        showState('state-already');
+        return;
+      }
+
+      const batch = snap.docs.map(d => updateDoc(d.ref, {
+        active: false,
+        unsubscribedAt: new Date().toISOString(),
+      }));
+      await Promise.all(batch);
+      showState('state-done');
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    if (token) {
+      unsubscribeByToken(token).catch(() => showState('state-error'));
+    } else {
+      showState('state-manual');
+    }
+
+    // ── Manual form handler ───────────────────────────────────────────────────
+    function attachFormHandler(formId, inputId, btnId, errorId) {
+      document.getElementById(formId).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById(inputId).value.trim().toLowerCase();
+        const btn   = document.getElementById(btnId);
+        const err   = document.getElementById(errorId);
+
+        err.textContent = '';
+        err.classList.remove('visible');
+
+        if (!email || !email.includes('@')) {
+          err.textContent = 'Please enter a valid email address.';
+          err.classList.add('visible');
+          return;
+        }
+
+        btn.disabled    = true;
+        btn.textContent = 'Processing…';
+
+        try {
+          await unsubscribeByEmail(email);
+        } catch (ex) {
+          console.error(ex);
+          err.textContent = 'Something went wrong. Please try again.';
+          err.classList.add('visible');
+          btn.disabled    = false;
+          btn.textContent = 'Unsubscribe Me';
+        }
+      });
+    }
+
+    attachFormHandler('manual-form', 'manual-email', 'manual-btn', 'manual-error');
+    attachFormHandler('error-form',  'error-email',  'error-btn',  'error-form-error');
+  </script>
+</body>
+</html>
