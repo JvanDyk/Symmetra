@@ -12,7 +12,7 @@
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Orbitron:wght@500;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg-0: #04070b;
@@ -221,6 +221,41 @@ code {
   align-items: center;
   gap: 0.95rem;
   text-decoration: none;
+}
+
+/* SYMMETRA Script brand mark */
+.brand-mark {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.55rem;
+  line-height: 1;
+}
+
+.brand-mark .b-main {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, #7c6fff, #5af0c4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: block;
+  line-height: 1;
+}
+
+.brand-mark .b-script {
+  font-family: 'Dancing Script', cursive;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #ffffff;
+  position: absolute;
+  bottom: 0;
+  right: -3px;
+  transform: rotate(-14deg);
+  transform-origin: left bottom;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .brand img {
@@ -1845,6 +1880,10 @@ code {
   <div class="shell topbar-inner">
     <a class="brand" href="#top">
       <img src="assets/logo.svg" alt="Symmetra logo">
+      <span class="brand-mark">
+        <span class="b-main">SYMMETRA</span>
+        <span class="b-script">Script</span>
+      </span>
     </a>
 
     <div class="nav-links">

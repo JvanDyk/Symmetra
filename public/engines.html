@@ -8,7 +8,7 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -55,14 +55,37 @@
     }
 
     .nav-brand {
+      position: relative;
+      display: inline-block;
+      text-decoration: none;
+      line-height: 1;
+      padding-bottom: 0.55rem; /* room for Script below */
+    }
+
+    .nav-brand .b-main {
       font-family: 'IBM Plex Mono', monospace;
       font-size: 0.9rem;
       font-weight: 600;
+      letter-spacing: 2px;
       background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      letter-spacing: 1px;
+      display: block;
+    }
+
+    .nav-brand .b-script {
+      font-family: 'Dancing Script', cursive;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #ffffff;
+      position: absolute;
+      bottom: 0;
+      right: -3px;
+      transform: rotate(-14deg);
+      transform-origin: left bottom;
+      white-space: nowrap;
+      line-height: 1;
     }
 
     .nav-links {
@@ -486,7 +509,10 @@
 <!-- ── Header ───────────────────────────────────────────────────────────── -->
 <header class="header">
   <div class="header-inner">
-    <a class="nav-brand" href="/">SYMMETRA</a>
+    <a class="nav-brand" href="/">
+      <span class="b-main">SYMMETRA</span>
+      <span class="b-script">Script</span>
+    </a>
     <nav class="nav-links">
       <a href="/">Home</a>
       <a href="/engines" class="active">Engines</a>

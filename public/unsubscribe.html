@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -33,16 +33,38 @@
     }
 
     .brand {
+      display: inline-block;
+      position: relative;
+      padding-bottom: 0.6rem;
+      margin-bottom: 2rem;
+      text-decoration: none;
+    }
+
+    .brand .b-main {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       font-weight: 600;
+      letter-spacing: 2px;
       background: linear-gradient(135deg, #7c6fff, #5af0c4);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      letter-spacing: 1px;
-      margin-bottom: 2rem;
       display: block;
+      line-height: 1;
+    }
+
+    .brand .b-script {
+      font-family: 'Dancing Script', cursive;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #ffffff;
+      position: absolute;
+      bottom: 0;
+      right: -3px;
+      transform: rotate(-14deg);
+      transform-origin: left bottom;
+      white-space: nowrap;
+      line-height: 1;
     }
 
     .icon {
@@ -171,7 +193,10 @@
 </head>
 <body>
   <div class="card">
-    <a class="brand" href="/">SYMMETRA</a>
+    <a class="brand" href="/">
+      <span class="b-main">SYMMETRA</span>
+      <span class="b-script">Script</span>
+    </a>
 
     <div class="emulator-bar" id="emulator-bar">⚡ Emulator mode</div>
 

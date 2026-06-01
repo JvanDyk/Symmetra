@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -36,20 +36,45 @@
       margin-bottom: 2rem;
     }
 
-    .brand-name {
+    .brand-logo {
+      display: inline-block;
+      position: relative;
+      padding-bottom: 0.7rem;
+      margin-bottom: 0.4rem;
+      text-decoration: none;
+    }
+
+    .brand-logo .b-main {
+      font-family: 'IBM Plex Mono', monospace;
       font-size: 1.5rem;
       font-weight: 700;
+      letter-spacing: 2px;
       background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      font-family: 'IBM Plex Mono', monospace;
+      display: block;
+      line-height: 1;
+    }
+
+    .brand-logo .b-script {
+      font-family: 'Dancing Script', cursive;
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: #ffffff;
+      position: absolute;
+      bottom: 0;
+      right: -4px;
+      transform: rotate(-14deg);
+      transform-origin: left bottom;
+      white-space: nowrap;
+      line-height: 1;
     }
 
     .brand-sub {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: #6b7280;
-      margin-top: 0.25rem;
+      margin-top: 0.15rem;
     }
 
     h2 {
@@ -215,7 +240,10 @@
 <body>
   <div class="card">
     <div class="brand">
-      <div class="brand-name">SYMMETRA</div>
+      <a class="brand-logo" href="/">
+        <span class="b-main">SYMMETRA</span>
+        <span class="b-script">Script</span>
+      </a>
       <div class="brand-sub">GPU-accelerated TypeScript runtime</div>
     </div>
 
