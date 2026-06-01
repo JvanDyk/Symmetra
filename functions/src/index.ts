@@ -72,12 +72,9 @@ export const getDownloadUrl = onCall(
       );
     }
 
-    // ── Check file exists + generate signed URL ──
+    // ── Check file exists + resolve download URL ──
     const bucket = getStorage().bucket();
     const file   = bucket.file(storagePath);
-
-    // exists() and getSignedUrl() both need a cast to work across GCS type
-    // versions bundled with firebase-admin.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const f = file as any;
 
@@ -89,10 +86,21 @@ export const getDownloadUrl = onCall(
       );
     }
 
-    const [signedUrl] = await f.getSignedUrl({
-      action:  'read',
-      expires: Date.now() + 60 * 60 * 1000,
-    }) as [string];
+    // The Storage emulator has no signing credentials, so getSignedUrl() throws.
+    // In emulator mode return a direct emulator URL instead.
+    let downloadUrl: string;
+    if (process.env.FUNCTIONS_EMULATOR) {
+      const bucketName = bucket.name;
+      downloadUrl =
+        `http://127.0.0.1:9199/v0/b/${encodeURIComponent(bucketName)}` +
+        `/o/${encodeURIComponent(storagePath)}?alt=media`;
+    } else {
+      const [signed] = await f.getSignedUrl({
+        action:  'read',
+        expires: Date.now() + 60 * 60 * 1000,
+      }) as [string];
+      downloadUrl = signed;
+    }
 
     // ── Log the download ──
     await db.collection('downloads').add({
@@ -108,7 +116,7 @@ export const getDownloadUrl = onCall(
     const filename = storagePath.split('/').pop() ?? `${engineId}-${platform}`;
 
     return {
-      url:        signedUrl,
+      url:        downloadUrl,
       filename,
       engineName: engine.name,
       version:    engine.version,

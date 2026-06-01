@@ -164,6 +164,36 @@
 
     .back-link:hover { color: #9ca3af; }
 
+    .newsletter-opt {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: rgba(90, 240, 196, 0.05);
+      border: 1px solid rgba(90, 240, 196, 0.15);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .newsletter-opt input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      accent-color: #5af0c4;
+      cursor: pointer;
+    }
+
+    .newsletter-opt-label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      line-height: 1.4;
+      cursor: pointer;
+    }
+
+    .newsletter-opt-label strong { color: #d1fae5; font-weight: 500; }
+
     .emulator-banner {
       background: rgba(251, 191, 36, 0.1);
       border: 1px solid rgba(251, 191, 36, 0.3);
@@ -208,6 +238,14 @@
         <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
       </div>
 
+      <!-- Newsletter opt-in — only visible in Create Account mode -->
+      <label class="newsletter-opt hidden" id="newsletter-opt" for="newsletter-check">
+        <input type="checkbox" id="newsletter-check" checked>
+        <span class="newsletter-opt-label">
+          <strong>Keep me updated</strong> — get notified when new engines and API features launch.
+        </span>
+      </label>
+
       <div class="error-msg" id="error-msg"></div>
 
       <button type="submit" class="btn-primary" id="submit-btn">Sign In</button>
@@ -222,13 +260,17 @@
   </div>
 
   <script type="module">
-    import { auth, isLocal } from '/firebase-app.js';
+    import { auth, db, isLocal } from '/firebase-app.js';
     import {
       onAuthStateChanged,
       signInWithEmailAndPassword,
       createUserWithEmailAndPassword,
       updateProfile,
     } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import {
+      doc,
+      setDoc,
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     // ── Emulator banner ──────────────────────────────────────────────────────
     if (isLocal) {
@@ -251,11 +293,12 @@
 
     const titleEl    = document.getElementById('form-title');
     const subtitleEl = document.getElementById('form-subtitle');
-    const nameField  = document.getElementById('name-field');
-    const toggleLbl  = document.getElementById('toggle-label');
-    const toggleBtn  = document.getElementById('toggle-btn');
-    const submitBtn  = document.getElementById('submit-btn');
-    const pwdInput   = document.getElementById('password');
+    const nameField      = document.getElementById('name-field');
+    const newsletterOpt  = document.getElementById('newsletter-opt');
+    const toggleLbl      = document.getElementById('toggle-label');
+    const toggleBtn      = document.getElementById('toggle-btn');
+    const submitBtn      = document.getElementById('submit-btn');
+    const pwdInput       = document.getElementById('password');
 
     toggleBtn.addEventListener('click', () => {
       mode = mode === 'signin' ? 'create' : 'signin';
@@ -265,6 +308,7 @@
         titleEl.textContent    = 'Create Account';
         subtitleEl.textContent = 'Free account — no credit card required.';
         nameField.classList.remove('hidden');
+        newsletterOpt.classList.remove('hidden');
         submitBtn.textContent  = 'Create Account';
         toggleLbl.textContent  = 'Already have an account?';
         toggleBtn.textContent  = 'Sign in';
@@ -273,6 +317,7 @@
         titleEl.textContent    = 'Sign In';
         subtitleEl.textContent = 'Access the engine catalog and downloads.';
         nameField.classList.add('hidden');
+        newsletterOpt.classList.add('hidden');
         submitBtn.textContent  = 'Sign In';
         toggleLbl.textContent  = "Don't have an account?";
         toggleBtn.textContent  = 'Create one';
@@ -304,6 +349,18 @@
           const cred = await createUserWithEmailAndPassword(auth, email, password);
           if (name) {
             await updateProfile(cred.user, { displayName: name });
+          }
+          // Save newsletter subscription if opted in
+          const wantsNewsletter = document.getElementById('newsletter-check').checked;
+          if (wantsNewsletter) {
+            const token = crypto.randomUUID();
+            await setDoc(doc(db, 'subscribers', token), {
+              email:        email.toLowerCase(),
+              token,
+              active:       true,
+              source:       'registration',
+              subscribedAt: new Date().toISOString(),
+            });
           }
         }
         // onAuthStateChanged will redirect
