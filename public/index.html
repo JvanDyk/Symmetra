@@ -42,6 +42,11 @@
   --mono: "IBM Plex Mono", "Cascadia Code", monospace;
 }
 
+@font-face {
+  font-family: 'Hemi Head';
+  src: url('assets/hemi%20head%20bd%20it.ttf') format('truetype');
+}
+
 *,
 *::before,
 *::after {
@@ -387,7 +392,14 @@ code {
   color: #ffb194;
 }
 
-.hero h1,
+.hero h1 {
+  margin: 1rem 0;
+  font-family: 'Hemi Head', var(--display);
+  text-transform: uppercase;
+  line-height: 0.98;
+  letter-spacing: 0.06em;
+}
+
 .section h2,
 .install-panel h2 {
   margin: 1rem 0;
