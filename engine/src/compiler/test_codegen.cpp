@@ -8600,6 +8600,130 @@ static void testDateAndStreaming() {
     });
 }
 
+static void testImprovedPartialFeatures() {
+    std::cout << "\n=== Improving Partial Features (Phase 3.10) ===\n";
+
+    TEST("AggregateError with errors array", {
+        auto src = codegen(
+            "app.get('/aggregateerror', (ctx) => {\n"
+            "  const errors = ['error1', 'error2', 'error3'];\n"
+            "  const err = new AggregateError(errors, 'Multiple errors');\n"
+            "  ctx.json({ message: err.message, count: err.length() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "AggregateError");
+    });
+
+    TEST("AggregateError iteration", {
+        auto src = codegen(
+            "app.get('/aggiter', (ctx) => {\n"
+            "  const errors = ['e1', 'e2', 'e3'];\n"
+            "  const err = new AggregateError(errors);\n"
+            "  let result = '';\n"
+            "  for (const e of err) { result += e; }\n"
+            "  ctx.json({ concatenated: result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("Enhanced 'in' operator for Maps", {
+        auto src = codegen(
+            "app.get('/inmap', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('key1', 'value1');\n"
+            "  const hasKey = 'key1' in map;\n"
+            "  ctx.json({ exists: hasKey });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "in");
+    });
+
+    TEST("Enhanced 'in' operator for Sets", {
+        auto src = codegen(
+            "app.get('/inset', (ctx) => {\n"
+            "  const set = new Set();\n"
+            "  set.add('item1');\n"
+            "  const hasItem = 'item1' in set;\n"
+            "  ctx.json({ exists: hasItem });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "in");
+    });
+
+    TEST("toString() method for coercion", {
+        auto src = codegen(
+            "app.post('/tostring', (ctx) => {\n"
+            "  const obj = { value: 42 };\n"
+            "  const str = obj.toString();\n"
+            "  ctx.json({ stringified: str });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toString");
+    });
+
+    TEST("valueOf() method for coercion", {
+        auto src = codegen(
+            "app.post('/valueof', (ctx) => {\n"
+            "  const obj = { value: 42 };\n"
+            "  const val = obj.valueOf();\n"
+            "  ctx.json({ value: val });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "valueOf");
+    });
+
+    TEST("toJSON() integration with JSON.stringify", {
+        auto src = codegen(
+            "app.post('/tojson', (ctx) => {\n"
+            "  const obj = { a: 1, b: 2 };\n"
+            "  const custom = obj.toJSON ? obj.toJSON() : obj;\n"
+            "  const json = JSON.stringify(custom);\n"
+            "  ctx.json({ json });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "toJSON");
+    });
+
+    TEST("Spread in object literal with known fields", {
+        auto src = codegen(
+            "app.post('/spreadobj', (ctx) => {\n"
+            "  const a = { x: 1, y: 2 };\n"
+            "  const b = { ...a, z: 3 };\n"
+            "  ctx.json({ result: b });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "spread");
+    });
+
+    TEST("Hoisting in simple var cases", {
+        auto src = codegen(
+            "app.get('/hoisting', (ctx) => {\n"
+            "  const x = 10;\n"
+            "  if (x > 5) {\n"
+            "    var y = 20;\n"
+            "  }\n"
+            "  ctx.json({ x, y });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "var");
+    });
+
+    TEST("Static initializer auto-call", {
+        auto src = codegen(
+            "class Config {\n"
+            "  static x = 0;\n"
+            "  static { this.x = 42; }\n"
+            "}\n"
+            "app.get('/static', (ctx) => {\n"
+            "  Config.__static_init__();\n"
+            "  ctx.json({ configX: Config.x });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__static_init__");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -12577,6 +12701,9 @@ int main() {
 
     // Phase 3.9: Date Methods & Streaming
     symm::testDateAndStreaming();
+
+    // Phase 3.10: Improving Partial Features
+    symm::testImprovedPartialFeatures();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

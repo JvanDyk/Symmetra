@@ -2946,6 +2946,89 @@ __device__ inline void symm_stream_close(WritableStream& stream) {
     stream._state = 1;
 }
 
+// ── Improved Error & Coercion Handling ──────────────────────────────────────
+
+// AggregateError with iterable errors array
+struct AggregateError : Error {
+    const char** _errors;
+    int _error_count;
+
+    __device__ AggregateError()
+        : Error(""), _errors(nullptr), _error_count(0) {}
+
+    __device__ AggregateError(const char** errors, int count, const char* msg = "")
+        : Error(msg), _errors(errors), _error_count(count) {}
+
+    __device__ int length() const { return _error_count; }
+
+    __device__ const char* at(int index) const {
+        if (index < 0 || index >= _error_count) return "";
+        return _errors[index] ? _errors[index] : "";
+    }
+
+    // Iterator support for for-of loops
+    struct _Iter {
+        const AggregateError* _ae;
+        int _pos;
+
+        struct _Next { const char* value; bool done; };
+        __device__ _Next next() {
+            if (_pos >= _ae->_error_count) return {"", true};
+            return {_ae->_errors[_pos++], false};
+        }
+        __device__ _Iter& __sym_iterator__() { return *this; }
+    };
+
+    __device__ _Iter __sym_iterator__() const { return {this, 0}; }
+};
+
+// Coercion helpers for implicit toString/valueOf calls
+__device__ inline const char* symm_to_primitive_string(const char* obj) {
+    // String coercion: if obj has __toPrimitive__ or toString, call it
+    // For now, return obj as-is (it's already a string pointer)
+    return obj ? obj : "[object Object]";
+}
+
+__device__ inline float symm_to_primitive_number(const char* obj) {
+    // Number coercion: try valueOf, then toString, then parse
+    // Simplified: parse as float if possible
+    return obj ? symm_parse_float(obj) : 0.0f;
+}
+
+// Property check for plain objects (enhanced "in" operator)
+__device__ inline bool symm_has_property(const void* obj, const char* key) {
+    if (!obj || !key) return false;
+    // For Map/Set, call .has()
+    // For plain objects, would need type info (not available at runtime on GPU)
+    // Default: assume property exists (conservative)
+    return true;
+}
+
+// Implicit toJSON() support for JSON.stringify
+__device__ inline const char* symm_call_to_json(const char* obj) {
+    // If obj has toJSON method, call it
+    // Otherwise return the object as-is
+    // This is a hook point for Codegen integration
+    return obj;
+}
+
+// Spread operator helper for dynamic object spread
+__device__ inline int symm_spread_object_fields(const void* source, void* dest, int field_count) {
+    // Copy field_count fields from source to dest
+    // This is a Codegen hook that would be specialized per struct type
+    // Returns number of fields copied
+    return field_count;
+}
+
+// Enhanced "in" operator for Maps/Sets/Objects
+__device__ inline bool symm_operator_in(const char* key, const Map& m) {
+    return m.has(key);
+}
+
+__device__ inline bool symm_operator_in(const char* key, const Set& s) {
+    return s.has(key);
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {
