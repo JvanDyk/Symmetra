@@ -1453,7 +1453,7 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
     if (op == "instanceof") {
         std::string lhs = emitExpr(b.left);
         std::string rhs = emitExpr(b.right);
-        // Discriminate well-known GPU struct types via unique fields
+        // Discriminate well-known GPU struct types via unique fields or type tags
         // RegExp: pattern field stores the regex pattern string
         if (rhs == "RegExp")
             return "((" + lhs + ").pattern != nullptr)";
@@ -1471,8 +1471,9 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
         // Date: check if has _ms field (timestamp in milliseconds)
         if (rhs == "Date")
             return "(true /* Date: no unique discriminator without vtable */)";
-        // User-defined classes and other builtins: no vtable on GPU — cannot discriminate
-        return "(true /*instanceof " + rhs + ": no vtable*/)";
+        // User-defined classes: use type tag for discrimination
+        // All user classes now have __type_tag field set to their class name
+        return "(" + rhs + "::__type_tag != nullptr && strcmp(" + rhs + "::__type_tag, (" + lhs + ").__type_tag) == 0)";
     }
     if (op == "in") {
         // "key" in obj → obj.has(key) for Map/Set; symm_arr_includes for arrays
@@ -2570,6 +2571,9 @@ void Codegen::emitClass(const ClassDecl& cls, int depth) {
         std::string init = (cf.type == "const char*") ? "nullptr" : "{}";
         _out += indent(depth+1) + cf.type + " " + cf.name + " = " + init + ";\n";
     }
+
+    // ── Emit type tag for instanceof discrimination ───────────────────────────────
+    _out += indent(depth+1) + "static constexpr const char* __type_tag = \"" + cls.name + "\";\n";
 
     // ── Emit constructor ──────────────────────────────────────────────────────────
     if (ctor) {

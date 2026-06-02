@@ -7110,6 +7110,22 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, ".add(");
     });
 
+    TEST("instanceof with type tags for user classes", {
+        auto src = codegen(
+            "class Animal {\n"
+            "  constructor(name) { this.name = name; }\n"
+            "}\n"
+            "class Dog extends Animal { }\n"
+            "app.get('/checktype', (ctx) => {\n"
+            "  const dog = new Dog('Rex');\n"
+            "  const result = dog instanceof Dog;\n"
+            "  ctx.json({ isDog: result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__type_tag");
+        ASSERT_CONTAINS(src, "strcmp(");
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"
