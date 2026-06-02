@@ -633,8 +633,18 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
             // Inside a generator _init(): yield expr → buffer append
             if (_inGeneratorBody && es.expr && es.expr->kind == NodeKind::AwaitExpr) {
                 auto& aw = std::get<AwaitExpr>(es.expr->data);
-                _out += ind + "if (_count < _MAX) _values[_count++] = (float)("
-                     + emitExpr(aw.expr) + ");\n";
+                if (aw.isDelegation) {
+                    // yield* delegation: iterate through the delegated iterable and yield each value
+                    std::string iterVar = freshTemp();
+                    std::string delegated = emitExpr(aw.expr);
+                    _out += ind + "for (auto& " + iterVar + " : " + delegated + ") {\n";
+                    _out += ind + "  if (_count < _MAX) _values[_count++] = (float)(" + iterVar + ");\n";
+                    _out += ind + "}\n";
+                } else {
+                    // Regular yield: append single value
+                    _out += ind + "if (_count < _MAX) _values[_count++] = (float)("
+                         + emitExpr(aw.expr) + ");\n";
+                }
                 break;
             }
             _out += ind + emitExpr(es.expr) + ";\n";

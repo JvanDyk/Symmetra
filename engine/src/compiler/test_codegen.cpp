@@ -7148,6 +7148,20 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "symm_write_str");  // nested array JSON building
     });
 
+    TEST("Generator with yield* delegation", {
+        auto src = codegen(
+            "function* delegatingGen() {\n"
+            "  yield* [1.0, 2.0, 3.0];\n"
+            "}\n"
+            "app.get('/delegate', (ctx) => {\n"
+            "  const gen = delegatingGen();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for (auto&");  // delegation iteration
+        ASSERT_CONTAINS(src, "_values[_count++]");  // buffer append in loop
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"

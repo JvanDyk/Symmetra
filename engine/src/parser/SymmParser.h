@@ -91,7 +91,7 @@ struct OptChainExpr {
     std::string prop;
 };
 
-struct AwaitExpr   { NodePtr expr; };
+struct AwaitExpr   { NodePtr expr; bool isDelegation = false; };
 struct ReturnStmt  { NodePtr expr; };
 struct Block       { std::vector<NodePtr> stmts; bool flat = false; };
 

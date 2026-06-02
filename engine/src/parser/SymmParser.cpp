@@ -908,11 +908,13 @@ NodePtr SymmParser::parseUnary() {
         NodePtr expr;
         if (cur().value != ";" && cur().value != "}" && cur().kind != Token::Eof)
             expr = parseExpr();
-        // For yield* delegation: wrap in a special marker (for now, same as yield)
-        // Codegen treats yield/yield* the same in simplified state machine
+        // Create AwaitExpr with delegation flag set if this is yield*
         auto n = std::make_shared<Node>();
-        n->kind = NodeKind::AwaitExpr;  // treat yield same as await for now
-        n->data = AwaitExpr{expr};
+        n->kind = NodeKind::AwaitExpr;
+        AwaitExpr ae;
+        ae.expr = expr;
+        ae.isDelegation = isDelegation;
+        n->data = ae;
         n->line = tok.line;
         return n;
     }
