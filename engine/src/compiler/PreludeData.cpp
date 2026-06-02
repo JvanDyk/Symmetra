@@ -1224,6 +1224,29 @@ struct _MapIter {
     __device__ _MapIter& __sym_iterator__() { return *this; }
 };
 
+// Extract Map keys as JSON array string
+// Returns "[\"key1\", \"key2\", ...]" for Map contents
+__device__ inline const char* symm_map_keys_as_json(const Map& m) {
+    static char buf[512];
+    buf[0] = '[';
+    int pos = 1;
+    for (int i = 0; i < m._n && pos < 500; i++) {
+        if (i > 0) buf[pos++] = ',';
+        buf[pos++] = '"';
+        const char* k = m._e[i].k;
+        if (k) {
+            while (*k && pos < 498) {
+                if (*k == '"' || *k == '\\') buf[pos++] = '\\';
+                buf[pos++] = *k++;
+            }
+        }
+        buf[pos++] = '"';
+    }
+    buf[pos++] = ']';
+    buf[pos] = '\0';
+    return buf;
+}
+
 struct Map {
     struct Entry { const char* k; float v; };
     Entry _e[64]; int _n = 0;

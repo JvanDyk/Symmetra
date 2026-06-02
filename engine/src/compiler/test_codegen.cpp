@@ -7059,6 +7059,19 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "symm_arr_reduce_right");
     });
 
+    TEST("Object.getOwnPropertyNames(map) — extract Map keys", {
+        auto src = codegen(
+            "app.get('/mapkeys', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('a', 1.0);\n"
+            "  map.set('b', 2.0);\n"
+            "  const keys = Object.getOwnPropertyNames(map);\n"
+            "  ctx.json({ keys });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_keys_as_json");
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"

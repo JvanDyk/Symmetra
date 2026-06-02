@@ -1979,6 +1979,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 }
                 return "(true /*Object.hasOwn: no args*/)";
             }
+            if (prop == "getOwnPropertyNames") {
+                // Object.getOwnPropertyNames(obj) — extract keys from Map/Set or return empty array
+                if (c.args.size() >= 1) {
+                    std::string target = emitExpr(c.args[0]);
+                    return "symm_map_keys_as_json(" + target + ")";
+                }
+                return "\"[]\"";
+            }
             if (prop == "is") {
                 // NaN-safe equality: Object.is(NaN, NaN) == true, Object.is(-0, +0) == false
                 std::string a = c.args.empty() ? "0" : emitExpr(c.args[0]);
