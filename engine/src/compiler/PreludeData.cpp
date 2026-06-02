@@ -2634,6 +2634,171 @@ __device__ inline bool symm_is_safe_content_type(const char* content_type) {
     return true;
 }
 
+// ── HTTP Caching & Cache Control ───────────────────────────────────────────────
+
+// Cache control directives
+struct CacheControl {
+    bool _public;
+    bool _private;
+    bool _no_cache;
+    bool _no_store;
+    int _max_age;
+    int _s_maxage;
+    bool _must_revalidate;
+    bool _proxy_revalidate;
+
+    __device__ CacheControl()
+        : _public(false), _private(false), _no_cache(false), _no_store(false),
+          _max_age(0), _s_maxage(0), _must_revalidate(false), _proxy_revalidate(false) {}
+
+    __device__ bool isCacheable() const {
+        return !_no_store && !_no_cache;
+    }
+
+    __device__ bool isExpired(int age_seconds) const {
+        if (_max_age > 0 && age_seconds > _max_age) return true;
+        if (_s_maxage > 0 && age_seconds > _s_maxage) return true;
+        return false;
+    }
+};
+
+// Parse Cache-Control header
+__device__ inline CacheControl symm_parse_cache_control(const char* header) {
+    CacheControl cc;
+    if (!header) return cc;
+
+    // Simple parsing: public, private, no-cache, no-store
+    if (symm_str_eq(header, "public")) cc._public = true;
+    if (symm_str_eq(header, "private")) cc._private = true;
+    if (symm_str_eq(header, "no-cache")) cc._no_cache = true;
+    if (symm_str_eq(header, "no-store")) cc._no_store = true;
+    if (symm_str_eq(header, "must-revalidate")) cc._must_revalidate = true;
+    if (symm_str_eq(header, "proxy-revalidate")) cc._proxy_revalidate = true;
+    return cc;
+}
+
+// Generate Cache-Control header value
+__device__ inline const char* symm_format_cache_control(const CacheControl& cc) {
+    static char buf[256];
+    int pos = 0;
+
+    if (cc._public) pos += snprintf(buf + pos, sizeof(buf) - pos, "public, ");
+    if (cc._private) pos += snprintf(buf + pos, sizeof(buf) - pos, "private, ");
+    if (cc._no_cache) pos += snprintf(buf + pos, sizeof(buf) - pos, "no-cache, ");
+    if (cc._no_store) pos += snprintf(buf + pos, sizeof(buf) - pos, "no-store, ");
+    if (cc._max_age > 0) pos += snprintf(buf + pos, sizeof(buf) - pos, "max-age=%d, ", cc._max_age);
+    if (cc._s_maxage > 0) pos += snprintf(buf + pos, sizeof(buf) - pos, "s-maxage=%d, ", cc._s_maxage);
+    if (cc._must_revalidate) pos += snprintf(buf + pos, sizeof(buf) - pos, "must-revalidate, ");
+    if (cc._proxy_revalidate) pos += snprintf(buf + pos, sizeof(buf) - pos, "proxy-revalidate, ");
+
+    // Remove trailing ", "
+    if (pos > 2) buf[pos - 2] = 0;
+    return buf;
+}
+
+// ETag handling
+struct ETag {
+    const char* _tag;
+    bool _weak;
+
+    __device__ ETag(const char* tag = "", bool weak = false)
+        : _tag(tag), _weak(weak) {}
+
+    __device__ const char* toString() const {
+        static char buf[128];
+        snprintf(buf, sizeof(buf), "%s\"%s\"", _weak ? "W/" : "", _tag ? _tag : "");
+        return buf;
+    }
+};
+
+// Generate ETag
+__device__ inline const char* symm_generate_etag(const char* data, int len) {
+    static char buf[64];
+    // Simple hash-based ETag: fnv1a of data
+    unsigned int hash = 2166136261u;
+    for (int i = 0; i < len && i < 256; i++) {
+        hash ^= (unsigned char)data[i];
+        hash *= 16777619u;
+    }
+    snprintf(buf, sizeof(buf), "\"%u\"", hash);
+    return buf;
+}
+
+// Check if ETags match
+__device__ inline bool symm_etags_match(const char* tag1, const char* tag2) {
+    if (!tag1 || !tag2) return false;
+    while (*tag1 && *tag2) {
+        if (*tag1 != *tag2) return false;
+        tag1++; tag2++;
+    }
+    return *tag1 == *tag2;
+}
+
+// Last-Modified header handling
+struct LastModified {
+    int _timestamp;  // Unix timestamp
+
+    __device__ LastModified(int ts = 0) : _timestamp(ts) {}
+
+    __device__ bool isNewer(int other_ts) const {
+        return _timestamp > other_ts;
+    }
+};
+
+// Cache entry
+struct CacheEntry {
+    const char* _url;
+    const char* _data;
+    int _size;
+    const char* _etag;
+    int _last_modified;
+    CacheControl _cache_control;
+    unsigned long long _cached_at;
+
+    __device__ CacheEntry()
+        : _url(""), _data(""), _size(0), _etag(""), _last_modified(0),
+          _cache_control(), _cached_at(clock64()) {}
+
+    __device__ bool isValid() const {
+        if (!_data) return false;
+        int age = (clock64() - _cached_at) / 1700 / 1000;  // Convert to milliseconds
+        return !_cache_control.isExpired(age);
+    }
+};
+
+// Cache key generation
+__device__ inline int symm_cache_hash(const char* url) {
+    if (!url) return 0;
+    unsigned int hash = 2166136261u;
+    for (int i = 0; url[i] && i < 256; i++) {
+        hash ^= (unsigned char)url[i];
+        hash *= 16777619u;
+    }
+    return hash & 0x7FFFFFFF;
+}
+
+// Conditional request helpers
+__device__ inline bool symm_should_use_cache(const CacheEntry& entry, const char* etag) {
+    if (!entry.isValid()) return false;
+    if (etag && symm_etags_match(entry._etag, etag)) return true;
+    return entry._cache_control.isCacheable();
+}
+
+// Format If-None-Match header
+__device__ inline const char* symm_format_if_none_match(const char* etag) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf), "If-None-Match: %s", etag ? etag : "");
+    return buf;
+}
+
+// Format If-Modified-Since header
+__device__ inline const char* symm_format_if_modified_since(int timestamp) {
+    static char buf[128];
+    // Simple timestamp formatting (not HTTP date format, but functional)
+    snprintf(buf, sizeof(buf), "If-Modified-Since: %d", timestamp);
+    return buf;
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {

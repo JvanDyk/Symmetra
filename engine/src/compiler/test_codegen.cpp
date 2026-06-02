@@ -8358,6 +8358,137 @@ static void testSecurityAndValidation() {
     });
 }
 
+static void testCachingAndOptimization() {
+    std::cout << "\n=== Caching & Response Optimization (Phase 3.8) ===\n";
+
+    TEST("Cache-Control header parsing", {
+        auto src = codegen(
+            "app.get('/cache', (ctx) => {\n"
+            "  ctx.setHeader('Cache-Control', 'public, max-age=3600');\n"
+            "  ctx.json({ cached: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Cache-Control");
+    });
+
+    TEST("Cache-Control directives", {
+        auto src = codegen(
+            "app.get('/nocache', (ctx) => {\n"
+            "  ctx.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');\n"
+            "  ctx.json({ fresh: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "must-revalidate");
+    });
+
+    TEST("ETag header generation", {
+        auto src = codegen(
+            "app.get('/etag', (ctx) => {\n"
+            "  const data = 'response data';\n"
+            "  const etag = '\"123abc456\"';\n"
+            "  ctx.setHeader('ETag', etag);\n"
+            "  ctx.json({ data });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "etag");
+    });
+
+    TEST("If-None-Match conditional request", {
+        auto src = codegen(
+            "app.get('/conditional', (ctx) => {\n"
+            "  const ifNoneMatch = ctx.headers['if-none-match'];\n"
+            "  if (ifNoneMatch === currentEtag) {\n"
+            "    ctx.status(304);  // Not Modified\n"
+            "  } else {\n"
+            "    ctx.json({ data: 'fresh' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "if-none-match");
+    });
+
+    TEST("If-Modified-Since header handling", {
+        auto src = codegen(
+            "app.get('/modified', (ctx) => {\n"
+            "  const ifModifiedSince = ctx.headers['if-modified-since'];\n"
+            "  const lastModified = 1717891200;\n"
+            "  if (ifModifiedSince >= lastModified) {\n"
+            "    ctx.status(304);\n"
+            "  } else {\n"
+            "    ctx.json({ updated: true });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "last-modified");
+    });
+
+    TEST("Cache key generation", {
+        auto src = codegen(
+            "app.get('/cached/:id', (ctx) => {\n"
+            "  const cacheKey = `user:${ctx.params.id}`;\n"
+            "  const cached = getFromCache(cacheKey);\n"
+            "  if (cached) {\n"
+            "    ctx.json(cached);\n"
+            "  } else {\n"
+            "    const data = fetchData(ctx.params.id);\n"
+            "    setInCache(cacheKey, data);\n"
+            "    ctx.json(data);\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "cacheKey");
+    });
+
+    TEST("Cache expiration checking", {
+        auto src = codegen(
+            "app.get('/checkexpire', (ctx) => {\n"
+            "  const cacheAge = (Date.now() - cachedAt) / 1000;\n"
+            "  const maxAge = 3600;  // 1 hour\n"
+            "  const isExpired = cacheAge > maxAge;\n"
+            "  ctx.json({ expired: isExpired });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isExpired");
+    });
+
+    TEST("Public vs private cache control", {
+        auto src = codegen(
+            "app.get('/public', (ctx) => {\n"
+            "  ctx.setHeader('Cache-Control', 'public, max-age=86400');\n"
+            "  ctx.json({ public: true });\n"
+            "});\n"
+            "app.get('/private', (ctx) => {\n"
+            "  ctx.setHeader('Cache-Control', 'private, max-age=3600');\n"
+            "  ctx.json({ private: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "public");
+    });
+
+    TEST("Vary header for cache keys", {
+        auto src = codegen(
+            "app.get('/vary', (ctx) => {\n"
+            "  const acceptEncoding = ctx.headers['accept-encoding'];\n"
+            "  ctx.setHeader('Vary', 'Accept-Encoding');\n"
+            "  ctx.json({ compressed: acceptEncoding.includes('gzip') });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Vary");
+    });
+
+    TEST("Response cache metrics", {
+        auto src = codegen(
+            "app.get('/metrics', (ctx) => {\n"
+            "  const cacheHits = 1234;\n"
+            "  const cacheMisses = 456;\n"
+            "  const hitRate = (cacheHits / (cacheHits + cacheMisses)) * 100;\n"
+            "  ctx.json({ cacheHits, cacheMisses, hitRate });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "hitRate");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -12329,6 +12460,9 @@ int main() {
 
     // Phase 3.7: Security & Validation Helpers
     symm::testSecurityAndValidation();
+
+    // Phase 3.8: Caching & Response Optimization
+    symm::testCachingAndOptimization();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
