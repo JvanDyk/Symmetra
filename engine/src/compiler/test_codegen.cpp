@@ -7088,6 +7088,28 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "Config::__static_init__()");
     });
 
+    TEST("Map initialization from iterable entries", {
+        auto src = codegen(
+            "app.get('/mapinit', (ctx) => {\n"
+            "  const entries = [['a', 1.0], ['b', 2.0]];\n"
+            "  const map = new Map(entries);\n"
+            "  ctx.json({ size: map.size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".set(");
+    });
+
+    TEST("Set initialization from iterable elements", {
+        auto src = codegen(
+            "app.get('/setinit', (ctx) => {\n"
+            "  const values = [1.0, 2.0, 3.0];\n"
+            "  const set = new Set(values);\n"
+            "  ctx.json({ size: set.size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".add(");
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"

@@ -1107,6 +1107,29 @@ std::string Codegen::emitExpr(const NodePtr& node) {
             if (ne.className == "Function") {
                 return "nullptr";  // Safe no-op
             }
+
+            // Special handling for Map/Set initialization from iterables
+            if ((ne.className == "Map" || ne.className == "Set") && !ne.args.empty()) {
+                std::string iterExpr = emitExpr(ne.args[0]);
+                std::string tmpVar = freshTemp();
+                std::string tmpIter = freshTemp();
+
+                if (ne.className == "Map") {
+                    // For Map: iterate entries and call .set(key, value)
+                    return "([&]() { " + ne.className + " " + tmpVar + "; "
+                        "for (auto& " + tmpIter + " : " + iterExpr + ") { "
+                        "if (" + tmpIter + ".length >= 2) "
+                        + tmpVar + ".set(" + tmpIter + "[0], " + tmpIter + "[1]); "
+                        "} return " + tmpVar + "; }())";
+                } else {
+                    // For Set: iterate elements and call .add(value)
+                    return "([&]() { " + ne.className + " " + tmpVar + "; "
+                        "for (auto& " + tmpIter + " : " + iterExpr + ") { "
+                        + tmpVar + ".add(" + tmpIter + "); "
+                        "} return " + tmpVar + "; }())";
+                }
+            }
+
             std::string args;
             for (int i = 0; i < (int)ne.args.size(); i++) {
                 if (i) args += ", ";
