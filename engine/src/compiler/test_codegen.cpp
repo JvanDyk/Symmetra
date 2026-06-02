@@ -8207,6 +8207,157 @@ static void testPerformanceMonitoring() {
     });
 }
 
+static void testSecurityAndValidation() {
+    std::cout << "\n=== Security & Validation Helpers (Phase 3.7) ===\n";
+
+    TEST("Input length validation", {
+        auto src = codegen(
+            "app.post('/length', (ctx) => {\n"
+            "  const username = ctx.body.username;\n"
+            "  if (username.length < 3 || username.length > 32) {\n"
+            "    ctx.json({ error: 'Invalid length' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "length");
+    });
+
+    TEST("Email validation", {
+        auto src = codegen(
+            "app.post('/email', (ctx) => {\n"
+            "  const email = ctx.body.email;\n"
+            "  const isValid = email.includes('@') && email.includes('.');\n"
+            "  ctx.json({ valid: isValid });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "includes");
+    });
+
+    TEST("Number range validation", {
+        auto src = codegen(
+            "app.post('/range', (ctx) => {\n"
+            "  const age = parseInt(ctx.body.age);\n"
+            "  if (age < 0 || age > 150) {\n"
+            "    ctx.json({ error: 'Invalid age' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ valid: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "age");
+    });
+
+    TEST("Alphanumeric validation", {
+        auto src = codegen(
+            "app.post('/alphanumeric', (ctx) => {\n"
+            "  const id = ctx.body.id;\n"
+            "  const isAlphaNum = /^[a-zA-Z0-9]+$/.test(id);\n"
+            "  ctx.json({ valid: isAlphaNum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "test");
+    });
+
+    TEST("Rate limiting with token bucket", {
+        auto src = codegen(
+            "app.get('/limited', (ctx) => {\n"
+            "  const limiter = new RateLimiter();\n"
+            "  if (!limiter.allowRequest()) {\n"
+            "    ctx.json({ error: 'Rate limited' }, 429);\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RateLimiter");
+    });
+
+    TEST("SQL injection detection", {
+        auto src = codegen(
+            "app.post('/search', (ctx) => {\n"
+            "  const query = ctx.body.q;\n"
+            "  if (query.includes('DROP') || query.includes('DELETE')) {\n"
+            "    ctx.json({ error: 'Invalid query' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ results: [] });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "includes");
+    });
+
+    TEST("CORS validation", {
+        auto src = codegen(
+            "app.get('/cors', (ctx) => {\n"
+            "  const origin = ctx.headers['origin'];\n"
+            "  const allowed = ['https://example.com', 'https://app.example.com'];\n"
+            "  if (allowed.includes(origin)) {\n"
+            "    ctx.json({ ok: true });\n"
+            "  } else {\n"
+            "    ctx.json({ error: 'CORS denied' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "origin");
+    });
+
+    TEST("Input sanitization", {
+        auto src = codegen(
+            "app.post('/sanitize', (ctx) => {\n"
+            "  const raw = ctx.body.input;\n"
+            "  const clean = raw.replace(/[\\n\\r]/g, '');\n"
+            "  ctx.json({ sanitized: clean });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "replace");
+    });
+
+    TEST("Content-Type security validation", {
+        auto src = codegen(
+            "app.post('/upload', (ctx) => {\n"
+            "  const contentType = ctx.headers['content-type'];\n"
+            "  const allowed = ['application/json', 'text/plain'];\n"
+            "  if (!allowed.includes(contentType)) {\n"
+            "    ctx.json({ error: 'Invalid content type' });\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ uploaded: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "contentType");
+    });
+
+    TEST("Request authentication header", {
+        auto src = codegen(
+            "app.get('/auth', (ctx) => {\n"
+            "  const auth = ctx.headers['authorization'];\n"
+            "  if (!auth || !auth.startsWith('Bearer ')) {\n"
+            "    ctx.json({ error: 'Unauthorized' }, 401);\n"
+            "    return;\n"
+            "  }\n"
+            "  ctx.json({ authenticated: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Bearer");
+    });
+
+    TEST("Password strength validation", {
+        auto src = codegen(
+            "app.post('/password', (ctx) => {\n"
+            "  const pwd = ctx.body.password;\n"
+            "  const strong = pwd.length >= 8 && \n"
+            "                /[A-Z]/.test(pwd) && \n"
+            "                /[0-9]/.test(pwd) && \n"
+            "                /[!@#$%^&*]/.test(pwd);\n"
+            "  ctx.json({ strong });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "strong");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -12175,6 +12326,9 @@ int main() {
 
     // Phase 3.6: Performance Monitoring & Metrics
     symm::testPerformanceMonitoring();
+
+    // Phase 3.7: Security & Validation Helpers
+    symm::testSecurityAndValidation();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

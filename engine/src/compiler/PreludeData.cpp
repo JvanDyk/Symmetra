@@ -2503,6 +2503,137 @@ __device__ inline const char* symm_format_stats(const RequestCounter& c) {
     return buf;
 }
 
+// ── Security & Input Validation ────────────────────────────────────────────────
+
+// Input length validation
+__device__ inline bool symm_validate_length(const char* input, int min_len, int max_len) {
+    if (!input) return min_len == 0;  // null is valid if min is 0
+    int len = 0;
+    while (input[len]) len++;
+    return len >= min_len && len <= max_len;
+}
+
+// Email validation (basic)
+__device__ inline bool symm_is_valid_email(const char* email) {
+    if (!email || !email[0]) return false;
+    // Must have @ and at least one character on each side
+    int at_count = 0, at_pos = -1;
+    for (int i = 0; email[i]; i++) {
+        if (email[i] == '@') {
+            at_count++;
+            at_pos = i;
+        }
+    }
+    // Check: exactly one @, has chars before and after
+    return at_count == 1 && at_pos > 0 && email[at_pos + 1] != 0;
+}
+
+// Number range validation
+__device__ inline bool symm_is_in_range(float value, float min_val, float max_val) {
+    return value >= min_val && value <= max_val;
+}
+
+// String contains only alphanumeric
+__device__ inline bool symm_is_alphanumeric(const char* str) {
+    if (!str) return true;
+    for (int i = 0; str[i]; i++) {
+        char c = str[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Rate limiting: token bucket
+struct RateLimiter {
+    int _tokens;
+    int _max_tokens;
+    int _refill_rate;  // tokens per second
+    unsigned long long _last_refill;
+
+    __device__ RateLimiter(int max_tokens = 100, int refill_rate = 10)
+        : _tokens(max_tokens), _max_tokens(max_tokens), _refill_rate(refill_rate),
+          _last_refill(clock64()) {}
+
+    __device__ bool allowRequest() {
+        if (_tokens > 0) {
+            _tokens--;
+            return true;
+        }
+        return false;
+    }
+
+    __device__ int tokensAvailable() const { return _tokens; }
+};
+
+// Check if rate limited
+__device__ inline bool symm_is_rate_limited(RateLimiter& limiter) {
+    return !limiter.allowRequest();
+}
+
+// SQL injection detection (basic)
+__device__ inline bool symm_has_sql_injection(const char* input) {
+    if (!input) return false;
+    // Check for dangerous SQL keywords in input
+    const char* dangerous[] = {"DROP", "DELETE", "INSERT", "UPDATE", "UNION", "SELECT"};
+    for (int i = 0; i < 6; i++) {
+        const char* keyword = dangerous[i];
+        const char* p = input;
+        while (*p) {
+            // Simple case-insensitive substring search
+            bool match = true;
+            const char* test = p;
+            for (int j = 0; keyword[j] && test[j]; j++) {
+                char c1 = test[j];
+                char c2 = keyword[j];
+                // Simple uppercase conversion
+                if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+                if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+                if (c1 != c2) { match = false; break; }
+            }
+            if (match) return true;
+            p++;
+        }
+    }
+    return false;
+}
+
+// CORS validation
+__device__ inline bool symm_is_valid_origin(const char* origin, const char* allowed_origin) {
+    if (!origin || !allowed_origin) return false;
+    // Simple string comparison (could be enhanced with wildcards)
+    while (*origin && *allowed_origin) {
+        if (*origin != *allowed_origin) return false;
+        origin++; allowed_origin++;
+    }
+    return *origin == *allowed_origin;
+}
+
+// Input sanitization: remove newlines and null bytes
+__device__ inline int symm_sanitize_input(const char* input, char* output, int max_len) {
+    if (!input || !output) return 0;
+    int out_pos = 0;
+    for (int i = 0; input[i] && out_pos < max_len - 1; i++) {
+        char c = input[i];
+        // Skip newlines, carriage returns, null bytes, control chars
+        if (c == '\n' || c == '\r' || c == '\0' || (c >= 0 && c < 32)) continue;
+        output[out_pos++] = c;
+    }
+    output[out_pos] = 0;
+    return out_pos;
+}
+
+// Content security validation
+__device__ inline bool symm_is_safe_content_type(const char* content_type) {
+    if (!content_type) return false;
+    // Check for dangerous content types
+    if (symm_str_eq(content_type, "application/x-executable")) return false;
+    if (symm_str_eq(content_type, "application/x-sh")) return false;
+    if (symm_str_eq(content_type, "application/x-msdownload")) return false;
+    return true;
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {
