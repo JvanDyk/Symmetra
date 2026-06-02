@@ -208,6 +208,7 @@ struct ClassMethod {
     bool                     isGetter;
     bool                     isSetter;
     bool                     isAsync;
+    std::vector<std::string> decorators;  // @decorator names applied to this method
 };
 
 struct ClassDecl {
@@ -216,6 +217,7 @@ struct ClassDecl {
     std::vector<std::string> typeParams;      // generic params ("T", "K", "V")
     std::vector<ClassField>  fields;
     std::vector<ClassMethod> methods;
+    std::vector<std::string> decorators;      // @decorator names applied to this class
 };
 
 struct MapCall    { NodePtr array; NodePtr fn; NodePtr init; };

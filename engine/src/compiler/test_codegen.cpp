@@ -7180,6 +7180,41 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "GpuAsyncIterState");  // async iterator state
     });
 
+    TEST("Class-level decorators are parsed (zero codegen impact)", {
+        auto src = codegen(
+            "@serializable\n"
+            "@cached\n"
+            "class User {\n"
+            "  constructor(name) { this.name = name; }\n"
+            "}\n"
+            "app.get('/user', (ctx) => {\n"
+            "  const user = new User('Alice');\n"
+            "  ctx.json({ user });\n"
+            "});"
+        );
+        // Decorators are parsed but not emitted (zero overhead)
+        // Success = no parse errors and normal codegen
+        ASSERT_CONTAINS(src, "struct User");
+    });
+
+    TEST("Method-level decorators are parsed (zero codegen impact)", {
+        auto src = codegen(
+            "class Service {\n"
+            "  @memoize\n"
+            "  getValue() { return 42.0; }\n"
+            "  \n"
+            "  @readonly\n"
+            "  name = 'service';\n"
+            "}\n"
+            "app.get('/service', (ctx) => {\n"
+            "  const svc = new Service();\n"
+            "  ctx.json({ val: svc.getValue() });\n"
+            "});"
+        );
+        // Decorators parsed but not emitted (zero overhead)
+        ASSERT_CONTAINS(src, "struct Service");
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"

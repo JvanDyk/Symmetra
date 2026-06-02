@@ -538,7 +538,33 @@ NodePtr SymmParser::parseStmt() {
         n->line = tok.line;
         return n;
     }
-    if (tok.value == "class")    return parseClass();
+    // Parse decorators (@decorator syntax) before class/function
+    std::vector<std::string> stmtDecorators;
+    while (cur().value == "@") {
+        consume(); // '@'
+        if (cur().kind == Token::Ident) {
+            stmtDecorators.push_back(cur().value);
+            consume(); // decorator name
+            // Skip optional parentheses and arguments
+            if (cur().value == "(") {
+                int parenDepth = 1;
+                consume();
+                while (parenDepth > 0 && cur().kind != Token::Eof) {
+                    if (cur().value == "(") parenDepth++;
+                    else if (cur().value == ")") parenDepth--;
+                    consume();
+                }
+            }
+        }
+    }
+
+    if (tok.value == "class") {
+        auto classNode = parseClass();
+        if (classNode && classNode->kind == NodeKind::ClassDecl && !stmtDecorators.empty()) {
+            std::get<ClassDecl>(classNode->data).decorators = stmtDecorators;
+        }
+        return classNode;
+    }
     if (tok.value == "function") return parseFunctionDecl(false);
     if (tok.value == "async" && peek().value == "function") {
         consume();
@@ -1697,10 +1723,24 @@ NodePtr SymmParser::parseClass() {
     cls.typeParams = typeParams;
 
     while (cur().value != "}" && cur().kind != Token::Eof) {
-        // Skip decorators
-        if (cur().value == "@") {
-            while (cur().value != "\n" && cur().kind != Token::Eof) consume();
-            continue;
+        // Parse decorators (collect before method/field definition)
+        std::vector<std::string> decorators;
+        while (cur().value == "@") {
+            consume(); // '@'
+            if (cur().kind == Token::Ident) {
+                decorators.push_back(cur().value);
+                consume(); // decorator name
+                // Skip optional parentheses and arguments for now
+                if (cur().value == "(") {
+                    int parenDepth = 1;
+                    consume();
+                    while (parenDepth > 0 && cur().kind != Token::Eof) {
+                        if (cur().value == "(") parenDepth++;
+                        else if (cur().value == ")") parenDepth--;
+                        consume();
+                    }
+                }
+            }
         }
         // Static initializer block: static { ... }
         if (cur().value == "static" && peek().value == "{") {
@@ -1782,7 +1822,7 @@ NodePtr SymmParser::parseClass() {
             else { match(";"); }  // abstract method
 
             bool isCtor = (memberName == "constructor");
-            ClassMethod m{ memberName, params, body, isStatic, isCtor, isGetter, isSetter, isAsync };
+            ClassMethod m{ memberName, params, body, isStatic, isCtor, isGetter, isSetter, isAsync, decorators };
             cls.methods.push_back(m);
         } else {
             // Field declaration
