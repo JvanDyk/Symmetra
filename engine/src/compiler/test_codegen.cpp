@@ -7162,6 +7162,24 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "_values[_count++]");  // buffer append in loop
     });
 
+    TEST("Async generator with state machine", {
+        auto src = codegen(
+            "class AsyncGen {\n"
+            "  async *__asyncIterator__() {\n"
+            "    yield 1.0;\n"
+            "    yield 2.0;\n"
+            "    yield 3.0;\n"
+            "  }\n"
+            "}\n"
+            "app.get('/asyncgen', (ctx) => {\n"
+            "  const gen = new AsyncGen();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__asyncIter_step");  // CPS state machine
+        ASSERT_CONTAINS(src, "GpuAsyncIterState");  // async iterator state
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"
