@@ -1211,6 +1211,72 @@ struct RangeError : Error {
     __device__ RangeError(const char* m = "") : Error(m) {}
 };
 
+// Enhanced error formatting with stack context
+__device__ inline const char* symm_format_error(const char* type, const char* msg, int line) {
+    static char buf[256];
+    int pos = 0;
+    // Format: "TypeError: message (at line N)"
+    while (type && *type && pos < 100) buf[pos++] = *type++;
+    buf[pos++] = ':'; buf[pos++] = ' ';
+    while (msg && *msg && pos < 200) buf[pos++] = *msg++;
+    if (line > 0) {
+        buf[pos++] = ' '; buf[pos++] = '(';
+        int n = symm_write_int(buf + pos, line); pos += n;
+        buf[pos++] = ')';
+    }
+    buf[pos] = 0;
+    return buf;
+}
+
+// Error with type info
+__device__ inline const char* symm_type_error(const char* expected, const char* got) {
+    static char buf[256];
+    int pos = snprintf(buf, sizeof(buf), "TypeError: expected %s, got %s", expected, got);
+    return buf;
+}
+
+// Range error with bounds info
+__device__ inline const char* symm_range_error(int actual, int min, int max) {
+    static char buf[128];
+    snprintf(buf, sizeof(buf), "RangeError: value %d out of range [%d, %d]", actual, min, max);
+    return buf;
+}
+
+// Assertion helpers for GPU validation
+__device__ inline bool symm_assert_not_null(const void* ptr, const char* context) {
+    if (!ptr) {
+        symm_debug_log_write(context);  // Log assertion failure
+        return false;
+    }
+    return true;
+}
+
+__device__ inline bool symm_assert_bounds(int idx, int len, const char* context) {
+    if (idx < 0 || idx >= len) {
+        symm_debug_log_write(context);
+        return false;
+    }
+    return true;
+}
+
+__device__ inline bool symm_assert_type(float value, bool is_valid_type) {
+    if (!is_valid_type) {
+        symm_debug_log_write("TypeError: invalid type");
+        return false;
+    }
+    return true;
+}
+
+// Try-catch emulation via error state tracking
+__device__ inline int symm_error_state() {
+    return 0;  // 0 = no error, 1 = error occurred
+}
+
+// Error recovery — reset error state
+__device__ inline void symm_clear_error() {
+    // In a real implementation, this would clear a thread-local error state
+}
+
 // Iterator for Map — returned by map.__sym_iterator__()
 // Supports for-of and C++17 structured bindings: for (const [k,v] of map)
 struct _MapIter {

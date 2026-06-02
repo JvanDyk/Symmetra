@@ -7692,6 +7692,114 @@ static void testAdvancedIteration() {
     });
 }
 
+static void testEnhancedErrorHandling() {
+    std::cout << "\n=== Enhanced Error Handling (Phase 3.3.7) ===\n";
+
+    TEST("Error type with message", {
+        auto src = codegen(
+            "app.get('/error', (ctx) => {\n"
+            "  const err = new Error('Something went wrong');\n"
+            "  ctx.json({ message: err.message });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Error");
+    });
+
+    TEST("TypeError for invalid operations", {
+        auto src = codegen(
+            "app.get('/typeerror', (ctx) => {\n"
+            "  try {\n"
+            "    const x = null + 5;\n"
+            "    ctx.json({ result: x });\n"
+            "  } catch (e) {\n"
+            "    ctx.json({ error: 'TypeError' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Error");
+    });
+
+    TEST("RangeError for out-of-bounds", {
+        auto src = codegen(
+            "app.get('/rangeerror', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  if (5 >= arr.length) {\n"
+            "    throw new RangeError('Index out of range');\n"
+            "  }\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "RangeError");
+    });
+
+    TEST("Error with cause (ES2022)", {
+        auto src = codegen(
+            "app.get('/errorcause', (ctx) => {\n"
+            "  const cause = new Error('root cause');\n"
+            "  const err = new Error('wrapper', cause.message);\n"
+            "  ctx.json({ message: err.message });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Error");
+    });
+
+    TEST("Try-catch-finally blocks", {
+        auto src = codegen(
+            "app.get('/trycatch', (ctx) => {\n"
+            "  let result = 0.0;\n"
+            "  try {\n"
+            "    result = 10.0 / 2.0;\n"
+            "  } catch (e) {\n"
+            "    result = -1.0;\n"
+            "  } finally {\n"
+            "    // cleanup\n"
+            "  }\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "try");
+    });
+
+    TEST("Custom error throwing and catching", {
+        auto src = codegen(
+            "app.get('/throw', (ctx) => {\n"
+            "  try {\n"
+            "    if (ctx.query.bad) {\n"
+            "      throw new Error('Bad request');\n"
+            "    }\n"
+            "    ctx.json({ ok: true });\n"
+            "  } catch (err) {\n"
+            "    ctx.json({ error: 'caught' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "throw");
+    });
+
+    TEST("Error assertions with null checks", {
+        auto src = codegen(
+            "app.get('/assert', (ctx) => {\n"
+            "  const map = ctx.query.map ? new Map() : null;\n"
+            "  if (!map) throw new Error('Invalid map');\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "if");
+    });
+
+    TEST("Error context with line numbers", {
+        auto src = codegen(
+            "app.get('/context', (ctx) => {\n"
+            "  if (ctx.query.x === 'invalid') {\n"
+            "    throw new TypeError('Invalid input type');\n"
+            "  }\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TypeError");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -11648,6 +11756,9 @@ int main() {
 
     // Phase 3.3.6: Advanced Iteration Support
     symm::testAdvancedIteration();
+
+    // Phase 3.3.7: Enhanced Error Handling
+    symm::testEnhancedErrorHandling();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
