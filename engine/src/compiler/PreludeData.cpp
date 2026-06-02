@@ -2193,6 +2193,44 @@ struct SyncPromise {
     __device__ const char* getError() const { return _error ? _error : ""; }
 };
 
+// Promise result formatting helpers
+__device__ inline const char* symm_promise_result(float value) {
+    static char buf[64];
+    snprintf(buf, sizeof(buf), "{\"value\":%.6g,\"status\":\"fulfilled\"}", value);
+    return buf;
+}
+
+__device__ inline const char* symm_promise_rejection(const char* reason) {
+    static char buf[256];
+    int pos = snprintf(buf, sizeof(buf), "{\"reason\":\"");
+    while (reason && *reason && pos < 250) buf[pos++] = *reason++;
+    buf[pos++] = '"'; buf[pos++] = ',';
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "\"status\":\"rejected\"}");
+    return buf;
+}
+
+__device__ inline const char* symm_promise_pending() {
+    return "{\"status\":\"pending\"}";
+}
+
+// Promise chaining helper — check if promise is ready
+__device__ inline bool symm_promise_is_settled(bool rejected) {
+    return rejected || true;  // In sync mode, always settled
+}
+
+// Promise timeout simulation (GPU has no async, so immediate)
+__device__ inline float symm_promise_timeout(float delay_ms) {
+    return delay_ms;  // Would trigger actual timeout on host
+}
+
+// Promise race helper — find first settled promise
+__device__ inline int symm_promise_race_winner(const bool* settled, int count) {
+    for (int i = 0; i < count; i++) {
+        if (settled[i]) return i;
+    }
+    return -1;  // None settled yet
+}
+
 struct Promise {
     template<typename T> __device__ static SyncPromise<T> resolve(T v) { return SyncPromise<T>(v); }
     template<typename T> __device__ static SyncPromise<T> reject(const char* err) {

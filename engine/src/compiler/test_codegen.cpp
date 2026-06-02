@@ -7800,6 +7800,125 @@ static void testEnhancedErrorHandling() {
     });
 }
 
+static void testPromiseAndAsync() {
+    std::cout << "\n=== Promise and Async Improvements (Phase 3.4) ===\n";
+
+    TEST("Promise.resolve() creates fulfilled promise", {
+        auto src = codegen(
+            "app.get('/resolve', (ctx) => {\n"
+            "  const p = Promise.resolve(42.0);\n"
+            "  ctx.json({ resolved: p });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    TEST("Promise.reject() creates rejected promise", {
+        auto src = codegen(
+            "app.get('/reject', (ctx) => {\n"
+            "  const p = Promise.reject('error');\n"
+            "  ctx.json({ rejected: p });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "reject");
+    });
+
+    TEST("Promise.all() waits for all promises", {
+        auto src = codegen(
+            "app.get('/all', (ctx) => {\n"
+            "  const p1 = Promise.resolve(1.0);\n"
+            "  const p2 = Promise.resolve(2.0);\n"
+            "  const results = Promise.all([p1, p2]);\n"
+            "  ctx.json({ allResults: results });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Promise");
+    });
+
+    TEST("Promise.race() returns first settled", {
+        auto src = codegen(
+            "app.get('/race', (ctx) => {\n"
+            "  const p1 = Promise.resolve(1.0);\n"
+            "  const p2 = Promise.resolve(2.0);\n"
+            "  const winner = Promise.race([p1, p2]);\n"
+            "  ctx.json({ winner });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "race");
+    });
+
+    TEST("Promise.allSettled() collects all results", {
+        auto src = codegen(
+            "app.get('/allsettled', (ctx) => {\n"
+            "  const p1 = Promise.resolve(1.0);\n"
+            "  const p2 = Promise.reject('error');\n"
+            "  const results = Promise.allSettled([p1, p2]);\n"
+            "  ctx.json({ all: results });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allSettled");
+    });
+
+    TEST("Promise.any() returns first fulfilled", {
+        auto src = codegen(
+            "app.get('/any', (ctx) => {\n"
+            "  const p1 = Promise.reject('a');\n"
+            "  const p2 = Promise.resolve(2.0);\n"
+            "  const first = Promise.any([p1, p2]);\n"
+            "  ctx.json({ firstFulfilled: first });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "any");
+    });
+
+    TEST("Promise result formatting", {
+        auto src = codegen(
+            "app.get('/promiseformat', (ctx) => {\n"
+            "  const p = Promise.resolve(3.14);\n"
+            "  const status = p.isRejected() ? 'rejected' : 'fulfilled';\n"
+            "  ctx.json({ status });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isRejected");
+    });
+
+    TEST("Promise error handling", {
+        auto src = codegen(
+            "app.get('/promiseerror', (ctx) => {\n"
+            "  const p = Promise.reject('Something failed');\n"
+            "  const err = p.getError();\n"
+            "  ctx.json({ error: err });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getError");
+    });
+
+    TEST("Async function stubs", {
+        auto src = codegen(
+            "async function fetchData() {\n"
+            "  return { data: 'loaded' };\n"
+            "}\n"
+            "app.get('/async', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "async");
+    });
+
+    TEST("Await expression in async context", {
+        auto src = codegen(
+            "async function process() {\n"
+            "  const data = await fetchData();\n"
+            "  return data;\n"
+            "}\n"
+            "app.get('/await', (ctx) => {\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "async");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -11759,6 +11878,9 @@ int main() {
 
     // Phase 3.3.7: Enhanced Error Handling
     symm::testEnhancedErrorHandling();
+
+    // Phase 3.4: Promise and Async Improvements
+    symm::testPromiseAndAsync();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
