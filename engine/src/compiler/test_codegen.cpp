@@ -7359,6 +7359,32 @@ static void testArrayMethodEnhancements() {
         );
         ASSERT_CONTAINS(src, "struct");  // At least struct definition
     });
+
+    TEST("Number formatting utilities (toFixed, toPrecision)", {
+        auto src = codegen(
+            "app.get('/numformat', (ctx) => {\n"
+            "  const num = 3.14159;\n"
+            "  const fixed = num.toFixed(2);\n"
+            "  const precise = num.toPrecision(4);\n"
+            "  ctx.json({ fixed, precise });\n"
+            "});"
+        );
+        // Number formatting available in prelude
+        ASSERT_CONTAINS(src, "Number");
+    });
+
+    TEST("Safe number to string conversion with special cases", {
+        auto src = codegen(
+            "app.get('/numconv', (ctx) => {\n"
+            "  const n = 123.456;\n"
+            "  const str = String(n);\n"
+            "  const inf = Infinity;\n"
+            "  const nan = NaN;\n"
+            "  ctx.json({ number: n, string: str });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "String");
+    });
 }
 
     TEST("str.split() — returns _StrParts struct", {

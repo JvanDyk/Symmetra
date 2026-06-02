@@ -1525,6 +1525,63 @@ __device__ inline bool symm_equals(const char* a, const char* b) {
     return strcmp(a, b) == 0;
 }
 
+// Number formatting utilities
+__device__ inline const char* symm_number_to_fixed(float f, int digits) {
+    static char buf[64];
+    if (digits < 0) digits = 0;
+    if (digits > 20) digits = 20;
+
+    // Handle special cases
+    if (isNaN(f)) return "NaN";
+    float inf = _symm_inf();
+    if (f == inf) return "Infinity";
+    if (f == -inf) return "-Infinity";
+
+    // Format with fixed decimal places
+    float multiplier = 1.0f;
+    for (int i = 0; i < digits; i++) multiplier *= 10.0f;
+
+    long long rounded = (long long)(f * multiplier + 0.5f);
+    if (f < 0 && rounded > 0) rounded = -rounded;
+
+    char* p = buf;
+    if (rounded < 0) {
+        *p++ = '-';
+        rounded = -rounded;
+    }
+
+    symm_write_int(p, (int)(rounded / (long long)multiplier));
+    while (*p) p++;
+
+    if (digits > 0) {
+        *p++ = '.';
+        long long remainder = rounded % (long long)multiplier;
+        for (int i = 0; i < digits; i++) {
+            multiplier /= 10.0f;
+            *p++ = '0' + (char)(remainder / (long long)multiplier);
+            remainder = remainder % (long long)multiplier;
+        }
+    }
+    *p = '\0';
+    return buf;
+}
+
+__device__ inline const char* symm_number_to_precision(float f, int digits) {
+    static char buf[64];
+    if (digits < 1) digits = 1;
+    if (digits > 21) digits = 21;
+
+    // Handle special cases
+    if (isNaN(f)) return "NaN";
+    float inf = _symm_inf();
+    if (f == inf) return "Infinity";
+    if (f == -inf) return "-Infinity";
+
+    // Simple implementation: format to fixed decimal
+    // More complex rounding and scientific notation could be added
+    return symm_number_to_fixed(f, digits > 5 ? 2 : digits - 1);
+}
+
 struct Math {
     __device__ static float random() {
         uint32_t seed = (uint32_t)(threadIdx.x + blockIdx.x * blockDim.x) * 1664525u + 1013904223u;
