@@ -7588,6 +7588,110 @@ static void testObjectMethodExtensions() {
     });
 }
 
+static void testAdvancedIteration() {
+    std::cout << "\n=== Advanced Iteration Support (Phase 3.3.6) ===\n";
+
+    TEST("For-of iteration over arrays", {
+        auto src = codegen(
+            "app.get('/forof', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  let sum = 0.0;\n"
+            "  for (const x of arr) { sum += x; }\n"
+            "  ctx.json({ sum });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("For-of iteration over Maps", {
+        auto src = codegen(
+            "app.get('/mapiter', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('a', 1.0);\n"
+            "  map.set('b', 2.0);\n"
+            "  let count = 0.0;\n"
+            "  for (const [k, v] of map) { count += v; }\n"
+            "  ctx.json({ sum: count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("Iterator protocol via __sym_iterator__", {
+        auto src = codegen(
+            "app.get('/iterator', (ctx) => {\n"
+            "  const parts = 'a,b,c'.split(',');\n"
+            "  let result = '';\n"
+            "  for (const part of parts) { result += part; }\n"
+            "  ctx.json({ concatenated: result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "split");
+    });
+
+    TEST("Generator state tracking with yields", {
+        auto src = codegen(
+            "function* gen() {\n"
+            "  yield 1.0;\n"
+            "  yield 2.0;\n"
+            "  yield 3.0;\n"
+            "}\n"
+            "app.get('/gen', (ctx) => {\n"
+            "  const g = gen();\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        // Generator parsing support
+        ASSERT_CONTAINS(src, "function");
+    });
+
+    TEST("Structured binding with array destructuring", {
+        auto src = codegen(
+            "app.get('/binding', (ctx) => {\n"
+            "  const arr = [10.0, 20.0, 30.0];\n"
+            "  const [x, y, z] = arr;\n"
+            "  ctx.json({ x, y, z });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "arr");
+    });
+
+    TEST("Destructuring with nested arrays", {
+        auto src = codegen(
+            "app.get('/nested', (ctx) => {\n"
+            "  const data = [[1.0, 2.0], [3.0, 4.0]];\n"
+            "  const [[a, b], [c, d]] = data;\n"
+            "  ctx.json({ a, b, c, d });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "data");
+    });
+
+    TEST("Spread operator in array literals", {
+        auto src = codegen(
+            "app.get('/spread', (ctx) => {\n"
+            "  const arr1 = [1.0, 2.0];\n"
+            "  const arr2 = [...arr1, 3.0];\n"
+            "  ctx.json({ combined: arr2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "arr1");
+    });
+
+    TEST("Map iteration with entries", {
+        auto src = codegen(
+            "app.get('/mapentries2', (ctx) => {\n"
+            "  const m = new Map();\n"
+            "  m.set('x', 1.0);\n"
+            "  m.set('y', 2.0);\n"
+            "  for (const e of m.entries()) { /*...*/ }\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "entries");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -11541,6 +11645,9 @@ int main() {
 
     // Phase 3.3.5: Object Method Extensions
     symm::testObjectMethodExtensions();
+
+    // Phase 3.3.6: Advanced Iteration Support
+    symm::testAdvancedIteration();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

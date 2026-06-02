@@ -1449,6 +1449,75 @@ __device__ T* symm_arr_filter(const T* arr, int len, Fn fn) {
     for (int i = 0; i < len && n < 255; i++) if (fn(arr[i])) _filt_buf[n++] = arr[i];
     return _filt_buf;
 }
+// Generator state machine helpers — for yield-based generators
+// State values: 0=initial, 1-255=yield markers, 256=done
+__device__ inline int symm_gen_next_state(int current_state, int yield_count) {
+    // Advance to next yield point, or DONE (256) if exceeded
+    return (current_state >= yield_count) ? 256 : current_state + 1;
+}
+
+// Check if generator has more values (state < DONE)
+__device__ inline bool symm_gen_has_next(int state) {
+    return state < 256;  // 256 = DONE marker
+}
+
+// Extract yield index from state (1-based offset into yield table)
+__device__ inline int symm_gen_yield_index(int state) {
+    return state > 0 ? state - 1 : 0;
+}
+
+// Iterator protocol helper for generators
+// Tracks state between next() calls and compares to resume point
+__device__ inline bool symm_gen_at_yield(int current_state, int target_yield) {
+    return current_state == target_yield;
+}
+
+// Async generator state tracking (0=pending, 1=resolved, 2=rejected, 3=await_pending)
+__device__ inline int symm_async_state_next(int current) {
+    return (current == 0) ? 1 : ((current == 1) ? 3 : 0);  // cycles through states
+}
+
+// Iterator result formatting — builds { value, done } JSON
+__device__ inline const char* symm_iter_result(float value, bool done) {
+    static char buf[64];
+    snprintf(buf, sizeof(buf), "{\"value\":%.6g,\"done\":%s}",
+             value, done ? "true" : "false");
+    return buf;
+}
+
+__device__ inline const char* symm_iter_result_done() {
+    return "{\"value\":null,\"done\":true}";
+}
+
+// Array iteration bounds check — clamp index to [0, len)
+__device__ inline int symm_iter_clamp_index(int idx, int len) {
+    if (idx < 0) idx = 0;
+    if (idx >= len) idx = len - 1;
+    return idx;
+}
+
+// Async iteration support — format promise-like result
+__device__ inline const char* symm_async_result(float value, bool resolved) {
+    static char buf[64];
+    snprintf(buf, sizeof(buf), "{\"value\":%.6g,\"done\":%s}",
+             value, resolved ? "false" : "true");
+    return buf;
+}
+
+// For-await support — tracks async iteration state
+__device__ inline bool symm_for_await_done(int iterations, int max_iterations) {
+    return iterations >= max_iterations;
+}
+
+// Delegation helper for yield* — forward iterator from inner generator
+__device__ inline bool symm_yield_delegation_next(int* state, int target_state) {
+    if (*state <= target_state) {
+        (*state)++;
+        return *state <= target_state;
+    }
+    return false;
+}
+
 // symm_arr_reduce(arr, len, fn, init) — fold left with callback
 template<typename T, typename Fn>
 __device__ T symm_arr_reduce(const T* arr, int len, Fn fn, T init) {
