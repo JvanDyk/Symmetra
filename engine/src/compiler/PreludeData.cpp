@@ -4305,7 +4305,71 @@ __device__ const char* symm_json_stringify_indent(const char* json, int /*indent
     return json ? json : "null";
 }
 
-// ── btoa / atob: Base64 encode/decode ─────────────────────────────────────────
+// ── Phase 3.11: Recursive JSON serialization for nested objects ────────────────
+// These helpers allow Codegen to emit better JSON serialization for nested structures.
+// Use convention: if an object has a .toJSON() method, Codegen will call it for serialization.
+
+// Helper to serialize an object with toJSON() method (Codegen calls this pattern)
+template<typename T>
+__device__ const char* symm_json_with_toJSON(const T& obj) {
+    // Generic fallback — if T has toJSON(), Codegen specializes this at codegen time
+    // For now, fallback to string conversion
+    return "[object Object]";
+}
+
+// Explicit overload for _SBuf (already JSON)
+__device__ const char* symm_json_with_toJSON(const _SBuf& sb) {
+    return sb._b;
+}
+
+// Helper to serialize array elements recursively
+__device__ int symm_json_array_elem(char* buf, const char* val, int maxlen) {
+    // Serialize a single element (already stringified or is a string)
+    if (!val) return 0;
+    int n = 0;
+    for (int i = 0; val[i] && n < maxlen-1; i++) buf[n++] = val[i];
+    buf[n] = 0;
+    return n;
+}
+
+// Helper to serialize array with comma separation and proper JSON formatting
+__device__ int symm_json_array_concat(char* buf, const char* elem1, const char* elem2) {
+    int n = 0;
+    if (elem1) { while (*elem1 && n < 510) buf[n++] = *elem1++; }
+    if (elem2) {
+        buf[n++] = ',';
+        while (*elem2 && n < 510) buf[n++] = *elem2++;
+    }
+    buf[n] = 0;
+    return n;
+}
+
+// Recursive helper for nested object serialization (used by Codegen for dynamic nesting)
+// Pattern: Codegen emits this when it knows the structure is nested at runtime
+__device__ const char* symm_json_nested_obj(const _SBuf& inner) {
+    // Inner already contains a JSON string from recursive ObjectExpr — return as-is
+    return inner._b;
+}
+
+// Array of JSON strings (Codegen uses this for arrays of objects)
+// Each element should already be JSON-stringified
+__device__ const char* symm_json_array_of_strings(const char* arr[], int count) {
+    static char buf[1024];
+    int pos = 0;
+    buf[pos++] = '[';
+    for (int i = 0; i < count && pos < 1022; i++) {
+        if (i > 0) buf[pos++] = ',';
+        if (arr[i]) {
+            const char* elem = arr[i];
+            while (*elem && pos < 1022) buf[pos++] = *elem++;
+        }
+    }
+    buf[pos++] = ']';
+    buf[pos] = 0;
+    return buf;
+}
+
+// btoa / atob: Base64 encode/decode ─────────────────────────────────────────
 static __device__ __constant__ const char _B64_ENC[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

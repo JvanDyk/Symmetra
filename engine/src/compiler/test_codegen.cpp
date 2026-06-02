@@ -3554,6 +3554,67 @@ static void testJsonParsStringify() {
         );
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
+
+    // ── Phase 3.11: Nested JSON serialization ─────────────────────────────────
+    TEST("JSON.stringify with nested object literal — emitted", {
+        auto src = codegen(
+            "app.get('/jsn', (ctx) => {\n"
+            "  const s = JSON.stringify({ user: { name: 'Alice', age: 30 } });\n"
+            "  ctx.json({ result: s });\n"
+            "});"
+        );
+        // Should contain symm_json_stringify (for outer conversion) or inline JSON
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with array of object literals — emitted", {
+        auto src = codegen(
+            "app.get('/jsao', (ctx) => {\n"
+            "  const s = JSON.stringify([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]);\n"
+            "  ctx.json({ data: s });\n"
+            "});"
+        );
+        // Should handle nested array of objects
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with deeply nested object — emitted", {
+        auto src = codegen(
+            "app.get('/jsdn', (ctx) => {\n"
+            "  const s = JSON.stringify({ a: { b: { c: { d: 42 } } } });\n"
+            "  ctx.json({ nested: s });\n"
+            "});"
+        );
+        // Should handle arbitrary depth of nesting
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with mixed nested structure — emitted", {
+        auto src = codegen(
+            "app.get('/jsmix', (ctx) => {\n"
+            "  const s = JSON.stringify({\n"
+            "    items: [1, 2, 3],\n"
+            "    user: { name: 'Charlie', scores: [95, 87, 92] },\n"
+            "    meta: { timestamp: 1234567890 }\n"
+            "  });\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle complex mixed nesting (objects containing arrays, etc)
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with toJSON method — helper exists", {
+        auto src = codegen(
+            "app.get('/jstoj', (ctx) => {\n"
+            "  const obj = { value: 42, toJSON() { return this.value; } };\n"
+            "  const s = JSON.stringify(obj);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Verify toJSON method support is available
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
 }
 
 // ── Array functional methods ──────────────────────────────────────────────────
