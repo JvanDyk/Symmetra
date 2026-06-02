@@ -2799,6 +2799,153 @@ __device__ inline const char* symm_format_if_modified_since(int timestamp) {
     return buf;
 }
 
+// ── Date Methods & Timestamp Utilities ──────────────────────────────────────
+
+// Date component extraction helpers
+__device__ inline int symm_date_get_year(unsigned long long ms) {
+    // Approximate: ms / (365.25 * 24 * 60 * 60 * 1000) + 1970
+    unsigned long long seconds = ms / 1000;
+    unsigned long long days = seconds / 86400;
+    // Simplified: days / 365.25 ≈ year offset from 1970
+    return 1970 + (days / 365);
+}
+
+__device__ inline int symm_date_get_month(unsigned long long ms) {
+    // Month: 0-11 from internal calculation
+    unsigned long long seconds = ms / 1000;
+    unsigned long long days = seconds / 86400;
+    int year = symm_date_get_year(ms);
+    int year_day = days - ((year - 1970) * 365);
+    if (year_day < 31) return 0;
+    if (year_day < 59) return 1;
+    if (year_day < 90) return 2;
+    if (year_day < 120) return 3;
+    if (year_day < 151) return 4;
+    if (year_day < 181) return 5;
+    if (year_day < 212) return 6;
+    if (year_day < 243) return 7;
+    if (year_day < 273) return 8;
+    if (year_day < 304) return 9;
+    if (year_day < 334) return 10;
+    return 11;
+}
+
+__device__ inline int symm_date_get_date(unsigned long long ms) {
+    // Date: 1-31 from day of month
+    unsigned long long seconds = ms / 1000;
+    unsigned long long days = seconds / 86400;
+    unsigned long long day_of_month = (days % 30) + 1;  // Simplified
+    return day_of_month > 31 ? 31 : day_of_month;
+}
+
+__device__ inline int symm_date_get_day(unsigned long long ms) {
+    // Day: 0-6 (0=Sunday) from timestamp
+    unsigned long long seconds = ms / 1000;
+    unsigned long long days = seconds / 86400;
+    return (days + 4) % 7;  // Jan 1 1970 was Thursday (day 4)
+}
+
+__device__ inline int symm_date_get_hours(unsigned long long ms) {
+    return (ms / 3600000) % 24;
+}
+
+__device__ inline int symm_date_get_minutes(unsigned long long ms) {
+    return (ms / 60000) % 60;
+}
+
+__device__ inline int symm_date_get_seconds(unsigned long long ms) {
+    return (ms / 1000) % 60;
+}
+
+__device__ inline int symm_date_get_milliseconds(unsigned long long ms) {
+    return ms % 1000;
+}
+
+// Date setter helpers — reconstruct timestamp from components
+__device__ inline unsigned long long symm_date_set_full_year(unsigned long long ms, int year) {
+    // Reconstruct: keep month/day/time, change year
+    int month = symm_date_get_month(ms);
+    int date = symm_date_get_date(ms);
+    int hours = symm_date_get_hours(ms);
+    int minutes = symm_date_get_minutes(ms);
+    int seconds = symm_date_get_seconds(ms);
+    int milli = symm_date_get_milliseconds(ms);
+
+    // Days since 1970 for new year + month + day
+    unsigned long long days = (year - 1970) * 365 + month * 30 + date;
+    unsigned long long result_ms = (days * 86400000) + (hours * 3600000) + (minutes * 60000) + (seconds * 1000) + milli;
+    return result_ms;
+}
+
+__device__ inline unsigned long long symm_date_set_month(unsigned long long ms, int month) {
+    int year = symm_date_get_year(ms);
+    int date = symm_date_get_date(ms);
+    int hours = symm_date_get_hours(ms);
+    int minutes = symm_date_get_minutes(ms);
+    int seconds = symm_date_get_seconds(ms);
+    int milli = symm_date_get_milliseconds(ms);
+
+    unsigned long long days = (year - 1970) * 365 + month * 30 + date;
+    return (days * 86400000) + (hours * 3600000) + (minutes * 60000) + (seconds * 1000) + milli;
+}
+
+__device__ inline unsigned long long symm_date_set_date(unsigned long long ms, int date) {
+    int year = symm_date_get_year(ms);
+    int month = symm_date_get_month(ms);
+    int hours = symm_date_get_hours(ms);
+    int minutes = symm_date_get_minutes(ms);
+    int seconds = symm_date_get_seconds(ms);
+    int milli = symm_date_get_milliseconds(ms);
+
+    unsigned long long days = (year - 1970) * 365 + month * 30 + date;
+    return (days * 86400000) + (hours * 3600000) + (minutes * 60000) + (seconds * 1000) + milli;
+}
+
+__device__ inline unsigned long long symm_date_set_hours(unsigned long long ms, int hours) {
+    return (ms / 3600000) * 3600000 + (hours * 3600000) + (ms % 3600000);
+}
+
+__device__ inline unsigned long long symm_date_set_minutes(unsigned long long ms, int minutes) {
+    return (ms / 60000) * 60000 + (minutes * 60000) + (ms % 60000);
+}
+
+__device__ inline unsigned long long symm_date_set_seconds(unsigned long long ms, int seconds) {
+    return (ms / 1000) * 1000 + (seconds * 1000) + (ms % 1000);
+}
+
+__device__ inline unsigned long long symm_date_set_milliseconds(unsigned long long ms, int milli) {
+    return (ms / 1000) * 1000 + milli;
+}
+
+// WritableStream support
+struct WritableStream {
+    int _state;  // 0=writable, 1=closed, 2=errored
+    int _queued_chunks;
+    int _high_water_mark;
+
+    __device__ WritableStream(int hwm = 16384)
+        : _state(0), _queued_chunks(0), _high_water_mark(hwm) {}
+
+    __device__ bool canWrite() const { return _state == 0; }
+    __device__ bool isClosed() const { return _state == 1; }
+    __device__ int getDesiredSize() const { return _high_water_mark - _queued_chunks; }
+};
+
+// Write to stream
+__device__ inline bool symm_stream_write(WritableStream& stream, const char* data, int size) {
+    if (stream._state != 0) return false;  // Not writable
+    stream._queued_chunks += size;
+    if (stream._queued_chunks >= stream._high_water_mark) {
+        stream._state = 1;  // Mark as closed when high water mark reached
+    }
+    return true;
+}
+
+// Close stream
+__device__ inline void symm_stream_close(WritableStream& stream) {
+    stream._state = 1;
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {

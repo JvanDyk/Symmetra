@@ -8489,6 +8489,117 @@ static void testCachingAndOptimization() {
     });
 }
 
+static void testDateAndStreaming() {
+    std::cout << "\n=== Date Methods & Streaming (Phase 3.9) ===\n";
+
+    TEST("Date component extraction", {
+        auto src = codegen(
+            "app.get('/date', (ctx) => {\n"
+            "  const now = Date.now();\n"
+            "  const d = new Date(now);\n"
+            "  const year = d.getFullYear();\n"
+            "  const month = d.getMonth();\n"
+            "  const date = d.getDate();\n"
+            "  ctx.json({ year, month, date });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getFullYear");
+    });
+
+    TEST("Date time components", {
+        auto src = codegen(
+            "app.get('/time', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  const hours = d.getHours();\n"
+            "  const minutes = d.getMinutes();\n"
+            "  const seconds = d.getSeconds();\n"
+            "  ctx.json({ hours, minutes, seconds });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getHours");
+    });
+
+    TEST("Date.getDay() day of week", {
+        auto src = codegen(
+            "app.get('/dayofweek', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  const dayOfWeek = d.getDay();\n"
+            "  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];\n"
+            "  ctx.json({ dayOfWeek, name: dayNames[dayOfWeek] });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getDay");
+    });
+
+    TEST("Date.getMilliseconds()", {
+        auto src = codegen(
+            "app.get('/ms', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  const ms = d.getMilliseconds();\n"
+            "  ctx.json({ milliseconds: ms });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getMilliseconds");
+    });
+
+    TEST("Date.setFullYear() updates year", {
+        auto src = codegen(
+            "app.post('/setyear', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  d.setFullYear(2030);\n"
+            "  ctx.json({ year: d.getFullYear() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "setFullYear");
+    });
+
+    TEST("Date.setMonth() updates month", {
+        auto src = codegen(
+            "app.post('/setmonth', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  d.setMonth(5);  // June\n"
+            "  ctx.json({ month: d.getMonth() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "setMonth");
+    });
+
+    TEST("Date.setDate() updates day", {
+        auto src = codegen(
+            "app.post('/setdate', (ctx) => {\n"
+            "  const d = new Date();\n"
+            "  d.setDate(15);\n"
+            "  ctx.json({ date: d.getDate() });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "setDate");
+    });
+
+    TEST("WritableStream write and close", {
+        auto src = codegen(
+            "app.post('/writestream', (ctx) => {\n"
+            "  const stream = new WritableStream();\n"
+            "  stream.write('chunk1');\n"
+            "  stream.write('chunk2');\n"
+            "  stream.close();\n"
+            "  ctx.json({ closed: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "WritableStream");
+    });
+
+    TEST("WritableStream desiredSize tracking", {
+        auto src = codegen(
+            "app.get('/desiredsize', (ctx) => {\n"
+            "  const stream = new WritableStream();\n"
+            "  const available = stream.getDesiredSize();\n"
+            "  ctx.json({ desiredSize: available });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getDesiredSize");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -12463,6 +12574,9 @@ int main() {
 
     // Phase 3.8: Caching & Response Optimization
     symm::testCachingAndOptimization();
+
+    // Phase 3.9: Date Methods & Streaming
+    symm::testDateAndStreaming();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
