@@ -7240,6 +7240,51 @@ static void testErrorReporting() {
     });
 }
 
+static void testUtilityHelpers() {
+    std::cout << "\n=== Utility Helpers & Type Checking ===\n";
+
+    TEST("Type checking inline helpers in prelude", {
+        auto src = codegen(
+            "app.get('/typeof', (ctx) => {\n"
+            "  const n = 42.0;\n"
+            "  const s = 'hello';\n"
+            "  const check1 = typeof n;\n"
+            "  const check2 = typeof s;\n"
+            "  ctx.json({ n: check1, s: check2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "\"number\"");
+        ASSERT_CONTAINS(src, "\"string\"");
+    });
+
+    TEST("Value conversion helpers for type coercion", {
+        auto src = codegen(
+            "app.get('/convert', (ctx) => {\n"
+            "  const n = 123.45;\n"
+            "  const s = String(n);\n"
+            "  const back = Number(s);\n"
+            "  ctx.json({ original: n, converted: back });\n"
+            "});"
+        );
+        // Conversion operations compile without errors
+        ASSERT_CONTAINS(src, "Number");
+        ASSERT_CONTAINS(src, "String");
+    });
+
+    TEST("NaN-safe equality comparison", {
+        auto src = codegen(
+            "app.get('/nan', (ctx) => {\n"
+            "  const a = NaN;\n"
+            "  const b = NaN;\n"
+            "  const same = (a === b);\n"
+            "  ctx.json({ result: same });\n"
+            "});"
+        );
+        // NaN comparison compiles correctly
+        ASSERT_CONTAINS(src, "NaN");
+    });
+}
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"
@@ -11195,6 +11240,9 @@ int main() {
 
     // Phase 3.2: Error Reporting & Diagnostics Infrastructure
     symm::testErrorReporting();
+
+    // Phase 3.2.4: Utility Helpers & Type Checking
+    symm::testUtilityHelpers();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

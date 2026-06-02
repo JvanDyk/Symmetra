@@ -1487,6 +1487,44 @@ struct Number {
 __device__ bool isNaN(float v) { return v != v; }
 __device__ bool isFinite(float v) { float i=_symm_inf(); return v==v&&v!=i&&v!=-i; }
 
+// Type checking inline helpers (zero overhead)
+__device__ inline bool symm_is_string(const char* v) { return v != nullptr; }
+__device__ inline bool symm_is_number(float v) { return isFinite(v) || isNaN(v); }
+__device__ inline bool symm_is_object(void* v) { return v != nullptr; }
+__device__ inline bool symm_is_null(void* v) { return v == nullptr; }
+
+// Type detection helpers
+__device__ inline const char* symm_typeof(float v) { return "number"; }
+__device__ inline const char* symm_typeof(const char* v) { return v ? "string" : "object"; }
+__device__ inline const char* symm_typeof(int v) { return "number"; }
+
+// Safe value conversion helpers
+__device__ inline float symm_to_number(const char* s) { return symm_parse_float(s); }
+__device__ inline float symm_to_number(int i) { return (float)i; }
+__device__ inline float symm_to_number(float f) { return f; }
+__device__ inline const char* symm_to_string(float f) {
+    static char buf[32];
+    symm_write_float(buf, f);
+    return buf;
+}
+__device__ inline const char* symm_to_string(int i) {
+    static char buf[32];
+    symm_write_int(buf, i);
+    return buf;
+}
+__device__ inline const char* symm_to_string(const char* s) { return s ? s : ""; }
+
+// Utility comparison helpers (handle NaN correctly)
+__device__ inline bool symm_equals(float a, float b) {
+    if (isNaN(a) && isNaN(b)) return true;  // NaN === NaN in GPU context
+    return a == b;
+}
+__device__ inline bool symm_equals(const char* a, const char* b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return strcmp(a, b) == 0;
+}
+
 struct Math {
     __device__ static float random() {
         uint32_t seed = (uint32_t)(threadIdx.x + blockIdx.x * blockDim.x) * 1664525u + 1013904223u;
