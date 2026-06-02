@@ -7126,6 +7126,28 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "strcmp(");
     });
 
+    TEST("Nested JSON.stringify with nested objects", {
+        auto src = codegen(
+            "app.get('/nested', (ctx) => {\n"
+            "  const obj = { user: { name: 'Alice', age: 30.0 }, active: true };\n"
+            "  const json = JSON.stringify(obj);\n"
+            "  ctx.json({ result: json });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_write_str");  // nested JSON building
+    });
+
+    TEST("Nested JSON.stringify with nested arrays", {
+        auto src = codegen(
+            "app.get('/nestedarray', (ctx) => {\n"
+            "  const arr = [1.0, [2.0, 3.0], [4.0, 5.0]];\n"
+            "  const json = JSON.stringify(arr);\n"
+            "  ctx.json({ result: json });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_write_str");  // nested array JSON building
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"

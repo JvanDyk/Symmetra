@@ -1141,6 +1141,41 @@ std::string Codegen::emitExpr(const NodePtr& node) {
 
         case NodeKind::ArrayExpr: {
             auto& ae = std::get<ArrayExpr>(node->data);
+            // Check if array contains nested objects/arrays — if so, emit as JSON
+            bool hasNested = false;
+            for (auto& elem : ae.elements) {
+                if (elem && (elem->kind == NodeKind::ObjectExpr || elem->kind == NodeKind::ArrayExpr)) {
+                    hasNested = true;
+                    break;
+                }
+            }
+
+            if (hasNested) {
+                // Emit as JSON array using _SBuf
+                std::string body = "_SBuf _ab; int _an = 0; _ab._b[_an++] = '['; ";
+                for (int i = 0; i < (int)ae.elements.size(); i++) {
+                    if (i) body += "_ab._b[_an++] = ','; ";
+                    auto& elem = ae.elements[i];
+                    if (elem && (elem->kind == NodeKind::ObjectExpr || elem->kind == NodeKind::ArrayExpr)) {
+                        // Nested object or array — recursively emit as JSON
+                        std::string nested = emitExpr(elem);
+                        body += "{ const char* _nj = (const char*)(" + nested + "); _an += symm_write_str(_ab._b + _an, _nj); } ";
+                    } else if (elem && elem->kind == NodeKind::Literal) {
+                        auto& lit = std::get<Literal>(elem->data);
+                        if (lit.kind == Literal::Str)
+                            body += "_an += symm_write_str(_ab._b + _an, \"\\\"" + lit.raw + "\\\"\"); ";
+                        else
+                            body += "_an += symm_json_val(_ab._b + _an, " + lit.raw + "); ";
+                    } else {
+                        std::string ex = elem ? emitExpr(elem) : "nullptr";
+                        body += "_an += symm_json_val(_ab._b + _an, " + ex + "); ";
+                    }
+                }
+                body += "_ab._b[_an < 510 ? _an++ : 510] = ']'; _ab._b[_an < 511 ? _an : 511] = '\\0'; return _ab;";
+                return "([&]()->_SBuf{ " + body + " }())";
+            }
+
+            // Simple array — emit as C++ initializer
             std::string s = "{";
             for (int i = 0; i < (int)ae.elements.size(); i++) {
                 if (i) s += ", ";
@@ -1198,6 +1233,10 @@ std::string Codegen::emitExpr(const NodePtr& node) {
                     }
                     else
                         body += "_on += symm_json_val(_ob._b + _on, " + lit.raw + "); ";
+                } else if (val && (val->kind == NodeKind::ObjectExpr || val->kind == NodeKind::ArrayExpr)) {
+                    // Nested object or array — recursively emit as JSON string
+                    std::string nested = emitExpr(val);
+                    body += "{ const char* _nj = (const char*)(" + nested + "); _on += symm_write_str(_ob._b + _on, _nj); } ";
                 } else {
                     std::string ex = val ? emitExpr(val) : "nullptr";
                     body += "_on += symm_json_val(_ob._b + _on, " + ex + "); ";
