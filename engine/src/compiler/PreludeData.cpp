@@ -2385,6 +2385,124 @@ __device__ inline const char* symm_stream_read(ReadableStream& stream) {
     return data;
 }
 
+// ── Performance Monitoring & Metrics ───────────────────────────────────────────
+
+// Request timing tracker
+struct RequestMetrics {
+    unsigned long long _start_time;
+    unsigned long long _end_time;
+    int _bytes_received;
+    int _bytes_sent;
+    int _status_code;
+
+    __device__ RequestMetrics()
+        : _start_time(0), _end_time(0), _bytes_received(0), _bytes_sent(0), _status_code(0) {}
+
+    __device__ unsigned long long duration() const {
+        return _end_time > _start_time ? _end_time - _start_time : 0;
+    }
+
+    __device__ float durationMs() const {
+        // ~1700 cycles per microsecond at 1.7 GHz
+        return (float)duration() / 1700.0f / 1000.0f;
+    }
+};
+
+// Start request timing
+__device__ inline void symm_metrics_start(RequestMetrics& m) {
+    m._start_time = clock64();
+}
+
+// End request timing
+__device__ inline void symm_metrics_end(RequestMetrics& m) {
+    m._end_time = clock64();
+}
+
+// Record bytes transferred
+__device__ inline void symm_metrics_record_bytes(RequestMetrics& m, int sent, int received) {
+    m._bytes_sent = sent;
+    m._bytes_received = received;
+}
+
+// Throughput calculation (bytes per ms)
+__device__ inline float symm_metrics_throughput(const RequestMetrics& m) {
+    float duration_ms = m.durationMs();
+    if (duration_ms < 0.001f) return 0.0f;  // Avoid division by zero
+    return (float)m._bytes_received / duration_ms;
+}
+
+// Latency percentile helpers
+struct LatencyStats {
+    float _min_ms;
+    float _max_ms;
+    float _avg_ms;
+    float _p50_ms;
+    float _p99_ms;
+
+    __device__ LatencyStats()
+        : _min_ms(0), _max_ms(0), _avg_ms(0), _p50_ms(0), _p99_ms(0) {}
+
+    __device__ bool isHealthy() const {
+        return _avg_ms < 100.0f && _max_ms < 1000.0f;
+    }
+};
+
+// Request counter
+struct RequestCounter {
+    int _total;
+    int _successful;  // 2xx
+    int _redirect;    // 3xx
+    int _client_error;  // 4xx
+    int _server_error;  // 5xx
+
+    __device__ RequestCounter()
+        : _total(0), _successful(0), _redirect(0), _client_error(0), _server_error(0) {}
+
+    __device__ void recordResponse(int status) {
+        _total++;
+        if (status >= 200 && status < 300) _successful++;
+        else if (status >= 300 && status < 400) _redirect++;
+        else if (status >= 400 && status < 500) _client_error++;
+        else if (status >= 500 && status < 600) _server_error++;
+    }
+
+    __device__ float successRate() const {
+        return _total > 0 ? (float)_successful / _total * 100.0f : 0.0f;
+    }
+
+    __device__ float errorRate() const {
+        return 100.0f - successRate();
+    }
+};
+
+// Error rate calculation
+__device__ inline float symm_error_rate(const RequestCounter& c) {
+    return c.errorRate();
+}
+
+// Success rate calculation
+__device__ inline float symm_success_rate(const RequestCounter& c) {
+    return c.successRate();
+}
+
+// Format metrics JSON
+__device__ inline const char* symm_format_metrics(const RequestMetrics& m) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+             "{\"duration_ms\":%.2f,\"bytes_sent\":%d,\"bytes_received\":%d,\"status\":%d}",
+             m.durationMs(), m._bytes_sent, m._bytes_received, m._status_code);
+    return buf;
+}
+
+// Format stats JSON
+__device__ inline const char* symm_format_stats(const RequestCounter& c) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+             "{\"total\":%d,\"successful\":%d,\"errors\":%d,\"error_rate\":%.1f}",
+             c._total, c._successful, c._client_error + c._server_error, c.errorRate());
+    return buf;
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {

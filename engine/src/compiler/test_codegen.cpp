@@ -8061,6 +8061,152 @@ static void testFetchAndWebSocket() {
     });
 }
 
+static void testPerformanceMonitoring() {
+    std::cout << "\n=== Performance Monitoring & Metrics (Phase 3.6) ===\n";
+
+    TEST("Request metrics tracking", {
+        auto src = codegen(
+            "app.get('/metrics', (ctx) => {\n"
+            "  const metrics = {\n"
+            "    startTime: Date.now(),\n"
+            "    duration: 0,\n"
+            "    bytes: 1024\n"
+            "  };\n"
+            "  metrics.duration = Date.now() - metrics.startTime;\n"
+            "  ctx.json({ metrics });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "metrics");
+    });
+
+    TEST("Request timing measurement", {
+        auto src = codegen(
+            "app.post('/timed', (ctx) => {\n"
+            "  console.time('request');\n"
+            "  const data = processRequest(ctx.body);\n"
+            "  console.timeEnd('request');\n"
+            "  ctx.json({ data });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "time");
+    });
+
+    TEST("Response status code tracking", {
+        auto src = codegen(
+            "app.get('/status', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com');\n"
+            "  const status = response.status();\n"
+            "  if (status >= 200 && status < 300) {\n"
+            "    ctx.json({ success: true });\n"
+            "  } else {\n"
+            "    ctx.json({ success: false, status });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "status");
+    });
+
+    TEST("Throughput calculation", {
+        auto src = codegen(
+            "app.get('/throughput', (ctx) => {\n"
+            "  const startTime = Date.now();\n"
+            "  const data = fetchLargeData();\n"
+            "  const duration = Date.now() - startTime;\n"
+            "  const throughput = data.length / duration;\n"
+            "  ctx.json({ throughput });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "throughput");
+    });
+
+    TEST("Request counter aggregation", {
+        auto src = codegen(
+            "app.get('/counter', (ctx) => {\n"
+            "  let successCount = 0;\n"
+            "  let errorCount = 0;\n"
+            "  for (let i = 0; i < responses.length; i++) {\n"
+            "    if (responses[i].ok) successCount++;\n"
+            "    else errorCount++;\n"
+            "  }\n"
+            "  ctx.json({ success: successCount, errors: errorCount });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "successCount");
+    });
+
+    TEST("Error rate monitoring", {
+        auto src = codegen(
+            "app.get('/errorrate', (ctx) => {\n"
+            "  const errors = 5;\n"
+            "  const total = 100;\n"
+            "  const errorRate = (errors / total) * 100;\n"
+            "  ctx.json({ errorRate });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "errorRate");
+    });
+
+    TEST("Success rate calculation", {
+        auto src = codegen(
+            "app.get('/successrate', (ctx) => {\n"
+            "  const successful = 95;\n"
+            "  const total = 100;\n"
+            "  const successRate = (successful / total) * 100;\n"
+            "  ctx.json({ successRate });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "successRate");
+    });
+
+    TEST("Latency percentile tracking", {
+        auto src = codegen(
+            "app.get('/latency', (ctx) => {\n"
+            "  const latencies = [10, 15, 12, 20, 18, 100];\n"
+            "  const avg = latencies.reduce((a, b) => a + b) / latencies.length;\n"
+            "  const max = Math.max(...latencies);\n"
+            "  ctx.json({ avg, max });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "latencies");
+    });
+
+    TEST("Metrics JSON serialization", {
+        auto src = codegen(
+            "app.get('/metricsjs', (ctx) => {\n"
+            "  const metrics = {\n"
+            "    duration: 25.5,\n"
+            "    bytes_sent: 256,\n"
+            "    bytes_received: 1024,\n"
+            "    status: 200\n"
+            "  };\n"
+            "  ctx.json(metrics);\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "metrics");
+    });
+
+    TEST("Performance health check", {
+        auto src = codegen(
+            "app.get('/health', (ctx) => {\n"
+            "  const isHealthy = avgLatency < 100 && errorRate < 5;\n"
+            "  ctx.json({ healthy: isHealthy });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isHealthy");
+    });
+
+    TEST("Bytes transferred tracking", {
+        auto src = codegen(
+            "app.post('/bytes', (ctx) => {\n"
+            "  const sent = ctx.body.length;\n"
+            "  const received = response.length;\n"
+            "  ctx.json({ sent, received });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "sent");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -12026,6 +12172,9 @@ int main() {
 
     // Phase 3.5: fetch/WebSocket Integration
     symm::testFetchAndWebSocket();
+
+    // Phase 3.6: Performance Monitoring & Metrics
+    symm::testPerformanceMonitoring();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
