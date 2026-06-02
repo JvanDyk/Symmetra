@@ -7072,6 +7072,22 @@ static void testArrayPatterns() {
         ASSERT_CONTAINS(src, "symm_map_keys_as_json");
     });
 
+    TEST("Static initializer auto-call in class definitions", {
+        auto src = codegen(
+            "class Config {\n"
+            "  static count = 0;\n"
+            "  static {\n"
+            "    Config.count = 42;\n"
+            "  }\n"
+            "}\n"
+            "app.get('/config', (ctx) => {\n"
+            "  ctx.json({ count: Config.count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "__static_init__");
+        ASSERT_CONTAINS(src, "Config::__static_init__()");
+    });
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"
