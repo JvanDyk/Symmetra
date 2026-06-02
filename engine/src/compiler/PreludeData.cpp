@@ -1700,6 +1700,99 @@ __device__ inline int symm_escape_json_string(const char* src, char* dst, int ma
     return pos;
 }
 
+// String method helpers
+__device__ inline const char* symm_string_repeat(const char* str, int count) {
+    static char buf[512];
+    if (!str || count <= 0) return "";
+    if (count == 1) return str;
+
+    int pos = 0;
+    int str_len = 0;
+    const char* p = str;
+    while (*p && str_len < 100) { str_len++; p++; }
+
+    if (str_len == 0) return "";
+    if (str_len * count > 500) count = 500 / str_len;  // Cap total length
+
+    for (int i = 0; i < count && pos < 500; i++) {
+        for (const char* src = str; *src && pos < 500; src++) {
+            buf[pos++] = *src;
+        }
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+
+__device__ inline const char* symm_string_pad_start(const char* str, int target_len, const char* pad_str) {
+    static char buf[256];
+    if (!str) str = "";
+    if (!pad_str || pad_str[0] == '\0') pad_str = " ";
+
+    int str_len = 0;
+    while (str[str_len] && str_len < 200) str_len++;
+
+    if (str_len >= target_len) {
+        // String is already long enough
+        int pos = 0;
+        for (int i = 0; i < str_len && pos < 255; i++) {
+            buf[pos++] = str[i];
+        }
+        buf[pos] = '\0';
+        return buf;
+    }
+
+    int pad_len = 0;
+    while (pad_str[pad_len] && pad_len < 10) pad_len++;
+    int pad_needed = target_len - str_len;
+
+    int pos = 0;
+    int pad_idx = 0;
+    while (pad_needed > 0 && pos < 250) {
+        buf[pos++] = pad_str[pad_idx];
+        pad_idx = (pad_idx + 1) % pad_len;
+        pad_needed--;
+    }
+
+    for (int i = 0; i < str_len && pos < 255; i++) {
+        buf[pos++] = str[i];
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+
+__device__ inline const char* symm_string_pad_end(const char* str, int target_len, const char* pad_str) {
+    static char buf[256];
+    if (!str) str = "";
+    if (!pad_str || pad_str[0] == '\0') pad_str = " ";
+
+    int str_len = 0;
+    while (str[str_len] && str_len < 200) str_len++;
+
+    int pos = 0;
+    for (int i = 0; i < str_len && pos < 250; i++) {
+        buf[pos++] = str[i];
+    }
+
+    if (str_len >= target_len) {
+        buf[pos] = '\0';
+        return buf;
+    }
+
+    int pad_len = 0;
+    while (pad_str[pad_len] && pad_len < 10) pad_len++;
+    int pad_needed = target_len - str_len;
+
+    int pad_idx = 0;
+    while (pad_needed > 0 && pos < 255) {
+        buf[pos++] = pad_str[pad_idx];
+        pad_idx = (pad_idx + 1) % pad_len;
+        pad_needed--;
+    }
+
+    buf[pos] = '\0';
+    return buf;
+}
+
 struct String {
     // String constructor - creates a string from value
     __device__ static const char* create(const char* s) { return s ? s : ""; }

@@ -7385,6 +7385,39 @@ static void testArrayMethodEnhancements() {
         );
         ASSERT_CONTAINS(src, "String");
     });
+
+    TEST("String.repeat() for repeated string generation", {
+        auto src = codegen(
+            "app.get('/repeat', (ctx) => {\n"
+            "  const str = 'ab';\n"
+            "  const repeated = str.repeat(3);\n"
+            "  ctx.json({ result: repeated });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "repeat");
+    });
+
+    TEST("String.padStart() for left-padding", {
+        auto src = codegen(
+            "app.get('/padstart', (ctx) => {\n"
+            "  const num = '5';\n"
+            "  const padded = num.padStart(3, '0');\n"
+            "  ctx.json({ result: padded });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "padStart");
+    });
+
+    TEST("String.padEnd() for right-padding", {
+        auto src = codegen(
+            "app.get('/padend', (ctx) => {\n"
+            "  const str = 'hi';\n"
+            "  const padded = str.padEnd(5, '-');\n"
+            "  ctx.json({ result: padded });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "padEnd");
+    });
 }
 
     TEST("str.split() — returns _StrParts struct", {
