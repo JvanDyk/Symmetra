@@ -2207,6 +2207,10 @@ std::string Codegen::emitCall(const CallExpr& c) {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
             return "symm_arr_includes(" + obj + ", " + obj + "_len, " + val + ")";
         }
+        if (prop == "lastIndexOf") {
+            std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            return "symm_arr_last_index_of(" + obj + ", " + obj + "_len, " + val + ")";
+        }
         if (prop == "at") {
             std::string idx = c.args.empty() ? "0" : emitExpr(c.args[0]);
             return "symm_arr_at(" + obj + ", " + obj + "_len, " + idx + ")";

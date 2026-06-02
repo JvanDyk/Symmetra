@@ -7418,6 +7418,72 @@ static void testArrayMethodEnhancements() {
         );
         ASSERT_CONTAINS(src, "padEnd");
     });
+
+    TEST("Array.indexOf() finds first occurrence", {
+        auto src = codegen(
+            "app.get('/indexof', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 2.0];\n"
+            "  const idx = arr.indexOf(2.0);\n"
+            "  ctx.json({ index: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_index_of");
+    });
+
+    TEST("Array.lastIndexOf() finds last occurrence", {
+        auto src = codegen(
+            "app.get('/lastindexof', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 2.0];\n"
+            "  const idx = arr.lastIndexOf(2.0);\n"
+            "  ctx.json({ lastIndex: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_last_index_of");
+    });
+
+    TEST("Array.findIndex() with callback predicate", {
+        auto src = codegen(
+            "app.get('/findindex', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const idx = arr.findIndex(x => x > 1.5);\n"
+            "  ctx.json({ foundIndex: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_find_index");
+    });
+
+    TEST("Array.findLastIndex() backward search with callback", {
+        auto src = codegen(
+            "app.get('/findlastindex', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 2.0];\n"
+            "  const idx = arr.findLastIndex(x => x >= 2.0);\n"
+            "  ctx.json({ lastFoundIndex: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_find_last_index");
+    });
+
+    TEST("String.indexOf() for substring search", {
+        auto src = codegen(
+            "app.get('/strindexof', (ctx) => {\n"
+            "  const str = 'hello world';\n"
+            "  const idx = str.indexOf('world');\n"
+            "  ctx.json({ index: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_index_of");
+    });
+
+    TEST("String.lastIndexOf() for backward substring search", {
+        auto src = codegen(
+            "app.get('/strlastindexof', (ctx) => {\n"
+            "  const str = 'hello hello world';\n"
+            "  const idx = str.lastIndexOf('hello');\n"
+            "  ctx.json({ lastIndex: idx });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_last_index_of");
+    });
 }
 
     TEST("str.split() — returns _StrParts struct", {

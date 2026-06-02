@@ -1456,6 +1456,15 @@ __device__ int symm_arr_index_of(const float* arr, int len, float val) {
 __device__ bool symm_arr_includes(const float* arr, int len, float val) {
     return symm_arr_index_of(arr, len, val) >= 0;
 }
+
+// Optimized lastIndexOf for backward search
+__device__ int symm_arr_last_index_of(const float* arr, int len, float val) {
+    for (int i = len - 1; i >= 0; i--) {
+        if (arr[i] == val) return i;
+    }
+    return -1;
+}
+
 )";
 
 // Fragment 4: Math and Array utilities
