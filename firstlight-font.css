@@ -1,0 +1,329 @@
+/* ========================================
+   FIRST LIGHT - 3D Font System
+   Professional Cinematic Typography
+   ======================================== */
+
+/* ========================================
+   MAIN 3D FONT STYLES
+   ======================================== */
+
+.text-3d {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+
+    /* Core 3D shadow effect - layered for depth */
+    text-shadow:
+        8px 8px 0px rgba(0, 0, 0, 0.4),
+        16px 16px 0px rgba(0, 0, 0, 0.3),
+        24px 24px 0px rgba(0, 0, 0, 0.2),
+        /* Right side shadow */
+        6px 0px 0px rgba(0, 0, 0, 0.3),
+        12px 0px 0px rgba(0, 0, 0, 0.2),
+        /* Bottom shadow */
+        0px 6px 0px rgba(0, 0, 0, 0.3),
+        0px 12px 0px rgba(0, 0, 0, 0.2),
+        /* Soft blur for realism */
+        10px 10px 20px rgba(0, 0, 0, 0.5);
+
+    /* 3D perspective tilt */
+    transform: perspective(1200px) rotateX(2deg);
+
+    /* Smooth transitions for interactive effects */
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ========================================
+   INTERACTIVE HOVER STATES
+   ======================================== */
+
+.text-3d:hover {
+    /* Enhanced shadow on hover for depth illusion */
+    text-shadow:
+        12px 12px 0px rgba(0, 0, 0, 0.5),
+        20px 20px 0px rgba(0, 0, 0, 0.4),
+        28px 28px 0px rgba(0, 0, 0, 0.3),
+        8px 0px 0px rgba(0, 0, 0, 0.4),
+        16px 0px 0px rgba(0, 0, 0, 0.3),
+        0px 8px 0px rgba(0, 0, 0, 0.4),
+        0px 16px 0px rgba(0, 0, 0, 0.3),
+        12px 12px 25px rgba(0, 0, 0, 0.6);
+
+    /* Increased perspective rotation on hover */
+    transform: perspective(1200px) rotateX(5deg) translateZ(10px);
+}
+
+/* ========================================
+   VARIANT: SOFT SHADOW (Subtle Effect)
+   ======================================== */
+
+.text-3d-soft {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    text-shadow:
+        4px 4px 0px rgba(0, 0, 0, 0.3),
+        8px 8px 0px rgba(0, 0, 0, 0.2),
+        12px 12px 15px rgba(0, 0, 0, 0.3);
+    transform: perspective(1200px) rotateX(1deg);
+    transition: all 0.3s ease;
+}
+
+.text-3d-soft:hover {
+    text-shadow:
+        6px 6px 0px rgba(0, 0, 0, 0.4),
+        12px 12px 0px rgba(0, 0, 0, 0.3),
+        18px 18px 20px rgba(0, 0, 0, 0.4);
+    transform: perspective(1200px) rotateX(3deg) translateZ(5px);
+}
+
+/* ========================================
+   VARIANT: DEEP SHADOW (Extreme Effect)
+   ======================================== */
+
+.text-3d-deep {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    text-shadow:
+        12px 12px 0px rgba(0, 0, 0, 0.5),
+        24px 24px 0px rgba(0, 0, 0, 0.4),
+        36px 36px 0px rgba(0, 0, 0, 0.3),
+        48px 48px 0px rgba(0, 0, 0, 0.2),
+        10px 0px 0px rgba(0, 0, 0, 0.4),
+        20px 0px 0px rgba(0, 0, 0, 0.3),
+        0px 10px 0px rgba(0, 0, 0, 0.4),
+        0px 20px 0px rgba(0, 0, 0, 0.3),
+        20px 20px 40px rgba(0, 0, 0, 0.6);
+    transform: perspective(1200px) rotateX(3deg);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.text-3d-deep:hover {
+    text-shadow:
+        16px 16px 0px rgba(0, 0, 0, 0.6),
+        32px 32px 0px rgba(0, 0, 0, 0.5),
+        48px 48px 0px rgba(0, 0, 0, 0.4),
+        64px 64px 0px rgba(0, 0, 0, 0.3),
+        12px 0px 0px rgba(0, 0, 0, 0.5),
+        24px 0px 0px rgba(0, 0, 0, 0.4),
+        0px 12px 0px rgba(0, 0, 0, 0.5),
+        0px 24px 0px rgba(0, 0, 0, 0.4),
+        24px 24px 50px rgba(0, 0, 0, 0.7);
+    transform: perspective(1200px) rotateX(7deg) translateZ(15px);
+}
+
+/* ========================================
+   VARIANT: COLORFUL (Neon/Glow Effect)
+   ======================================== */
+
+.text-3d-neon {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #00ff88;
+    text-shadow:
+        0 0 10px #00ff88,
+        0 0 20px rgba(0, 255, 136, 0.5),
+        8px 8px 0px rgba(0, 0, 0, 0.4),
+        16px 16px 0px rgba(0, 0, 0, 0.3),
+        24px 24px 0px rgba(0, 0, 0, 0.2),
+        8px 0px 0px rgba(0, 0, 0, 0.3),
+        0px 8px 0px rgba(0, 0, 0, 0.3);
+    transform: perspective(1200px) rotateX(2deg);
+    transition: all 0.3s ease;
+}
+
+.text-3d-neon:hover {
+    text-shadow:
+        0 0 15px #00ff88,
+        0 0 30px rgba(0, 255, 136, 0.7),
+        12px 12px 0px rgba(0, 0, 0, 0.5),
+        20px 20px 0px rgba(0, 0, 0, 0.4),
+        28px 28px 0px rgba(0, 0, 0, 0.3),
+        10px 0px 0px rgba(0, 0, 0, 0.4),
+        0px 10px 0px rgba(0, 0, 0, 0.4);
+    transform: perspective(1200px) rotateX(5deg) translateZ(10px);
+}
+
+/* ========================================
+   CONTAINER & LAYOUT HELPERS
+   ======================================== */
+
+.text-3d-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0d0d0d 100%);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.text-3d-inline {
+    display: inline-block;
+    padding: 0 10px;
+}
+
+.text-3d-block {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 20px;
+}
+
+/* ========================================
+   RESPONSIVE SIZING
+   ======================================== */
+
+/* Small screens */
+@media (max-width: 600px) {
+    .text-3d {
+        font-size: 48px;
+        letter-spacing: 0.06em;
+        text-shadow:
+            4px 4px 0px rgba(0, 0, 0, 0.3),
+            8px 8px 0px rgba(0, 0, 0, 0.2),
+            12px 12px 0px rgba(0, 0, 0, 0.1),
+            3px 0px 0px rgba(0, 0, 0, 0.2),
+            6px 0px 0px rgba(0, 0, 0, 0.1),
+            0px 3px 0px rgba(0, 0, 0, 0.2),
+            0px 6px 0px rgba(0, 0, 0, 0.1),
+            6px 6px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .text-3d-deep {
+        text-shadow:
+            6px 6px 0px rgba(0, 0, 0, 0.4),
+            12px 12px 0px rgba(0, 0, 0, 0.3),
+            18px 18px 0px rgba(0, 0, 0, 0.2),
+            24px 24px 0px rgba(0, 0, 0, 0.1),
+            5px 0px 0px rgba(0, 0, 0, 0.3),
+            10px 0px 0px rgba(0, 0, 0, 0.2),
+            0px 5px 0px rgba(0, 0, 0, 0.3),
+            0px 10px 0px rgba(0, 0, 0, 0.2),
+            10px 10px 20px rgba(0, 0, 0, 0.4);
+    }
+}
+
+/* Medium screens */
+@media (min-width: 601px) and (max-width: 1024px) {
+    .text-3d {
+        font-size: 80px;
+    }
+}
+
+/* Large screens */
+@media (min-width: 1025px) {
+    .text-3d {
+        font-size: 120px;
+    }
+}
+
+/* ========================================
+   DARK MODE & ACCESSIBILITY
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    .text-3d {
+        color: #ffffff;
+    }
+
+    .text-3d-container {
+        background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0d0d0d 100%);
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    .text-3d {
+        color: #1a1a1a;
+        text-shadow:
+            8px 8px 0px rgba(100, 100, 100, 0.4),
+            16px 16px 0px rgba(100, 100, 100, 0.3),
+            24px 24px 0px rgba(100, 100, 100, 0.2),
+            6px 0px 0px rgba(100, 100, 100, 0.3),
+            12px 0px 0px rgba(100, 100, 100, 0.2),
+            0px 6px 0px rgba(100, 100, 100, 0.3),
+            0px 12px 0px rgba(100, 100, 100, 0.2),
+            10px 10px 20px rgba(100, 100, 100, 0.4);
+    }
+}
+
+/* ========================================
+   REDUCED MOTION (Accessibility)
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .text-3d,
+    .text-3d-soft,
+    .text-3d-deep,
+    .text-3d-neon {
+        transition: none;
+    }
+
+    .text-3d:hover,
+    .text-3d-soft:hover,
+    .text-3d-deep:hover,
+    .text-3d-neon:hover {
+        transform: none;
+    }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+    .text-3d,
+    .text-3d-soft,
+    .text-3d-deep,
+    .text-3d-neon {
+        text-shadow:
+            2px 2px 0px rgba(0, 0, 0, 0.5),
+            4px 4px 0px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+
+@keyframes float3d {
+    0% {
+        transform: perspective(1200px) rotateX(2deg) translateY(0px);
+    }
+    50% {
+        transform: perspective(1200px) rotateX(2deg) translateY(-10px);
+    }
+    100% {
+        transform: perspective(1200px) rotateX(2deg) translateY(0px);
+    }
+}
+
+.text-3d-float {
+    animation: float3d 4s ease-in-out infinite;
+}
+
+@keyframes pulse3d {
+    0%, 100% {
+        text-shadow:
+            8px 8px 0px rgba(0, 0, 0, 0.4),
+            16px 16px 0px rgba(0, 0, 0, 0.3),
+            24px 24px 0px rgba(0, 0, 0, 0.2),
+            10px 10px 20px rgba(0, 0, 0, 0.5);
+    }
+    50% {
+        text-shadow:
+            10px 10px 0px rgba(0, 0, 0, 0.5),
+            20px 20px 0px rgba(0, 0, 0, 0.4),
+            30px 30px 0px rgba(0, 0, 0, 0.3),
+            15px 15px 25px rgba(0, 0, 0, 0.6);
+    }
+}
+
+.text-3d-pulse {
+    animation: pulse3d 2s ease-in-out infinite;
+}

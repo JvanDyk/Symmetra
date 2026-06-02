@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Symmetra installer for Windows
-# Usage: iwr https://symmetra.io/install.ps1 | iex
+# Usage: iwr https://symmscript.com/install.ps1 | iex
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -87,7 +87,7 @@ if (-not $downloaded) {
     Write-Host "       https://github.com/$GITHUB_REPO/releases"
     Write-Host "    2. Extract sym.exe to: $INSTALL_DIR"
     Write-Host ""
-    Write-Host "  Docs: https://symmetra.io/docs/getting-started"
+    Write-Host "  Docs: https://symmscript.com/docs/getting-started"
     Write-Host ""
     exit 1
 }
@@ -120,5 +120,5 @@ Write-Host "  sym doctor          # verify GPU + CUDA driver"
 Write-Host "  sym ./server.ts     # compile and launch"
 Write-Host "  sym check           # audit package.json compatibility"
 Write-Host ""
-Write-Host "  Docs: https://symmetra.io/docs/getting-started"
+Write-Host "  Docs: https://symmscript.com/docs/getting-started"
 Write-Host ""

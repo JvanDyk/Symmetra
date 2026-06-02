@@ -457,6 +457,13 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                         }
                     }
                 }
+                // Track Map/Set variables — they have __sym_iterator__() so for-of uses protocol
+                if (d.init && d.init->kind == NodeKind::NewExpr) {
+                    auto& ne = std::get<NewExpr>(d.init->data);
+                    if (ne.className == "Map" || ne.className == "Set") {
+                        _iterableVars.insert(d.name);
+                    }
+                }
                 // If binding from a ctx.json() body var, extract the field from JSON
                 if (isDestructureBind && _ctxBodyVars.count(destructSrc)) {
                     auto& me = std::get<MemberExpr>(d.init->data);
@@ -719,6 +726,9 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                 }
 
                 std::string idx = freshTemp() + "_i";
+                // Detect Map/Set destructuring: varName is "k,v" from for(const [k,v] of map)
+                bool isDestructure = (fo.varName.find(',') != std::string::npos);
+
                 if (isStringIter) {
                     // for (const ch of str) — iterate chars; expose as one-char C-string
                     std::string chBuf = freshTemp() + "_ch";
@@ -727,20 +737,52 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
                     _out += indent(depth+1) + "const char* " + fo.varName + " = " + chBuf + ";\n";
                     emitStmt(fo.body, depth + 1);
                     _out += ind + "}\n";
-                } else {
-                    // for (const x of arr) — try iterator protocol first, then fall back to _len
-                    // Iterator protocol: object has __sym_iterator__() method that returns iterator with next()
-                    std::string itVar = freshTemp() + "_it";
+                } else if (isDestructure) {
+                    // for (const [k,v] of map) — Map/Set iterator protocol with C++17 structured binding
+                    std::string itVar  = freshTemp() + "_it";
                     std::string resVar = freshTemp() + "_res";
                     _out += ind + "{\n";
                     _out += indent(depth+1) + "auto " + itVar + " = (" + iter + ").__sym_iterator__();\n";
                     _out += indent(depth+1) + "for (;;) {\n";
                     _out += indent(depth+2) + "auto " + resVar + " = " + itVar + ".next();\n";
                     _out += indent(depth+2) + "if (" + resVar + ".done) break;\n";
-                    _out += indent(depth+2) + "auto " + fo.varName + " = " + resVar + ".value;\n";
+                    // C++17 structured binding: auto [k, v] = res.value
+                    _out += indent(depth+2) + "auto [" + fo.varName + "] = " + resVar + ".value;\n";
                     emitStmt(fo.body, depth + 2);
                     _out += indent(depth+1) + "}\n";
                     _out += ind + "}\n";
+                } else {
+                    // Heuristic to pick iteration strategy:
+                    //   CallExpr iter (e.g. gen(), arr.filter()) → iterator protocol
+                    //   Ident in _iterableVars (Map, Set) → iterator protocol
+                    //   Ident NOT in _iterableVars → indexed loop using iter_len (for arrays)
+                    bool iterIsCall = fo.iter && fo.iter->kind == NodeKind::CallExpr;
+                    // Check if the iter is a known Map/Set variable
+                    if (!iterIsCall && fo.iter && fo.iter->kind == NodeKind::Ident) {
+                        const std::string& nm = std::get<Ident>(fo.iter->data).name;
+                        if (_iterableVars.count(nm)) iterIsCall = true; // use iterator protocol
+                    }
+                    if (iterIsCall) {
+                        // Generator / method result — use __sym_iterator__() / next() protocol
+                        std::string itVar  = freshTemp() + "_it";
+                        std::string resVar = freshTemp() + "_res";
+                        _out += ind + "{\n";
+                        _out += indent(depth+1) + "auto " + itVar + " = (" + iter + ").__sym_iterator__();\n";
+                        _out += indent(depth+1) + "for (;;) {\n";
+                        _out += indent(depth+2) + "auto " + resVar + " = " + itVar + ".next();\n";
+                        _out += indent(depth+2) + "if (" + resVar + ".done) break;\n";
+                        _out += indent(depth+2) + "auto " + fo.varName + " = " + resVar + ".value;\n";
+                        emitStmt(fo.body, depth + 2);
+                        _out += indent(depth+1) + "}\n";
+                        _out += ind + "}\n";
+                    } else {
+                        // Array variable — use companion _len indexed loop
+                        std::string lenVar = iter + "_len";
+                        _out += ind + "for (int " + idx + " = 0; " + idx + " < " + lenVar + "; ++" + idx + ") {\n";
+                        _out += indent(depth+1) + "auto " + fo.varName + " = " + iter + "[" + idx + "];\n";
+                        emitStmt(fo.body, depth + 1);
+                        _out += ind + "}\n";
+                    }
                 }
             }
             break;
@@ -752,6 +794,10 @@ void Codegen::emitStmt(const NodePtr& node, int depth) {
             // over the map's internal entry array and expose the key as varName.
             std::string obj = emitExpr(fi.obj);
             std::string idx = freshTemp() + "_ki";
+            // for...in iterates the key array of Map objects (_e[]/_n).
+            // Only Map instances have _n and _e[] — plain structs do not.
+            // Best effort: emit the _n-indexed loop (works for Map; plain structs produce
+            // a compile error at the _n access site, so users must use Map for for...in).
             _out += ind + "// for...in over " + obj + "\n";
             _out += ind + "for (int " + idx + " = 0; " + idx + " < " + obj + "._n; " + idx + "++) {\n";
             _out += indent(depth+1) + "const char* " + fi.varName + " = " + obj + "._e[" + idx + "].k;\n";
@@ -1301,8 +1347,22 @@ std::string Codegen::emitLiteral(const Literal& l) {
             return val + "ull";
         }
         case Literal::Str: {
-            // Escape the raw string for embedding in a C++ string literal.
-            // The tokenizer stores the unescaped content (e.g. a literal newline or quote).
+            // Regex literal: raw starts with '/' (e.g. /abc/gi → RegExp{"abc","gi"})
+            if (!l.raw.empty() && l.raw[0] == '/') {
+                size_t lastSlash = l.raw.rfind('/');
+                if (lastSlash > 0) {
+                    std::string pat   = l.raw.substr(1, lastSlash - 1);
+                    std::string flags = l.raw.substr(lastSlash + 1);
+                    std::string ep;
+                    for (char ch : pat) {
+                        if (ch == '"')  ep += "\\\"";
+                        else if (ch == '\\') ep += "\\\\";
+                        else ep += ch;
+                    }
+                    return "RegExp{\"" + ep + "\", \"" + flags + "\"}";
+                }
+            }
+            // Normal string literal — escape for C++ embedding
             std::string esc;
             esc.reserve(l.raw.size() + 4);
             for (char ch : l.raw) {
@@ -1367,7 +1427,19 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
         return "(!symm_eq(" + emitExpr(b.left) + ", " + emitExpr(b.right) + "))";
     }
     // JS logical operators — same in C++
-    if (op == "instanceof") return "(true /*instanceof*/)";
+    if (op == "instanceof") {
+        std::string lhs = emitExpr(b.left);
+        std::string rhs = emitExpr(b.right);
+        // Discriminate well-known GPU struct types via a unique field
+        if (rhs == "RegExp")
+            return "((" + lhs + ").pattern != nullptr)";
+        if (rhs == "Error" || rhs == "TypeError" || rhs == "RangeError" ||
+            rhs == "SyntaxError" || rhs == "ReferenceError" ||
+            rhs == "URIError"  || rhs == "EvalError" || rhs == "AggregateError")
+            return "((" + lhs + ").message != nullptr)";
+        // User-defined classes and other builtins: no vtable on GPU — cannot discriminate
+        return "(true /*instanceof " + rhs + ": no vtable*/)";
+    }
     if (op == "in") {
         // "key" in obj → obj.has(key) for Map/Set; symm_arr_includes for arrays
         // Use .has() method which both Map and Set support; falls back to true for structs
@@ -1559,6 +1631,17 @@ std::string Codegen::emitMember(const MemberExpr& m) {
 
     // lastIndex on RegExp
     if (m.prop == "lastIndex") return obj + ".lastIndex";
+
+    // .size on Map/Set — dispatch to size() method (not a plain field)
+    if (m.prop == "size") return obj + ".size()";
+
+    // RegExp property accessors — methods, not fields
+    if (m.prop == "flags")  return obj + ".getFlags()";
+    if (m.prop == "source") return obj + ".source()";
+    if (m.prop == "global") return obj + "._has_flag('g')";
+    if (m.prop == "ignoreCase") return obj + "._has_flag('i')";
+    if (m.prop == "multiline")  return obj + "._has_flag('m')";
+    if (m.prop == "dotAll")     return obj + "._has_flag('s')";
 
     return obj + "." + m.prop;   // default: value type member access
 }
@@ -1754,9 +1837,18 @@ std::string Codegen::emitCall(const CallExpr& c) {
 
         // JSON.* static methods
         if (obj == "JSON") {
-            std::string arg0 = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
             if (prop == "stringify") {
-                // JSON.stringify(val, replacer, indent) — optional indent arg
+                if (c.args.empty()) return "\"null\"";
+                // Object/array literals already produce JSON via emitExpr — don't double-encode
+                bool isObjOrArr = c.args[0]->kind == NodeKind::ObjectExpr
+                               || c.args[0]->kind == NodeKind::ArrayExpr;
+                std::string arg0 = emitExpr(c.args[0]);
+                if (isObjOrArr) {
+                    // arg0 is already a JSON string (C++ literal or _SBuf with operator const char*)
+                    if (c.args.size() >= 3)
+                        return "symm_json_stringify_indent((const char*)(" + arg0 + "), (int)(" + emitExpr(c.args[2]) + "))";
+                    return "(const char*)(" + arg0 + ")";
+                }
                 if (c.args.size() >= 3) {
                     std::string indent = emitExpr(c.args[2]);
                     return "symm_json_stringify_indent(symm_json_stringify(" + arg0 + "), (int)(" + indent + "))";
@@ -1808,8 +1900,8 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 std::string radix = emitExpr(c.args[0]);
                 return "symm_number_to_string_radix((long long)(" + obj + "), " + radix + ")";
             }
-            // Default: decimal string
-            return "symm_number_to_fixed(" + obj + ", 0)";
+            // Default: decimal — use radix 10 (emits integer string, no trailing zeros)
+            return "symm_number_to_string_radix((long long)(" + obj + "), 10)";
         }
 
         // Number.prototype.toPrecision(digits) — format to N significant digits
@@ -1852,12 +1944,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             }
             if (prop == "of") {
-                // Array.of(a,b,c) — emit as initializer
-                std::string elems;
-                for (int i = 0; i < (int)c.args.size(); i++) {
-                    if (i) elems += ", ";
-                    elems += emitExpr(c.args[i]);
-                }
+                // Array.of(a,b,c) — emit as a typed initializer list.
+                // Type is inferred from the first argument (float for numbers, const char* for strings).
+                // Note: this returns a brace-initializer; callers must be in a typed context.
+                // Workaround: use an array literal [a,b,c] in source instead.
+                if (c.args.empty()) return "{}";
+                std::string first = emitExpr(c.args[0]);
+                std::string elems = first;
+                for (int i = 1; i < (int)c.args.size(); i++) elems += ", " + emitExpr(c.args[i]);
                 return "{" + elems + "}";
             }
         }
@@ -1865,7 +1959,14 @@ std::string Codegen::emitCall(const CallExpr& c) {
         // ── Object.* static methods ──────────────────────────────────────────
         if (obj == "Object") {
             if (prop == "hasOwn") {
-                return "(true /*Object.hasOwn*/)";
+                // Object.hasOwn(obj, key) — try Map.has(key) which is the most common GPU use case.
+                // For plain structs all fields always "exist", so true is correct for them too.
+                if (c.args.size() >= 2) {
+                    std::string target = emitExpr(c.args[0]);
+                    std::string key    = emitExpr(c.args[1]);
+                    return "(" + target + ".has(" + key + "))";
+                }
+                return "(true /*Object.hasOwn: no args*/)";
             }
             if (prop == "is") {
                 // NaN-safe equality: Object.is(NaN, NaN) == true, Object.is(-0, +0) == false
@@ -1991,12 +2092,8 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "symm_strlen(" + obj + ")";
         }
         if (prop == "split") {
-            // str.split(sep) — returns the full split (index-based access via [N])
-            // Emit as a struct that supports [N] access via symm_str_split_at
-            // Since GPU has no dynamic arrays, emitExpr of split()[N] is the common pattern.
-            // We leave this for the ForOfStmt handler; here just return a sentinel.
             std::string sep = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
-            return obj + "/*split(" + sep + ")*/";
+            return "symm_str_split_parts(" + obj + ", " + sep + ")";
         }
 
         // ── Array prototype methods ──────────────────────────────────────────
@@ -2054,11 +2151,13 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "symm_arr_for_each(" + obj + ", " + obj + "_len, " + fn + ")";
         }
         if (prop == "flat") {
-            return "symm_arr_flat(" + obj + ", " + obj + "_len)";
+            std::string depth = c.args.empty() ? "1" : emitExpr(c.args[0]);
+            return "symm_arr_flat(" + obj + ", " + obj + "_len, " + depth + ")";
         }
         if (prop == "flatMap") {
             std::string fn = c.args.empty() ? "[](auto x){return x;}" : emitExpr(c.args[0]);
-            return "symm_arr_map(" + obj + ", " + obj + "_len, " + fn + ")";  // simplified
+            // flatMap: map then flatten one level
+            return "symm_arr_flat(symm_arr_map(" + obj + ", " + obj + "_len, " + fn + "), " + obj + "_len, 1)";
         }
         if (prop == "fill") {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
@@ -2082,10 +2181,9 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "symm_arr_reduce(" + obj + ", " + obj + "_len, " + fn + ", " + init + ")";
         }
         if (prop == "reduceRight") {
-            // Simplified: same as reduce (GPU arrays tend to be short)
             std::string fn   = c.args.empty() ? "[](auto a, auto b){return a+b;}" : emitExpr(c.args[0]);
             std::string init = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
-            return "symm_arr_reduce(" + obj + ", " + obj + "_len, " + fn + ", " + init + ")";
+            return "symm_arr_reduce_right(" + obj + ", " + obj + "_len, " + fn + ", " + init + ")";
         }
         if (prop == "slice") {
             std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
@@ -2096,9 +2194,6 @@ std::string Codegen::emitCall(const CallExpr& c) {
             std::string other    = c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             std::string otherLen = c.args.empty() ? "0" : (other + "_len");
             return "symm_arr_concat(" + obj + ", &" + obj + "_len, " + other + ", " + otherLen + ")";
-        }
-        if (prop == "flat" || prop == "flatMap") {
-            return "symm_arr_flat(" + obj + ", " + obj + "_len)";
         }
         if (prop == "copyWithin") {
             std::string target = c.args.empty() ? "0" : emitExpr(c.args[0]);
@@ -2115,23 +2210,31 @@ std::string Codegen::emitCall(const CallExpr& c) {
             return "symm_arr_to_sorted(" + obj + ", " + obj + "_len, " + obj + ")";
         }
         if (prop == "toSpliced") {
-            // simplified: same as slice + splice semantics; returns modified copy
             std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
-            return "symm_arr_slice(" + obj + ", " + obj + "_len, 0, " + obj + "_len)";
+            std::string deleteCount = (c.args.size() > 1) ? emitExpr(c.args[1]) : obj + "_len";
+            return "symm_arr_to_spliced(" + obj + ", " + obj + "_len, " + start + ", " + deleteCount + ")";
         }
         if (prop == "with") {
             std::string idx = c.args.empty() ? "0" : emitExpr(c.args[0]);
             std::string val = (c.args.size() > 1) ? emitExpr(c.args[1]) : "0";
-            return "(" + obj + "[" + idx + "] = " + val + ", " + obj + ")";
+            return "symm_arr_with(" + obj + ", " + obj + "_len, " + idx + ", " + val + ")";
         }
-        // Note: entries/keys/values fall through to generic dispatch
-        // so Map.keys(), Set.keys(), arr.keys() all call the struct method directly.
+        // Array.prototype.entries/keys/values — dispatch to prelude helpers
+        if (prop == "entries") {
+            return "symm_arr_entries(" + obj + ", " + obj + "_len)";
+        }
+        if (prop == "keys") {
+            return "symm_arr_keys(" + obj + ", " + obj + "_len)";
+        }
+        if (prop == "values") {
+            return "symm_arr_values(" + obj + ", " + obj + "_len)";
+        }
+        // Map/Set keys()/values()/entries() fall through to the struct's own methods below.
         if (prop == "pop") {
             return "(" + obj + "_len > 0 ? " + obj + "[--" + obj + "_len] : 0)";
         }
         if (prop == "shift") {
-            // Not efficient but correct
-            return "(" + obj + "_len > 0 ? " + obj + "[0] : 0)";
+            return "symm_arr_shift(" + obj + ", &" + obj + "_len)";
         }
         if (prop == "push") {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
@@ -2139,12 +2242,19 @@ std::string Codegen::emitCall(const CallExpr& c) {
         }
         if (prop == "unshift") {
             std::string val = c.args.empty() ? "0" : emitExpr(c.args[0]);
-            return "(++(" + obj + "_len))";  // simplified; actual shift not safe without bounds
+            return "symm_arr_unshift(" + obj + ", &" + obj + "_len, " + val + ")";
+        }
+        if (prop == "splice") {
+            std::string start = c.args.empty() ? "0" : emitExpr(c.args[0]);
+            std::string deleteCount = (c.args.size() > 1) ? emitExpr(c.args[1]) : obj + "_len";
+            return "symm_arr_splice(" + obj + ", &" + obj + "_len, " + start + ", " + deleteCount + ")";
         }
 
-        // ── Map/Set keys() / values() / entries() — inline struct methods ──────
-        // Map and Set both have inline keys()/values()/entries() methods now.
-        // Fall through to generic dispatch: obj.keys() / obj.values() / obj.entries()
+        // ── Map/Set delete — `delete` is a C++ keyword; redirect to _delete_() ──
+        if (prop == "delete") {
+            std::string key = c.args.empty() ? "\"\"" : emitExpr(c.args[0]);
+            return obj + "._delete_(" + key + ")";
+        }
 
         // ── Generator protocol: gen.return(val) / gen.throw(err) ────────────
         if (prop == "return" || prop == "return_") {
@@ -2599,7 +2709,17 @@ void Codegen::emitClass(const ClassDecl& cls, int depth) {
         _out += indent(depth+1) + "}\n";
     }
 
-    _out += ind + "};\n\n";
+    _out += ind + "};\n";
+
+    // Auto-call static initializer blocks: if the class has a __static_init__() method,
+    // call it immediately after the struct definition so static { } blocks run at startup.
+    for (auto& m : cls.methods) {
+        if (m.name == "__static_init__" && m.isStatic) {
+            _out += ind + cls.name + "::__static_init__();\n";
+            break;
+        }
+    }
+    _out += "\n";
 }
 
 // ── Template literal emission ─────────────────────────────────────────────────

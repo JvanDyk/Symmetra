@@ -11,6 +11,11 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    @font-face {
+      font-family: 'Hemi Head';
+      src: url('assets/hemi%20head%20bd%20it.ttf') format('truetype');
+    }
+
     body {
       font-family: 'IBM Plex Sans', sans-serif;
       background: linear-gradient(135deg, #0a0e14 0%, #0d1117 50%, #0a0e14 100%);
@@ -36,40 +41,15 @@
       margin-bottom: 2rem;
     }
 
-    .brand-logo {
+    .brand a {
       display: inline-block;
-      position: relative;
-      padding-bottom: 0.7rem;
-      margin-bottom: 0.4rem;
       text-decoration: none;
+      margin-bottom: 0.5rem;
     }
 
-    .brand-logo .b-main {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: 2px;
-      background: linear-gradient(135deg, #7c6fff 0%, #5af0c4 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      display: block;
-      line-height: 1;
-    }
-
-    .brand-logo .b-script {
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-style: italic;
-      font-weight: 700;
-      font-size: 1.15rem;
-      color: #ffffff;
-      position: absolute;
-      bottom: 0;
-      right: -4px;
-      transform: rotate(-14deg);
-      transform-origin: left bottom;
-      white-space: nowrap;
-      line-height: 1;
+    .brand img {
+      height: 56px;
+      filter: drop-shadow(0 0 16px rgba(124, 111, 255, 0.28));
     }
 
     .brand-sub {
@@ -241,9 +221,8 @@
 <body>
   <div class="card">
     <div class="brand">
-      <a class="brand-logo" href="/">
-        <span class="b-main">SYMMETRA</span>
-        <span class="b-script">Script</span>
+      <a href="/">
+        <img src="assets/logo.svg" alt="Symmetra Script">
       </a>
       <div class="brand-sub">GPU-accelerated TypeScript runtime</div>
     </div>

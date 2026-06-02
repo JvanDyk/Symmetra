@@ -1,152 +1,547 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Getting Started - Symmetra</title>
-  <link rel="stylesheet" href="../style.css">
+  <title>Getting Started — Symmetra Docs</title>
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,700&display=swap" rel="stylesheet">
   <style>
-    .doc-content { max-width: 800px; margin: 0 auto; padding: 2rem; }
-    .doc-section { margin-bottom: 3rem; }
-    code { background: var(--surface); padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
-    pre { background: var(--surface); padding: 1rem; border-radius: 0.5rem; overflow-x: auto; border: 1px solid var(--border); }
-    h2 { margin-top: 2rem; margin-bottom: 1rem; }
-    .step { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-    .step-number { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
-    .step-content h3 { margin-top: 0; margin-bottom: 0.5rem; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @font-face {
+      font-family: 'Hemi Head';
+      src: url('../assets/hemi%20head%20bd%20it.ttf') format('truetype');
+    }
+
+    :root {
+      --bg:       #0a0e14;
+      --surface:  rgba(17, 24, 39, 0.85);
+      --border:   rgba(116, 152, 255, 0.18);
+      --text:     #e5e7eb;
+      --muted:    #9ca3af;
+      --muted2:   #6b7280;
+      --accent-a: #7c6fff;
+      --accent-b: #5af0c4;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: linear-gradient(160deg, #080c11 0%, #0d1117 60%, #080c11 100%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+
+    a { color: var(--accent-b); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8, 12, 17, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .nav-brand { display: inline-flex; align-items: center; flex-shrink: 0; }
+    .nav-brand img { height: 36px; filter: drop-shadow(0 0 12px rgba(124,111,255,0.22)); }
+
+    .nav-links { display: flex; gap: 1.5rem; font-size: 0.84rem; color: var(--muted); }
+    .nav-links a { font-family: 'IBM Plex Sans', sans-serif; font-style: italic; font-weight: 700; transform: skewX(-14deg); display: inline-block; }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); text-decoration: none; }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 5rem;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    /* ── Sidebar TOC ──────────────────────────────────────────────────── */
+    .sidebar {
+      position: sticky;
+      top: 74px;
+      font-size: 0.8rem;
+    }
+
+    .sidebar-label {
+      font-size: 0.67rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted2);
+      margin-bottom: 0.75rem;
+    }
+
+    .sidebar a {
+      display: block;
+      color: var(--muted);
+      padding: 0.3rem 0;
+      border-left: 2px solid var(--border);
+      padding-left: 0.75rem;
+      transition: color 0.15s, border-color 0.15s;
+      font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    .sidebar a:hover { color: var(--text); border-color: var(--accent-a); text-decoration: none; }
+
+    /* ── Doc body ─────────────────────────────────────────────────────── */
+    .doc h1 {
+      font-family: 'Hemi Head', sans-serif;
+      font-size: 2rem;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+
+    .doc .lead {
+      font-size: 1rem;
+      color: var(--muted);
+      margin-bottom: 2.5rem;
+      max-width: 600px;
+    }
+
+    .doc h2 {
+      font-family: 'Hemi Head', sans-serif;
+      font-size: 1.2rem;
+      color: var(--accent-a);
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .doc h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent-b);
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    .doc p { color: var(--muted); margin-bottom: 1rem; }
+    .doc ul, .doc ol { color: var(--muted); margin: 0.75rem 0 1rem 1.25rem; }
+    .doc li { margin-bottom: 0.4rem; }
+    .doc strong { color: var(--text); font-weight: 600; }
+
+    code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.82em;
+      background: rgba(116, 152, 255, 0.1);
+      border: 1px solid rgba(116, 152, 255, 0.16);
+      border-radius: 4px;
+      padding: 0.15em 0.45em;
+      color: var(--accent-b);
+    }
+
+    pre {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      background: rgba(4, 7, 11, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+      color: #c9d1d9;
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 1em;
+      color: inherit;
+    }
+
+    /* ── Requirement steps ────────────────────────────────────────────── */
+    .req-list { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0 1.5rem; }
+
+    .req-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+    }
+
+    .req-icon {
+      font-size: 1rem;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #000;
+      margin-top: 0.1rem;
+    }
+
+    .req-content strong { display: block; margin-bottom: 0.2rem; font-size: 0.9rem; }
+    .req-content p { font-size: 0.84rem; margin: 0; }
+
+    /* ── Download panel ───────────────────────────────────────────────── */
+    .download-panel {
+      background: rgba(90, 240, 196, 0.05);
+      border: 1px solid rgba(90, 240, 196, 0.22);
+      border-radius: 10px;
+      padding: 1.4rem 1.6rem;
+      margin: 1rem 0 1.5rem;
+    }
+
+    .download-panel h3 { margin-top: 0; color: var(--accent-b); }
+    .download-panel p { font-size: 0.88rem; }
+
+    .btn-catalog {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      padding: 0.65rem 1.4rem;
+      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+      border-radius: 6px;
+      color: #000;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-weight: 700;
+      font-size: 0.88rem;
+      text-decoration: none;
+    }
+
+    .btn-catalog:hover { opacity: 0.88; text-decoration: none; }
+
+    /* ── CLI table ────────────────────────────────────────────────────── */
+    .cli-table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.84rem; }
+    .cli-table th {
+      text-align: left;
+      font-size: 0.67rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted2);
+      border-bottom: 1px solid var(--border);
+      padding: 0.4rem 0.75rem;
+    }
+    .cli-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(116,152,255,0.08); vertical-align: top; color: var(--muted); }
+    .cli-table td:first-child { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--accent-b); white-space: nowrap; }
+
+    /* ── Help box ─────────────────────────────────────────────────────── */
+    .help-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.4rem 1.6rem;
+      margin-top: 2.5rem;
+    }
+    .help-box h3 { font-family: 'Hemi Head', sans-serif; font-size: 1rem; color: var(--text); margin-bottom: 0.75rem; margin-top: 0; }
+    .help-box ul { list-style: none; margin: 0; padding: 0; }
+    .help-box li { padding: 0.3rem 0; font-size: 0.88rem; color: var(--muted); }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted2);
+    }
+
+    footer a { color: var(--accent-b); }
+
+    @media (max-width: 700px) {
+      .page { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container">
-      <div class="logo">
-        <img src="../assets/logo.svg" alt="Symmetra Logo">
-        <span>Symmetra</span>
+
+<header class="header">
+  <div class="header-inner">
+    <a class="nav-brand" href="/">
+      <img src="../assets/logo.svg" alt="Symmetra Script">
+    </a>
+    <nav class="nav-links">
+      <a href="/">Home</a>
+      <a href="/engines.html">Catalog</a>
+      <a href="#" class="active">Docs</a>
+    </nav>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- Sidebar TOC -->
+  <aside class="sidebar">
+    <div class="sidebar-label">On this page</div>
+    <a href="#requirements">System requirements</a>
+    <a href="#download">Download an engine</a>
+    <a href="#first-server">Your first server</a>
+    <a href="#gpu-compute">GPU compute</a>
+    <a href="#vram-cache">VRAM cache</a>
+    <a href="#libraries">Standard libraries</a>
+    <a href="#cli">CLI reference</a>
+    <a href="#help">Need help?</a>
+  </aside>
+
+  <!-- Doc body -->
+  <article class="doc">
+    <h1>Getting Started</h1>
+    <p class="lead">Get a Symmetra engine running in minutes. TypeScript compiles to CUDA — no build step, no VM, no GC. Verified at <strong>711K sustained RPS · 1.4 µs P99</strong> on RTX 5070.</p>
+
+    <!-- Requirements -->
+    <h2 id="requirements">1. System Requirements</h2>
+
+    <div class="req-list">
+      <div class="req-item">
+        <div class="req-icon">✓</div>
+        <div class="req-content">
+          <strong>NVIDIA GPU — RTX 2070 or newer</strong>
+          <p>Compute capability sm_75+ required. RTX 2070 = sm_75 · RTX 3080 = sm_86 · RTX 4090 = sm_89 · RTX 5070 = sm_89. Check with <code>nvidia-smi</code>.</p>
+        </div>
       </div>
-      <nav>
-        <a href="../#features">Features</a>
-        <a href="../#language">Language</a>
-        <a href="../#install">Install</a>
-        <a href="#">Docs</a>
-      </nav>
+      <div class="req-item">
+        <div class="req-icon">✓</div>
+        <div class="req-content">
+          <strong>NVIDIA Driver 525+</strong>
+          <p>Symmetra bundles NVRTC — you <strong>do not</strong> need the full CUDA Toolkit. Only the driver. Download from <a href="https://www.nvidia.com/drivers" target="_blank" rel="noopener">nvidia.com/drivers</a>.</p>
+        </div>
+      </div>
+      <div class="req-item">
+        <div class="req-icon">✓</div>
+        <div class="req-content">
+          <strong>OS — Windows 10/11 or Linux</strong>
+          <p>Windows: build 19041+ · Linux: Ubuntu 20.04+ (glibc 2.31+), x86_64 only.</p>
+        </div>
+      </div>
+      <div class="req-item">
+        <div class="req-icon">✓</div>
+        <div class="req-content">
+          <strong>Visual C++ Redistributable (Windows only)</strong>
+          <p>Most systems have this. If <code>sym doctor</code> reports a missing DLL, install from <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe" target="_blank" rel="noopener">aka.ms/vc_redist</a>.</p>
+        </div>
+      </div>
     </div>
-  </header>
 
-  <section style="padding: 2rem;">
-    <div class="doc-content">
-      <h1>Getting Started with Symmetra</h1>
-      <p style="font-size: 1.1rem; color: var(--text-muted);">
-        Get up and running with Symmetra in 5 minutes. Compile TypeScript, execute on GPU, and achieve 3.2M RPS.
-      </p>
+    <!-- Download -->
+    <h2 id="download">2. Download an Engine</h2>
 
-      <div class="doc-section">
-        <h2>1. System Requirements</h2>
-        <div class="step">
-          <div class="step-number">✓</div>
-          <div class="step-content">
-            <h3>NVIDIA GPU</h3>
-            <p style="margin-bottom: 0;">RTX 2070 or newer (Compute Capability 7.5+). Check with: <code>nvidia-smi</code></p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-number">✓</div>
-          <div class="step-content">
-            <h3>CUDA Driver</h3>
-            <p style="margin-bottom: 0;">Driver version 525 or newer. <a href="https://developer.nvidia.com/cuda-downloads">Download CUDA Toolkit</a></p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-number">✓</div>
-          <div class="step-content">
-            <h3>OS Compatibility</h3>
-            <p style="margin-bottom: 0;">Windows 10/11 or Linux (Ubuntu 20.04+, CentOS 8+)</p>
-          </div>
-        </div>
-      </div>
+    <p>Symmetra engines are pre-built, ready-to-run packages available from the <strong>Engine Catalog</strong>. Choose your engine, select your platform, and download — no CLI installation required.</p>
 
-      <div class="doc-section">
-        <h2>2. Install Symmetra</h2>
-        
-        <h3>Windows (PowerShell)</h3>
-        <pre><code>iex (iwr -Uri 'https://symmetra.io/install.ps1').Content</code></pre>
-        
-        <h3>Linux (Bash)</h3>
-        <pre><code>curl https://symmetra.io/install.sh | bash</code></pre>
-        
-        <p>This will download the latest binary and add it to your PATH.</p>
-      </div>
+    <div class="download-panel">
+      <h3>Engine Catalog</h3>
+      <p>Browse available Turing machine engines. Each card shows platform-specific download buttons and post-download setup instructions for Windows (.msi, .zip) and Linux (.deb, .rpm, .tar.gz).</p>
+      <a class="btn-catalog" href="/engines.html">→ Browse Engines</a>
+    </div>
 
-      <div class="doc-section">
-        <h2>3. Create Your First Program</h2>
-        
-        <p>Create a file named <code>server.ts</code>:</p>
-        <pre><code>export default async function handler(req: Request): Promise&lt;Response&gt; {
-  const name = new URL(req.url).searchParams.get('name') || 'GPU';
-  return new Response(JSON.stringify({
-    message: `Hello from ${name}!`,
-    timestamp: Date.now()
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
-  });
+    <h3>After downloading — Windows .zip portable</h3>
+<pre><code>Expand-Archive rule60-v1.0.0-windows-x64.zip -DestinationPath .\rule60
+.\rule60\sym.exe doctor</code></pre>
+
+    <h3>After downloading — Linux .tar.gz</h3>
+<pre><code>tar -xzf rule60-v1.0.0-linux-x64.tar.gz
+cd rule60 && ./sym doctor</code></pre>
+
+    <p><code>sym doctor</code> verifies your GPU, CUDA driver, and reports anything missing with clear instructions.</p>
+
+    <!-- First server -->
+    <h2 id="first-server">3. Your First Server</h2>
+
+    <p>Create <code>server.ts</code>:</p>
+<pre><code>import { serve, Router } from '@symmetra/http';
+
+const app = new Router();
+
+app.get('/ping', (ctx) => {
+  ctx.json({ message: 'pong', gpu: true });
+});
+
+serve(app, { port: 8080 });</code></pre>
+
+    <p>Run it:</p>
+<pre><code>sym ./server.ts</code></pre>
+
+    <p>Output:</p>
+<pre><code>Symmetra 1.0.0  ·  RTX 5070 sm_89  ·  NVRTC JIT 47ms
+Listening on :8080  ·  1 route compiled
+Press Ctrl-C to stop.</code></pre>
+
+    <p>Test it:</p>
+<pre><code>curl http://localhost:8080/ping
+# {"message":"pong","gpu":true}</code></pre>
+
+    <h3>What just happened</h3>
+    <ol style="margin:0.75rem 0 1rem 1.25rem; color: var(--muted);">
+      <li style="margin-bottom:0.4rem;"><strong>esbuild</strong> stripped TypeScript types from your file (~3 ms)</li>
+      <li style="margin-bottom:0.4rem;">The <strong>Symmetra compiler</strong> walked the JS AST and generated CUDA C++ source</li>
+      <li style="margin-bottom:0.4rem;"><strong>NVRTC</strong> JIT-compiled the CUDA C++ to PTX for your GPU (~47 ms, once at startup)</li>
+      <li style="margin-bottom:0.4rem;">The GPU kernel was launched — your handler now runs entirely in VRAM</li>
+      <li>TCP <code>accept()</code> + <code>recv()</code> runs on CPU (unavoidable); data is immediately pinned to VRAM</li>
+    </ol>
+    <p>Nothing runs on CPU after startup except TCP I/O.</p>
+
+    <!-- GPU compute -->
+    <h2 id="gpu-compute">4. GPU Compute in Handlers</h2>
+
+    <p><code>.map()</code>, <code>.filter()</code>, <code>.reduce()</code> on <code>GpuBuffer</code> compile to <code>__global__</code> CUDA kernels. Each call creates one thread per element:</p>
+
+<pre><code>app.post('/transform', async (ctx) => {
+  // body&lt;Float32Array&gt;() returns a GpuBuffer — already in VRAM, zero-copy
+  const data = await ctx.body&lt;Float32Array&gt;();
+
+  // Compiles to a __global__ kernel: (data.length / 256) blocks
+  const result = data.map(x => x * x + Math.sin(x));
+
+  ctx.json(result);
+});</code></pre>
+
+    <p>The generated CUDA kernel:</p>
+<pre><code>__global__ void transform(const float* in, float* out, int n) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n) return;
+    float x = in[tid];
+    out[tid] = x * x + sinf(x);   // Math.sin → sinf (CUDA intrinsic)
 }</code></pre>
-      </div>
 
-      <div class="doc-section">
-        <h2>4. Run the Server</h2>
-        
-        <pre><code>sym server.ts --port 3000</code></pre>
-        
-        <p>The server will compile your TypeScript to CUDA and launch on your GPU.</p>
-      </div>
+    <!-- VRAM cache -->
+    <h2 id="vram-cache">5. VRAM Key-Value Cache</h2>
 
-      <div class="doc-section">
-        <h2>5. Test It</h2>
-        
-        <p>In another terminal:</p>
-        <pre><code>curl 'http://localhost:3000?name=Symmetra'</code></pre>
-        
-        <p>You should see:</p>
-        <pre><code>{"message":"Hello from Symmetra!","timestamp":1234567890}</code></pre>
-      </div>
+<pre><code>import { serve, Router } from '@symmetra/http';
+import { KvStore } from '@symmetra/kv';
 
-      <div class="doc-section">
-        <h2>Next Steps</h2>
-        
-        <ul style="line-height: 2;">
-          <li><strong>HTTP API</strong> — Learn about <code>Request</code>, <code>Response</code>, headers, and streaming</li>
-          <li><strong>Language Features</strong> — Classes, async/await, generators, regex, and more</li>
-          <li><strong>Performance Tuning</strong> — Batch sizing, thread pools, memory optimization</li>
-          <li><strong>Security</strong> — TLS configuration, HMAC signing, rate limiting</li>
-          <li><strong>Examples</strong> — Database access, file I/O, cryptography, full-stack apps</li>
-        </ul>
-      </div>
+const kv  = new KvStore({ maxMb: 512 });
+const app = new Router();
 
-      <div class="doc-section">
-        <h2>Verify Installation</h2>
-        
-        <p>Check that everything is working:</p>
-        <pre><code>sym doctor</code></pre>
-        
-        <p>This will verify your GPU, CUDA driver, and system configuration.</p>
-      </div>
+app.get('/item/:id', async (ctx) => {
+  // kv.get reads from VRAM — no Redis, no DRAM round-trip
+  const item = await kv.get&lt;Item&gt;(ctx.params.id);
+  if (!item) { ctx.status(404).json({ error: 'not found' }); return; }
+  ctx.json(item);
+});
 
-      <div class="doc-section" style="background: var(--surface); padding: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-        <h3 style="margin-top: 0;">Need Help?</h3>
-        <ul style="line-height: 1.8; margin-bottom: 0;">
-          <li><a href="https://github.com/JvanDyk/symmetra/issues">Open an issue on GitHub</a></li>
-          <li><a href="https://github.com/JvanDyk/symmetra/discussions">Join discussions</a></li>
-          <li><a href="https://symmetra.io/#docs">Read the full documentation</a></li>
-        </ul>
-      </div>
+app.put('/item/:id', async (ctx) => {
+  const body = await ctx.json&lt;Item&gt;();
+  await kv.set(ctx.params.id, body, { ttlMs: 60_000 });
+  ctx.json({ ok: true });
+});
+
+serve(app, { port: 8080 });</code></pre>
+
+    <!-- Standard libraries -->
+    <h2 id="libraries">6. Standard Libraries</h2>
+
+    <p>All packages ship as TypeScript type definitions. The implementations run inside <code>sym</code> — no <code>npm install</code> required at runtime.</p>
+
+    <h3>@symmetra/db — Database</h3>
+<pre><code>import { postgres } from '@symmetra/db';
+
+const pg = postgres({ host: 'localhost', database: 'myapp', user: 'u', password: 'p' });
+
+app.get('/users', async (ctx) => {
+  const result = await pg.query&lt;{ id: number; name: string }&gt;('SELECT id, name FROM users');
+  ctx.json(result.rows);
+});</code></pre>
+
+    <h3>@symmetra/crypto — Auth & Cryptography</h3>
+<pre><code>import { jwt, password } from '@symmetra/crypto';
+
+app.post('/login', async (ctx) => {
+  const { email, pass } = await ctx.json&lt;{ email: string; pass: string }&gt;();
+  if (!await password.verify(pass, user.passwordHash)) {
+    ctx.status(401).json({ error: 'invalid credentials' }); return;
+  }
+  const token = await jwt.sign({ sub: String(user.id) }, process.env.JWT_SECRET!, { expiresIn: 86400 });
+  ctx.json({ token });
+});</code></pre>
+
+    <h3>@symmetra/net — HTTP Client</h3>
+<pre><code>import { http } from '@symmetra/net';
+
+app.get('/proxy', async (ctx) => {
+  const response = await http.get('https://api.example.com/data', { timeout: 5000 });
+  ctx.json(response.json());
+});</code></pre>
+
+    <h3>Node.js import remapping</h3>
+    <p>The compiler automatically remaps Node.js built-ins to Symmetra equivalents. Existing Node.js code typically works without modification:</p>
+    <table class="cli-table">
+      <thead><tr><th>Node.js import</th><th>Remapped to</th></tr></thead>
+      <tbody>
+        <tr><td>import fs from 'fs'</td><td>@symmetra/fs</td></tr>
+        <tr><td>import { createHash } from 'crypto'</td><td>@symmetra/crypto</td></tr>
+        <tr><td>import { EventEmitter } from 'events'</td><td>@symmetra/core GpuEventEmitter</td></tr>
+        <tr><td>import path from 'path'</td><td>Built-in GPU path utilities</td></tr>
+        <tr><td>import { fetch } from 'node-fetch'</td><td>@symmetra/net</td></tr>
+        <tr><td>import os from 'os'</td><td>GPU system info API</td></tr>
+      </tbody>
+    </table>
+
+    <!-- CLI -->
+    <h2 id="cli">7. CLI Reference</h2>
+
+    <table class="cli-table">
+      <thead><tr><th>Command</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>sym ./server.ts</td><td>Compile TypeScript + run on GPU</td></tr>
+        <tr><td>sym build ./server.ts</td><td>Compile to sym.ptx (ahead-of-time)</td></tr>
+        <tr><td>sym doctor</td><td>Verify GPU, CUDA driver, NVRTC, PATH</td></tr>
+        <tr><td>sym bench</td><td>Run GPU benchmark and report throughput</td></tr>
+        <tr><td>sym version</td><td>Print version and GPU info</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Options</h3>
+    <table class="cli-table">
+      <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>--port &lt;n&gt;</td><td>Override the port from serve()</td></tr>
+        <tr><td>--streams &lt;n&gt;</td><td>CUDA stream pool size (default: 32)</td></tr>
+        <tr><td>--verbose</td><td>Show generated CUDA C++ and NVRTC output</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Help -->
+    <div class="help-box" id="help">
+      <h3>Need Help?</h3>
+      <ul>
+        <li><a href="https://github.com/JvanDyk/symmetra/issues" target="_blank" rel="noopener">Open an issue on GitHub</a> — include your OS, driver version, and <code>sym doctor</code> output</li>
+        <li><a href="https://github.com/JvanDyk/symmetra/discussions" target="_blank" rel="noopener">Join GitHub Discussions</a></li>
+        <li><a href="constraints.html">Constraints &amp; trade-offs</a> — understand GPU architectural limits</li>
+        <li><a href="js-ts-coverage.html">JS/TS coverage matrix</a> — full language feature status</li>
+        <li><a href="engine-architecture-v2.html">Engine architecture</a> — deep-dive into the compile pipeline</li>
+      </ul>
     </div>
-  </section>
+  </article>
+</div>
 
-  <footer>
-    <div class="container">
-      <p><strong>Symmetra</strong> — GPU-accelerated TypeScript runtime</p>
-      <p>© 2026 <a href="https://github.com/JvanDyk/symmetra">JvanDyk/symmetra</a> — Open source under MIT License</p>
-    </div>
-  </footer>
+<footer>
+  <a href="https://symmscript.com">symmscript.com</a> · Benchmarks on NVIDIA RTX 5070 under sustained load · 2026
+</footer>
+
 </body>
 </html>

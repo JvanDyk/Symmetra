@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Symmetra Engine — Architecture</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -17,13 +17,13 @@
   --radius:12px;--tr:.18s ease;
 }
 html{font-size:15px;scroll-behavior:smooth;}
-body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.65;overflow-x:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;line-height:1.65;overflow-x:hidden;}
 h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;letter-spacing:-.04em;line-height:1.1;}
 h2{font-size:clamp(1.4rem,3vw,1.9rem);font-weight:700;letter-spacing:-.025em;margin-bottom:.9rem;}
 h3{font-size:1.15rem;font-weight:600;}
 h4{font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;}
 p{color:#7a85b0;line-height:1.7;}
-code{font-family:'JetBrains Mono',monospace;font-size:.82em;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:1px 7px;color:var(--cyan);}
+code{font-family:'IBM Plex Mono',monospace;font-size:.82em;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:1px 7px;color:var(--cyan);}
 .wrap{max-width:1340px;margin:0 auto;padding:0 2.5rem;}
 section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 
@@ -57,7 +57,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 /* stat counters */
 .stat-row{display:flex;flex-wrap:wrap;gap:1.8rem;margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--border);}
 .stat-item{display:flex;flex-direction:column;gap:.15rem;}
-.stat-value{font-size:1.9rem;font-weight:800;letter-spacing:-.04em;font-family:'JetBrains Mono',monospace;
+.stat-value{font-size:1.9rem;font-weight:800;letter-spacing:-.04em;font-family:'IBM Plex Mono',monospace;
   background:linear-gradient(135deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .stat-label{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim2);}
 
@@ -120,7 +120,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 .code-lang{font-size:.72rem;font-weight:700;letter-spacing:.07em;}
 .code-copy{font-size:.68rem;color:var(--dim2);cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid var(--border2);transition:color .15s;background:none;}
 .code-copy:hover{color:var(--text);}
-.code-body{padding:1rem 1.2rem;font-family:'JetBrains Mono',monospace;font-size:.75rem;line-height:1.7;overflow-x:auto;white-space:pre;color:var(--text);}
+.code-body{padding:1rem 1.2rem;font-family:'IBM Plex Mono',monospace;font-size:.75rem;line-height:1.7;overflow-x:auto;white-space:pre;color:var(--text);}
 .k{color:var(--purple);}.fn{color:var(--cpu);}.s{color:var(--green);}.n{color:var(--orange);}.c{color:var(--dim2);font-style:italic;}.t{color:var(--cyan);}.prop{color:var(--red);}.mac{color:var(--yellow);}
 
 /* layer stack */
@@ -131,7 +131,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 .layer-title{font-size:.92rem;font-weight:600;}
 .layer-desc{font-size:.74rem;color:var(--dim2);margin-top:3px;line-height:1.45;}
 .layer-files{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem;}
-.layer-file{font-size:.68rem;font-family:'JetBrains Mono',monospace;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;color:var(--cyan);}
+.layer-file{font-size:.68rem;font-family:'IBM Plex Mono',monospace;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;color:var(--cyan);}
 .layer-file.prop{color:var(--red);border-color:rgba(208,56,96,.3);background:rgba(208,56,96,.07);}
 .l-user{background:rgba(168,112,245,.05);border-color:rgba(168,112,245,.2);}
 .l-cli{background:rgba(79,126,244,.05);border-color:rgba(79,126,244,.2);}
@@ -165,7 +165,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 .phase-num.sched{background:rgba(54,212,133,.2);color:var(--green);}
 .phase-body h4{font-size:.8rem;}
 .phase-body p{font-size:.74rem;margin-top:2px;}
-.phase-time{margin-left:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--dim2);background:var(--bg3);border-radius:4px;padding:2px 7px;white-space:nowrap;}
+.phase-time{margin-left:auto;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--dim2);background:var(--bg3);border-radius:4px;padding:2px 7px;white-space:nowrap;}
 .timing-bar{height:32px;border-radius:7px;display:flex;overflow:hidden;gap:2px;}
 .tb{display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff;width:0;transition:width 1.4s cubic-bezier(.4,0,.2,1);}
 
@@ -183,10 +183,10 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 
 /* benchmark */
 .bench-row{display:flex;align-items:center;gap:1rem;margin-bottom:.9rem;}
-.bench-label{font-size:.76rem;font-family:'JetBrains Mono',monospace;width:150px;flex-shrink:0;color:var(--dim2);}
+.bench-label{font-size:.76rem;font-family:'IBM Plex Mono',monospace;width:150px;flex-shrink:0;color:var(--dim2);}
 .bench-bar-wrap{flex:1;height:22px;background:var(--bg3);border-radius:5px;overflow:hidden;border:1px solid var(--border);}
 .bench-bar{height:100%;border-radius:5px;width:0;display:flex;align-items:center;padding-left:.5rem;font-size:.63rem;font-weight:700;color:#fff;transition:width 1.5s cubic-bezier(.4,0,.2,1);white-space:nowrap;}
-.bench-val{font-size:.76rem;font-family:'JetBrains Mono',monospace;width:90px;text-align:right;flex-shrink:0;}
+.bench-val{font-size:.76rem;font-family:'IBM Plex Mono',monospace;width:90px;text-align:right;flex-shrink:0;}
 
 /* turing */
 .turing-grid{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;}
@@ -204,7 +204,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 .platform-card.active{border-color:rgba(54,212,133,.4);background:rgba(54,212,133,.04);}
 .platform-name{font-weight:700;font-size:.88rem;}
 .platform-api{font-size:.7rem;color:var(--dim2);margin-top:.3rem;}
-.platform-jit{font-size:.67rem;color:var(--dim2);margin-top:.2rem;font-family:'JetBrains Mono',monospace;}
+.platform-jit{font-size:.67rem;color:var(--dim2);margin-top:.2rem;font-family:'IBM Plex Mono',monospace;}
 .platform-badge{display:inline-block;margin-top:.45rem;font-size:.63rem;font-weight:600;padding:2px 9px;border-radius:100px;}
 .pb-now{background:rgba(54,212,133,.15);color:var(--green);}
 .pb-soon{background:rgba(240,192,48,.15);color:var(--yellow);}
@@ -262,8 +262,8 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
         <span class="stat-label">Peak Throughput</span>
       </div>
       <div class="stat-item">
-        <span class="stat-value" data-count="10" data-suffix=" TB/s">0</span>
-        <span class="stat-label">HBM Bandwidth</span>
+        <span class="stat-value" data-count="1" data-suffix=".7 TB/s">0</span>
+        <span class="stat-label">GDDR7 Bandwidth</span>
       </div>
       <div class="stat-item">
         <span class="stat-value" data-count="32" data-suffix="">0</span>
@@ -290,7 +290,6 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
   <a class="toc-link" href="#simulation">⑤ Batch Sim</a>
   <a class="toc-link" href="#benchmark">⑥ Benchmark</a>
   <a class="toc-link" href="#turing">⑦ GPU Turing</a>
-  <a class="toc-link" href="#gaps">⑧ Coverage</a>
   <a class="toc-link" href="#gpu-compare">⑨ GPU Engines</a>
   <a class="toc-link" href="#security">⑩ Security</a>
 </nav>
@@ -764,13 +763,13 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
               <th style="text-align:right;padding:.4rem .3rem;border-bottom:1px solid var(--border)">Per batch</th>
             </tr></thead>
             <tbody>
-              <tr><td style="padding:.3rem">TCP accept + recv</td><td style="text-align:right;color:var(--cpu)">CPU</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">~1–10 µs/conn</td></tr>
-              <tr><td style="padding:.3rem">Batch fill window</td><td style="text-align:right;color:var(--green)">Scheduler</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">0–5 000 µs</td></tr>
-              <tr><td style="padding:.3rem">H2D upload (DMA)</td><td style="text-align:right;color:var(--orange)">PCIe / NVLink</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">~30–80 µs</td></tr>
-              <tr><td style="padding:.3rem">Kernel launch overhead</td><td style="text-align:right;color:var(--gpu)">CUDA Driver</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">~2–5 µs</td></tr>
-              <tr><td style="padding:.3rem">User handler (GPU)</td><td style="text-align:right;color:var(--gpu)">GPU SIMT</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">10–500 µs</td></tr>
-              <tr><td style="padding:.3rem">D2H download (DMA)</td><td style="text-align:right;color:var(--orange)">PCIe / NVLink</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">~30–80 µs</td></tr>
-              <tr><td style="padding:.3rem">HTTP build + send</td><td style="text-align:right;color:var(--cpu)">CPU</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">~1 µs/slot</td></tr>
+              <tr><td style="padding:.3rem">TCP accept + recv</td><td style="text-align:right;color:var(--cpu)">CPU</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">~1–10 µs/conn</td></tr>
+              <tr><td style="padding:.3rem">Batch fill window</td><td style="text-align:right;color:var(--green)">Scheduler</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">0–5 000 µs</td></tr>
+              <tr><td style="padding:.3rem">H2D upload (DMA)</td><td style="text-align:right;color:var(--orange)">PCIe / NVLink</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">~30–80 µs</td></tr>
+              <tr><td style="padding:.3rem">Kernel launch overhead</td><td style="text-align:right;color:var(--gpu)">CUDA Driver</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">~2–5 µs</td></tr>
+              <tr><td style="padding:.3rem">User handler (GPU)</td><td style="text-align:right;color:var(--gpu)">GPU SIMT</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">10–500 µs</td></tr>
+              <tr><td style="padding:.3rem">D2H download (DMA)</td><td style="text-align:right;color:var(--orange)">PCIe / NVLink</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">~30–80 µs</td></tr>
+              <tr><td style="padding:.3rem">HTTP build + send</td><td style="text-align:right;color:var(--cpu)">CPU</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">~1 µs/slot</td></tr>
             </tbody>
           </table>
         </div>
@@ -815,7 +814,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
       <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem">
         <button class="btn primary" id="sim-run">▶ Run</button>
         <button class="btn" id="sim-reset">↺ Reset</button>
-        <span style="font-size:.76rem;color:var(--dim2);font-family:'JetBrains Mono',monospace" id="sim-status">Ready — 0 / 256 slots filled</span>
+        <span style="font-size:.76rem;color:var(--dim2);font-family:'IBM Plex Mono',monospace" id="sim-status">Ready — 0 / 256 slots filled</span>
       </div>
       <div style="margin-top:1rem;padding:.8rem 1rem;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:.74rem;color:var(--dim2)" id="sim-log">
         BatchScheduler idle — waiting for requests...
@@ -935,30 +934,6 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
             <div class="platform-badge pb-now">✓ Shipping</div>
           </div>
           <div class="platform-card">
-            <div class="platform-name" style="color:var(--yellow)">AMD</div>
-            <div class="platform-api">ROCm / HIP</div>
-            <div class="platform-jit">HIP-RTC → GFX ISA</div>
-            <div class="platform-badge pb-soon">Planned</div>
-          </div>
-          <div class="platform-card">
-            <div class="platform-name" style="color:var(--dim2)">Intel</div>
-            <div class="platform-api">oneAPI / SYCL</div>
-            <div class="platform-jit">JIT → Xe ISA</div>
-            <div class="platform-badge pb-plan">Future</div>
-          </div>
-          <div class="platform-card">
-            <div class="platform-name" style="color:var(--dim2)">Apple</div>
-            <div class="platform-api">Metal Compute</div>
-            <div class="platform-jit">MSL → AIR</div>
-            <div class="platform-badge pb-plan">Research</div>
-          </div>
-          <div class="platform-card">
-            <div class="platform-name" style="color:var(--dim2)">WebGPU</div>
-            <div class="platform-api">wgpu / Dawn</div>
-            <div class="platform-jit">WGSL → native</div>
-            <div class="platform-badge pb-plan">Research</div>
-          </div>
-          <div class="platform-card">
             <div class="platform-name" style="color:var(--dim2)">CPU fallback</div>
             <div class="platform-api">C++ std::thread</div>
             <div class="platform-jit">Clang → native</div>
@@ -970,223 +945,6 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
           <h4 style="color:var(--accent);margin-bottom:.5rem">Why SIMT fits HTTP servers</h4>
           <p style="font-size:.77rem;margin-bottom:.5rem">HTTP servers are embarrassingly parallel — each request is independent. SIMT hardware runs 32 identical threads in lock-step per warp. When all 32 threads execute the same route handler there is <strong style="color:var(--green)">zero branch divergence</strong> — full warp throughput.</p>
           <p style="font-size:.77rem">The GPU is the only commodity hardware sustaining <strong style="color:var(--green)">~2 TB/s HBM bandwidth</strong>, letting per-request KV lookups, JSON parsing, and response serialisation happen in tens of microseconds.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ⑧ COVERAGE GAPS -->
-<section id="gaps">
-  <div class="wrap">
-    <div class="section-label reveal">Section 8</div>
-    <h2 class="reveal d1">JS / TypeScript Feature Coverage</h2>
-    <p class="reveal d2" style="margin-bottom:1rem">Complete audit of every language and standard-library feature. Filter by status.</p>
-
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.2rem" class="reveal d2">
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.79rem"><span class="gap-status status-done" style="display:inline-block">Done</span> Implemented + tested</div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.79rem"><span class="gap-status status-partial" style="display:inline-block">Partial</span> Stub / limitations</div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.79rem"><span class="gap-status status-missing" style="display:inline-block">Missing</span> Not yet implemented</div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.79rem"><span class="gap-status status-skip" style="display:inline-block">N/A</span> Not feasible on GPU</div>
-    </div>
-
-    <div class="coverage-tabs reveal d2">
-      <button class="ctab active" data-filter="all">All</button>
-      <button class="ctab" data-filter="done">Done</button>
-      <button class="ctab" data-filter="partial">Partial</button>
-      <button class="ctab" data-filter="missing">Missing</button>
-    </div>
-
-    <div class="gap-grid reveal d3" id="gap-grid">
-
-      <!-- Parser -->
-      <div class="gap-card" data-done="15" data-total="18">
-        <div class="gap-header" style="background:rgba(50,200,200,.07);border-bottom:1px solid rgba(50,200,200,.18)">
-          <span style="color:var(--cyan)">🌳 Parser (SymmParser)</span>
-          <span style="font-size:.72rem;color:var(--dim2)">15/18</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--cyan)" data-pct="83"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature">Variable declarations (<code>let</code>, <code>const</code>, <code>var</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Arrow functions, regular functions</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Classes (<code>extends</code>, <code>super</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Destructuring (array + object, defaults)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Spread / rest (<code>...args</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Optional chaining (<code>?.</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Nullish coalescing (<code>??</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Template literals (untagged)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>for await…of</code> / <code>Symbol.asyncIterator</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Generator functions (<code>function*</code>, <code>yield</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Computed class method names (<code>[Symbol.*]</code>)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">BigInt literals (<code>100n</code>)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature">Logical assignment (<code>&amp;&amp;=</code> <code>||=</code> <code>??=</code>)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature">Labelled break / continue</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature">Bitwise compound assign (<code>&amp;=</code> <code>|=</code> <code>^=</code> <code>&lt;&lt;=</code>)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature">Tagged template literals (<code>sql`…`</code>)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>using</code> / <code>await using</code> (TC39)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature">TS decorators (<code>@injectable</code>)</span><span class="gap-status status-skip">N/A</span></div>
-        </div>
-      </div>
-
-      <!-- Codegen control flow -->
-      <div class="gap-card" data-done="12" data-total="15">
-        <div class="gap-header" style="background:rgba(208,56,96,.07);border-bottom:1px solid rgba(208,56,96,.18)">
-          <span style="color:var(--prop)">🔒 Codegen — Control Flow</span>
-          <span style="font-size:.72rem;color:var(--dim2)">12/15</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--prop)" data-pct="80"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature"><code>if/else</code>, ternary, switch/case</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>for</code>, <code>while</code>, <code>do…while</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>for…of</code> (arrays, generators)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>for…in</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>break</code> / <code>continue</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>return</code> with value</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>async/await</code> (Tier-1 strip, Tier-3 CPS)</span><span class="gap-status status-partial">Partial</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>try/catch/finally</code> + <code>throw</code></span><span class="gap-status status-done">Done ✓ Ph14</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>in</code> operator (property check)</span><span class="gap-status status-done">Done ✓ Ph14</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>instanceof</code> type check</span><span class="gap-status status-done">Done ✓ Ph14</span></div>
-          <div class="gap-row"><span class="gap-feature">Labeled break / continue (goto)</span><span class="gap-status status-done">Done ✓ Ph14</span></div>
-          <div class="gap-row"><span class="gap-feature">BigInt emit (<code>unsigned long long</code>)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature">Getter / setter (<code>get foo()</code>)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>delete</code> operator</span><span class="gap-status status-skip">N/A</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>eval</code> / <code>with</code></span><span class="gap-status status-skip">N/A</span></div>
-        </div>
-      </div>
-
-      <!-- String -->
-      <div class="gap-card" data-done="10" data-total="15">
-        <div class="gap-header" style="background:rgba(79,126,244,.07);border-bottom:1px solid rgba(79,126,244,.18)">
-          <span style="color:var(--cpu)">🔤 String Prototype</span>
-          <span style="font-size:.72rem;color:var(--dim2)">10/15</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--cpu)" data-pct="67"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature"><code>padStart</code> / <code>padEnd</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>trim</code> / <code>trimStart</code> / <code>trimEnd</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>replace</code> / <code>replaceAll</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>repeat</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>includes</code> / <code>startsWith</code> / <code>endsWith</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>indexOf</code> / <code>lastIndexOf</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>slice</code> / <code>substring</code> / <code>charAt</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>toUpperCase</code> / <code>toLowerCase</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>charCodeAt</code> / <code>concat</code> / <code>split</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>matchAll</code> (global RegExp)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>toFixed</code> / <code>toPrecision</code> / <code>toExponential</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>at()</code> (negative index)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>codePointAt</code> / <code>fromCodePoint</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>normalize</code> (NFC/NFD)</span><span class="gap-status status-skip">N/A</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>String.raw</code> tagged template</span><span class="gap-status status-missing">Missing</span></div>
-        </div>
-      </div>
-
-      <!-- Array -->
-      <div class="gap-card" data-done="8" data-total="12">
-        <div class="gap-header" style="background:rgba(54,212,133,.07);border-bottom:1px solid rgba(54,212,133,.18)">
-          <span style="color:var(--green)">📋 Array Prototype + Statics</span>
-          <span style="font-size:.72rem;color:var(--dim2)">8/12</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--green)" data-pct="67"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature"><code>push</code> / <code>pop</code> / <code>shift</code> / <code>unshift</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>map</code> / <code>filter</code> / <code>reduce</code> / <code>forEach</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>find</code> / <code>some</code> / <code>every</code> / <code>includes</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>indexOf</code> / <code>join</code> / <code>slice</code> / <code>concat</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>sort</code> / <code>reverse</code> / <code>splice</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Array.isArray</code> / <code>Array.from</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">Typed Arrays (<code>Float32Array</code> etc.)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature">GPU <code>map</code> / <code>reduce</code> (parallel)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>findIndex</code> / <code>findLast</code> / <code>findLastIndex</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>at()</code> (negative index)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>flat</code> / <code>flatMap</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>fill</code> / <code>copyWithin</code></span><span class="gap-status status-missing">Missing</span></div>
-        </div>
-      </div>
-
-      <!-- Object / Map / Set -->
-      <div class="gap-card" data-done="6" data-total="11">
-        <div class="gap-header" style="background:rgba(240,154,62,.07);border-bottom:1px solid rgba(240,154,62,.18)">
-          <span style="color:var(--orange)">🗄️ Object · Map · Set</span>
-          <span style="font-size:.72rem;color:var(--dim2)">6/11</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--orange)" data-pct="55"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature"><code>Object.hasOwn</code> / <code>assign</code> / <code>freeze</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Object.keys</code> / <code>values</code> / <code>entries</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Object.fromEntries</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Map</code> (set/get/has/size)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Map</code> key comparison by value (<code>strcmp</code>)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Set</code> (add/has/size, value equality)</span><span class="gap-status status-done">Done ✓ Ph15</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Map.forEach</code> / <code>keys()</code> / <code>values()</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Set.forEach</code> / iteration</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>WeakMap</code> / <code>WeakSet</code></span><span class="gap-status status-skip">N/A</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>structuredClone</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Proxy</code> / <code>Reflect</code></span><span class="gap-status status-skip">N/A</span></div>
-        </div>
-      </div>
-
-      <!-- Web APIs -->
-      <div class="gap-card" data-done="6" data-total="15">
-        <div class="gap-header" style="background:rgba(168,112,245,.07);border-bottom:1px solid rgba(168,112,245,.18)">
-          <span style="color:var(--purple)">🌐 Web / Node APIs</span>
-          <span style="font-size:.72rem;color:var(--dim2)">6/15</span>
-        </div>
-        <div class="gap-progress"><div class="gap-progress-fill" style="background:var(--purple)" data-pct="40"></div></div>
-        <div class="gap-rows">
-          <div class="gap-row"><span class="gap-feature"><code>URL</code> + <code>URLSearchParams</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>TextEncoder</code> / <code>TextDecoder</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Buffer</code> (Node.js compat)</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>JSON.stringify</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>AbortController</code> / <code>AbortSignal</code></span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Error</code> class</span><span class="gap-status status-done">Done</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>JSON.parse</code> (GPU-side)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Date.now()</code> (real-time)</span><span class="gap-status status-partial">Partial</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Date</code> full object methods</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>fetch()</code> API</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature">WebSocket (persistent streams)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>ReadableStream</code> / <code>WritableStream</code></span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>crypto.subtle</code> (AES, SHA, HMAC)</span><span class="gap-status status-partial">Partial</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>console.log</code> (debug buffer)</span><span class="gap-status status-missing">Missing</span></div>
-          <div class="gap-row"><span class="gap-feature"><code>Blob</code> / <code>FormData</code> / multipart</span><span class="gap-status status-missing">Missing</span></div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Priority tasks -->
-    <div style="margin-top:2.5rem" class="reveal d2">
-      <h3 style="margin-bottom:1rem">Prioritised Next Tasks</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.85rem">
-        <div class="card" style="border-color:rgba(54,212,133,.3);background:rgba(54,212,133,.04)">
-          <h4 style="color:var(--green);margin-bottom:.5rem">✅ Completed (Ph14–15)</h4>
-          <ul style="font-size:.79rem;padding-left:1.2rem;color:#7a85b0;display:flex;flex-direction:column;gap:.25rem">
-            <li>✓ <code>try/catch/finally</code> + <code>throw</code> with Error objects</li>
-            <li>✓ BigInt <code>n</code> suffix → <code>unsigned long long</code></li>
-            <li>✓ <code>Map</code>/<code>Set</code> key comparison by value (<code>strcmp</code>)</li>
-            <li>✓ Labeled <code>break</code>/<code>continue</code> (goto emitted)</li>
-            <li>✓ Bitwise compound assigns (<code>&amp;=</code> <code>|=</code> <code>^=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code>)</li>
-            <li>✓ <code>in</code> / <code>instanceof</code> operators</li>
-          </ul>
-        </div>
-        <div class="card" style="border-color:rgba(238,95,95,.3);background:rgba(238,95,95,.04)">
-          <h4 style="color:var(--red);margin-bottom:.5rem">🔴 Next: Critical</h4>
-          <ul style="font-size:.79rem;padding-left:1.2rem;color:#7a85b0;display:flex;flex-direction:column;gap:.25rem">
-            <li><code>JSON.parse</code> GPU-side implementation</li>
-            <li>Input path traversal sanitisation (<code>../</code> rejection)</li>
-            <li>Request body size cap (413 enforcement)</li>
-            <li>TLS / HTTPS support (mbed-TLS handshake)</li>
-          </ul>
-        </div>
-        <div class="card" style="border-color:rgba(240,154,62,.3);background:rgba(240,154,62,.04)">
-          <h4 style="color:var(--orange);margin-bottom:.5rem">🟡 High</h4>
-          <ul style="font-size:.79rem;padding-left:1.2rem;color:#7a85b0;display:flex;flex-direction:column;gap:.25rem">
-            <li><code>console.log</code> → debug ring buffer in VRAM</li>
-            <li>Getters / setters in class definitions</li>
-            <li>Private class fields (<code>#field</code>)</li>
-            <li>Rate limiting built-in (per-IP token bucket)</li>
-            <li>Tier-3 split-kernel CPS for <code>@symmetra/net</code></li>
-            <li>WebSocket upgrade path</li>
-          </ul>
         </div>
       </div>
     </div>
@@ -1210,7 +968,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
 
     <!-- SIMT explainer -->
     <div class="card reveal" style="margin:2rem 0;background:rgba(79,126,244,.05);border-color:rgba(79,126,244,.25)">
-      <h3 style="margin-bottom:.75rem;color:var(--accent)">⚡ How SIMT Execution Delivers ~1.2 M req/s</h3>
+      <h3 style="margin-bottom:.75rem;color:var(--accent)">⚡ How SIMT Execution Delivers 711K req/s</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
         <div>
           <p style="font-size:.83rem;color:#8893b5;line-height:1.65">
@@ -1233,7 +991,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
             <span style="color:var(--purple)">GPU kernel</span> runs ~50 µs<br>
             &nbsp;&nbsp;↓ 256 responses written to HBM<br>
             <span style="color:var(--accent)">BatchScheduler</span> copies results → TCP<br>
-            &nbsp;&nbsp;⇒ <strong style="color:var(--green)">~1.2 M req/s sustained</strong>
+            &nbsp;&nbsp;⇒ <strong style="color:var(--green)">711K req/s sustained</strong>
           </div>
         </div>
       </div>
@@ -1307,7 +1065,7 @@ section{padding:5.5rem 0;border-top:1px solid var(--border);position:relative;}
             <td style="padding:.65rem 1rem;color:var(--dim2)">HBM3e stacked — 2nd-gen Transformer Engine</td>
           </tr>
           <tr>
-            <td style="padding:.65rem 1rem;color:#ccd0e8;font-weight:600">Multi-GPU (NVLink) <span style="font-size:.7rem;color:var(--orange);border:1px solid var(--orange);border-radius:.25rem;padding:0 .3rem;margin-left:.25rem">roadmap</span></td>
+            <td style="padding:.65rem 1rem;color:#ccd0e8;font-weight:600">Multi-GPU (NVLink)</td>
             <td style="padding:.65rem 1rem;text-align:right;color:var(--accent)">N × cores</td>
             <td style="padding:.65rem 1rem;text-align:right;color:#8893b5">N × BW</td>
             <td style="padding:.65rem 1rem;text-align:right;color:#8893b5">256 / GPU</td>

@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Symmetra — JS/TS Feature Coverage Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,700&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg:     #0a0c12; --bg2: #111420; --bg3: #181c2e;
@@ -13,7 +16,7 @@
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; }
-body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; }
 
 /* ── sticky header ── */
 .topbar {
@@ -75,11 +78,9 @@ tr.feat { border-bottom: 1px solid rgba(37,42,64,.5); }
 tr.feat:hover { background: rgba(91,138,244,.04); }
 tr.feat.hidden { display: none; }
 td { padding: .4rem .6rem; vertical-align: top; }
-td.name { font-size: .82rem; font-weight: 500; min-width: 200px; }
-td.name code { font-family: 'JetBrains Mono','Fira Code',monospace; font-size: .78em; color: #7dd3f5; background: var(--bg3); padding: 1px 4px; border-radius: 3px; }
-td.notes { font-size: .76rem; color: var(--dim); max-width: 500px; }
-td.effort { font-size: .72rem; white-space: nowrap; }
-td.phase  { font-size: .72rem; white-space: nowrap; color: var(--orange); }
+td.name { font-size: .82rem; font-weight: 500; min-width: 180px; width: 28%; }
+td.name code { font-family: 'IBM Plex Mono', monospace; font-size: .78em; color: #7dd3f5; background: var(--bg3); padding: 1px 4px; border-radius: 3px; }
+td.notes { font-size: .75rem; color: var(--dim); line-height: 1.55; }
 
 .badge {
   display: inline-block; font-size: .65rem; font-weight: 700; letter-spacing: .05em;
@@ -91,12 +92,6 @@ td.phase  { font-size: .72rem; white-space: nowrap; color: var(--orange); }
 .s-na      { background: var(--bg3);           color: var(--na);      border: 1px solid var(--border); }
 .s-cpu     { background: rgba(62,207,207,.12); color: var(--cpu);     border: 1px solid rgba(62,207,207,.3); }
 
-.effort-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
-.e-xs  { background: var(--done); }
-.e-s   { background: #8bcf4a; }
-.e-m   { background: var(--partial); }
-.e-l   { background: var(--orange); }
-.e-xl  { background: var(--missing); }
 
 /* ── progress bar ── */
 .progress-wrap { display: flex; gap: 1rem; margin: 1.2rem 0 2rem; align-items: center; flex-wrap: wrap; }
@@ -111,6 +106,19 @@ td.phase  { font-size: .72rem; white-space: nowrap; color: var(--orange); }
 
 /* ── cat summary mini-bar ── */
 .mini-bar { height: 4px; border-radius: 2px; overflow: hidden; display: flex; margin-bottom: .5rem; }
+
+/* ── category explanation callout ── */
+.cat-note {
+  margin: .3rem 0 .9rem;
+  padding: .75rem 1rem;
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+  background: rgba(91,138,244,.07);
+  font-size: .79rem;
+  color: var(--dim);
+  line-height: 1.65;
+}
+.cat-note strong { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -149,8 +157,6 @@ td.phase  { font-size: .72rem; white-space: nowrap; color: var(--orange); }
 <!-- ═══════════════════════════════════════════════════════════════════════════
      DATA — each category is an object with rows.
      status: done | partial | missing | na | cpu
-     effort: xs(< 1h) | s(half-day) | m(1-2d) | l(3-5d) | xl(1-2w) | na
-     phase: A B C D E F G  (implementation phase)
   ══════════════════════════════════════════════════════════════════════════ -->
 <div id="cats"></div>
 
@@ -166,7 +172,7 @@ const DATA = [
   { name: "Boolean literals",           code: "true, false",             st: "done",    eff: "na",  phase: "",  notes: "Direct C++ bool." },
   { name: "Integer / float literals",   code: "42, 3.14, 0xFF, 0b101",  st: "done",    eff: "na",  phase: "",  notes: "All numeric bases handled by parser." },
   { name: "Numeric separators",         code: "1_000_000",               st: "done",    eff: "na",  phase: "",  notes: "Lexer strips underscores from numeric tokens at line 88 of SymmParser.cpp." },
-  { name: "BigInt literals",            code: "100n, 0xFFn",             st: "partial", eff: "s",   phase: "A", notes: "Lexer preserves the 'n' suffix in the token; emitted as-is. BigInt() constructor maps to long long." },
+  { name: "BigInt literals",            code: "100n, 0xFFn",             st: "partial", eff: "s",   phase: "A", notes: "The 'n' suffix is stripped and the value emitted as a long long literal. BigInt-typed arithmetic works via typedef. The 'n' suffix is NOT preserved in CUDA output — code that passes a BigInt literal to a function expecting long long works; mixed BigInt+number expressions may not type-check in NVRTC." },
   { name: "String literals",            code: "'a', \"b\"",               st: "done",    eff: "na",  phase: "",  notes: "Both delimiters parsed; stored as const char* in VRAM." },
   { name: "Template literals (plain)",  code: "`Hello ${name}`",         st: "done",    eff: "na",  phase: "",  notes: "Codegen emits symm_write() calls into a char buffer." },
   { name: "Template literals (tagged)", code: "sql`SELECT…`",            st: "done",    eff: "na",  phase: "",  notes: "Parser converts tag\`str \${expr}\` into tag([strings...], ...exprs) CallExpr. Codegen emits as normal function call." },
@@ -197,7 +203,7 @@ const DATA = [
   { name: "void",                       code: "void expr",               st: "done",    eff: "na",  phase: "",  notes: "Emits expr; return nullptr." },
   { name: "delete",                     code: "delete obj.x",            st: "na",      eff: "na",  phase: "",  notes: "GPU stack structs have fixed layout; property deletion not meaningful." },
   { name: "in (property check)",        code: "\"x\" in obj",             st: "partial", eff: "s",   phase: "C", notes: "Emits obj.has(key) — works for Map and Set. Plain object struct fields aren't dynamically checkable." },
-  { name: "instanceof",                 code: "x instanceof Foo",         st: "partial", eff: "m",   phase: "C", notes: "Emitted as (true /*instanceof*/) — stub always returns true. Full __type_tag dispatch not yet wired." },
+  { name: "instanceof",                 code: "x instanceof Foo",         st: "missing", eff: "m",   phase: "C", notes: "Stub unconditionally returns true regardless of actual type — any instanceof check always passes. __type_tag dispatch not yet wired. Do not rely on instanceof for type-guarding." },
   { name: "new",                        code: "new Foo()",                st: "done",    eff: "na",  phase: "",  notes: "Stack-allocates struct + calls constructor." },
   { name: "Exponentiation assign",      code: "x **= 2",                 st: "done",    eff: "na",  phase: "",  notes: "" },
 ]},
@@ -231,7 +237,7 @@ const DATA = [
   { name: "Arrow functions",            code: "const f = (x) => x*2",   st: "done",    eff: "na",  phase: "",  notes: "Lexical this captured via lambda if inside class." },
   { name: "Default parameters",         code: "function f(x=0){}",       st: "done",    eff: "na",  phase: "",  notes: "Emitted as C++ default argument values." },
   { name: "Rest parameters",            code: "function f(...args){}",   st: "done",    eff: "na",  phase: "",  notes: "Emitted as fixed-size GpuArray<T,N> on stack." },
-  { name: "Spread in call",             code: "f(...arr)",               st: "partial", eff: "s",   phase: "C", notes: "Fixed-size known arrays work; variadic spread needs sizeof expansion." },
+  { name: "Spread in call",             code: "f(...arr)",               st: "partial", eff: "s",   phase: "C", notes: "Fixed-size GpuArray&lt;T,N&gt; spread works when N is known at compile time. Variadic spread of runtime-length arrays requires sizeof expansion codegen — not yet implemented." },
   { name: "arguments object",           code: "function f(){ arguments }",st:"na",      eff: "na",  phase: "",  notes: "Legacy feature; GPU functions use rest params instead." },
   { name: "Named function expressions", code: "const f = function g(){}",st: "done",    eff: "na",  phase: "",  notes: "" },
   { name: "Generator functions",        code: "function* gen(){}",       st: "done",    eff: "na",  phase: "",  notes: "Emitted as GpuGenState<V> switch-case state machine." },
@@ -246,9 +252,9 @@ const DATA = [
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "Classes & OOP", icon: "🏛️", rows: [
   { name: "Class declarations",         code: "class Foo {}",            st: "done",    eff: "na",  phase: "",  notes: "Emitted as __device__ struct with methods." },
-  { name: "Class expressions",          code: "const C = class {}",      st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Constructor",                code: "constructor(x){}",        st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Instance methods",           code: "foo() { return 1; }",     st: "done",    eff: "na",  phase: "",  notes: "" },
+  { name: "Class expressions",          code: "const C = class {}",      st: "done",    eff: "na",  phase: "",  notes: "Assigned to a variable or passed as an argument — codegen treats it identically to a named class declaration. The expression name (if any) is available inside the class body only." },
+  { name: "Constructor",                code: "constructor(x){}",        st: "done",    eff: "na",  phase: "",  notes: "Emitted as a __device__ init(args) function on the struct. Called automatically by new Foo()." },
+  { name: "Instance methods",           code: "foo() { return 1; }",     st: "done",    eff: "na",  phase: "",  notes: "Emitted as __device__ T method(ClassName* self, args) functions tied to the struct type." },
   { name: "Static methods",             code: "static bar() {}",         st: "done",    eff: "na",  phase: "",  notes: "Emitted as free __device__ function with class prefix." },
   { name: "extends / super()",          code: "class B extends A {}",    st: "done",    eff: "na",  phase: "",  notes: "struct inheritance; super() calls parent constructor." },
   { name: "Getter methods",             code: "get foo() { return … }",  st: "done",    eff: "na",  phase: "",  notes: "Codegen detects isGetter flag and emits get_prop() method on the struct. Tests passing." },
@@ -257,13 +263,21 @@ const DATA = [
   { name: "Private methods (#method)",  code: "#doThing(){}",            st: "done",    eff: "na",  phase: "",  notes: "Same # stripping as private fields — emitted as regular __device__ method." },
   { name: "Static private fields",      code: "static #x = 0",          st: "done",    eff: "na",  phase: "",  notes: "Emitted as static field with # stripped. Tests passing." },
   { name: "Static fields",              code: "static x = 42",           st: "done",    eff: "na",  phase: "",  notes: "Codegen emits 'static' prefix via isStatic flag on ClassField. Tests passing." },
-  { name: "Static initializer blocks", code: "static { this.x=1; }",    st: "partial", eff: "m",   phase: "B", notes: "Parsed and emitted as a static __static_init__ method on the class. Not automatically called; caller must invoke ClassName.__static_init__() if needed." },
+  { name: "Static initializer blocks", code: "static { this.x=1; }",    st: "partial", eff: "m",   phase: "B", notes: "Parsed and emitted as __static_init__() method. JS spec requires it to run automatically when the class is first evaluated — Symmetra does NOT auto-call it. You must explicitly call ClassName.__static_init__() at your entry point." },
   { name: "Symbol.iterator on class",  code: "[Symbol.iterator](){}",   st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __iterator__; codegen emits GpuGenState factory." },
   { name: "Symbol.asyncIterator",      code: "[Symbol.asyncIterator]()",st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __asyncIterator__; emits GpuAsyncIterState." },
-  { name: "Symbol.toPrimitive",        code: "[Symbol.toPrimitive]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __toPrimitive__; codegen doesn't yet call it in type-coercion contexts." },
-  { name: "Symbol.hasInstance",        code: "[Symbol.hasInstance]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __hasInstance__; instanceof codegen not wired yet." },
-  { name: "Abstract classes (TS)",     code: "abstract class Foo {}",   st: "na",      eff: "na",  phase: "",  notes: "Type-only; erased by esbuild before parsing." },
-  { name: "Override keyword (TS)",     code: "override foo(){}",         st: "na",      eff: "na",  phase: "",  notes: "Type-only; erased." },
+  { name: "Symbol.toPrimitive",        code: "[Symbol.toPrimitive]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __toPrimitive__. Method is callable explicitly but NOT invoked automatically — the + operator, template literals, and == do not trigger __toPrimitive__ calls. Codegen does not insert implicit coercion call sites." },
+  { name: "Symbol.hasInstance",        code: "[Symbol.hasInstance]()",  st: "partial", eff: "s",   phase: "D", notes: "Parser maps to __hasInstance__. Since instanceof unconditionally returns true (see Operators section), __hasInstance__ is never actually called regardless of definition." },
+  { name: "Public instance fields",    code: "class Foo { x = 0 }",     st: "done",    eff: "na",  phase: "",  notes: "Field initializers emitted as member variables in the struct body. Initializer expressions become constructor-body assignments." },
+  { name: "super.method() in body",   code: "foo(){ super.foo(); }",    st: "done",    eff: "na",  phase: "",  notes: "super.foo() inside a method emits a call to the parent struct's method. super.prop accesses the parent struct field. Works at any depth of the inheritance chain." },
+  { name: "Method overriding",         code: "class B extends A { foo(){} }", st: "partial", eff: "m", phase: "", notes: "Child class redefines the parent method in the struct — works correctly when the variable is statically typed as B. CRITICAL: no dynamic dispatch (no vtable). If a function takes an A& reference and you pass a B, A::foo is called, not B::foo. Polymorphism is compile-time static-only." },
+  { name: "toString() / valueOf() override", code: "toString(){ return `…` }", st: "partial", eff: "s", phase: "C", notes: "Methods can be defined and called explicitly. Auto-coercion contexts (+ concatenation, template literals, == comparison) do NOT call toString() or valueOf() automatically — CUDA codegen inserts no implicit coercion call sites." },
+  { name: "toJSON() override",         code: "toJSON(){ return {…} }",  st: "partial", eff: "s",   phase: "C", notes: "toJSON() can be defined as a regular method. JSON.stringify does NOT call it automatically — symm_json_stringify does not inspect the object for toJSON. Call obj.toJSON() explicitly and pass the result." },
+  { name: "Mixin pattern",             code: "const M = (B) => class extends B {}", st: "partial", eff: "m", phase: "D", notes: "Arrow function returning a class expression that extends a generic base — basic pattern compiles since class expressions and extends are both done. Multiple-mixin stacking and instanceof chain checks hit the static-dispatch and instanceof limitations." },
+  { name: "Private static methods",    code: "static #doThing(){}",     st: "done",    eff: "na",  phase: "",  notes: "# prefix stripped; static keyword preserved. Emitted as a static __device__ function with the class prefix — same pipeline as regular static methods." },
+  { name: "Class.name (runtime)",      code: "MyClass.name",            st: "na",      eff: "na",  phase: "",  notes: "GPU structs carry no runtime type metadata. MyClass.name is not available at runtime — use a static NAME = 'MyClass' field as the workaround." },
+  { name: "Abstract classes (TS)",     code: "abstract class Foo {}",   st: "na",      eff: "na",  phase: "",  notes: "Erased by esbuild. The abstract modifier tells TypeScript this class cannot be directly instantiated — it is a type-checker contract only. At runtime SymmParser sees a regular class declaration." },
+  { name: "Override keyword (TS)",     code: "override foo(){}",         st: "na",      eff: "na",  phase: "",  notes: "Erased by esbuild. override confirms to TypeScript that this method intentionally replaces a parent method — it is a safety annotation only. SymmParser sees the method without the keyword." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,7 +329,7 @@ const DATA = [
   { name: "Promise.race",               code: "Promise.race([a,b])",     st: "done",    eff: "na",  phase: "",  notes: "_PromiseVal struct; first non-null wins." },
   { name: "Promise.any",                code: "Promise.any([a,b])",      st: "done",    eff: "na",  phase: "",  notes: "" },
   { name: "Promise.allSettled",         code: "Promise.allSettled([])",  st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: ".then/.catch/.finally",      code: "p.then(f).catch(g)",      st: "partial", eff: "m",   phase: "D", notes: "For Tier-1 (GPU-native), chains work as sync calls. For Tier-3 chaining across I/O boundaries needs full CPS." },
+  { name: ".then/.catch/.finally",      code: "p.then(f).catch(g)",      st: "partial", eff: "m",   phase: "D", notes: "Tier-1 (GPU-native ops): .then/.catch/.finally chains emit as synchronous calls — fully working. Tier-3 (real I/O via fetch/WebSocket): chaining across split-kernel boundaries requires full CPS, not yet implemented." },
   { name: "Top-level await",            code: "await fetchData()",       st: "partial", eff: "na",  phase: "",  notes: "Tier-1 await stripped. Tier-3 split-kernel needed for real I/O." },
 ]},
 
@@ -340,7 +354,7 @@ const DATA = [
   { name: "Symbol.iterator",            code: "[Symbol.iterator]",       st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __iterator__." },
   { name: "Symbol.asyncIterator",       code: "[Symbol.asyncIterator]",  st: "done",    eff: "na",  phase: "",  notes: "Parser maps to __asyncIterator__." },
   { name: "Symbol.toPrimitive",         code: "[Symbol.toPrimitive]",    st: "partial", eff: "s",   phase: "D", notes: "Parsed; codegen not wired in coercion contexts yet." },
-  { name: "Symbol.hasInstance",         code: "[Symbol.hasInstance]",    st: "partial", eff: "s",   phase: "D", notes: "Parsed; instanceof codegen not wired yet." },
+  { name: "Symbol.hasInstance",         code: "[Symbol.hasInstance]",    st: "partial", eff: "s",   phase: "D", notes: "Parsed and mapped to __hasInstance__. Since instanceof unconditionally returns true (broken — see Operators), __hasInstance__ is never reached regardless of definition." },
   { name: "Symbol.species",             code: "[Symbol.species]",        st: "na",      eff: "na",  phase: "",  notes: "Array subclassing not supported." },
   { name: "Symbol.toStringTag",         code: "[Symbol.toStringTag]",    st: "done",    eff: "na",  phase: "",  notes: "Symbol.toStringTag access emits Symbol::toStringTag() call. Well-known symbol mapped in emitMember." },
 ]},
@@ -385,56 +399,58 @@ const DATA = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "Number & Math", icon: "🔢", rows: [
-  { name: "Number.isNaN/isFinite/isInteger/isSafeInteger", code:"Number.isNaN(x)",st:"done",eff:"na",phase:"",notes:"" },
-  { name: "Number.parseInt/parseFloat", code: "Number.parseInt('42')",   st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Number.EPSILON/MAX_SAFE_INTEGER/…", code:"Number.EPSILON",    st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Number.POSITIVE/NEGATIVE_INFINITY",code:"Infinity",           st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Number.MAX_VALUE/MIN_VALUE",  code:"Number.MAX_VALUE",        st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "n.toFixed(digits)",           code: "(3.14).toFixed(2)",      st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_fixed(val, decimals) in Codegen." },
-  { name: "n.toPrecision(digits)",       code: "(12345).toPrecision(4)", st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_precision(val, digits) in Codegen." },
-  { name: "n.toExponential(digits)",     code: "(1e6).toExponential(2)", st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_exponential(val, digits) in Codegen." },
-  { name: "n.toString(radix)",           code: "(255).toString(16)",     st: "partial", eff: "s",   phase: "C", notes: "Radix 10 and 16 supported. Octal (8) and binary (2) radix not yet implemented." },
-  { name: "global isNaN/isFinite",       code: "isNaN(x)",               st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "global parseInt/parseFloat",  code: "parseInt('FF', 16)",     st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Math — all standard methods", code: "sin cos log pow sqrt …", st: "done",    eff: "na",  phase: "",  notes: "CUDA single-precision intrinsics. All 30+ methods mapped." },
-  { name: "Math.sign/clz32/imul/fround", code: "Math.sign(x)",          st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Math.random()",               code: "Math.random()",          st: "done",    eff: "na",  phase: "",  notes: "Implemented as Math::random — LCG seeded from thread index. Fast, deterministic per-thread PRNG." },
-  { name: "Math.PI, E, LN2, …",         code: "Math.PI",                st: "done",    eff: "na",  phase: "",  notes: "Defined as float literals in MATH_REMAP." },
-  { name: "BigInt arithmetic",           code: "100n + 200n",            st: "partial", eff: "m",   phase: "A", notes: "typedef long long bigint works for arithmetic; n suffix not yet parsed." },
-  { name: "BigInt comparison",           code: "100n === 100n",          st: "partial", eff: "xs",  phase: "A", notes: "" },
-  { name: "BigInt conversion",           code: "BigInt(42)",             st: "done",    eff: "na",  phase: "",  notes: "BigInt(v) dispatched to __device__ long long BigInt(long long/float/const char*) overloads." },
+  { name: "Number.isNaN/isFinite/isInteger/isSafeInteger", code:"Number.isNaN(x)",st:"done",eff:"na",phase:"",notes:"All four static methods implemented. Unlike global isNaN(), Number.isNaN() does NOT coerce its argument — it only returns true for actual NaN values." },
+  { name: "Number.parseInt/parseFloat", code: "Number.parseInt('42')",   st: "done",    eff: "na",  phase: "",  notes: "Aliases of the global parseInt/parseFloat — same implementation and radix support." },
+  { name: "Number.EPSILON/MAX_SAFE_INTEGER/MIN_SAFE_INTEGER", code:"Number.EPSILON", st: "done", eff: "na", phase: "", notes: "All defined as constexpr float/long long literals in the NUMBER_REMAP prelude block." },
+  { name: "Number.POSITIVE/NEGATIVE_INFINITY", code:"Infinity",          st: "done",    eff: "na",  phase: "",  notes: "POSITIVE_INFINITY = HUGE_VALF, NEGATIVE_INFINITY = -HUGE_VALF. Global Infinity and -Infinity are also mapped." },
+  { name: "Number.MAX_VALUE/MIN_VALUE", code:"Number.MAX_VALUE",         st: "done",    eff: "na",  phase: "",  notes: "MAX_VALUE = FLT_MAX (~3.4e38), MIN_VALUE = FLT_MIN (smallest positive float ~1.2e-38). Number.NaN = GPU NaN bit pattern." },
+  { name: "Number.NaN",                 code: "Number.NaN",              st: "done",    eff: "na",  phase: "",  notes: "Mapped to the GPU NaN bit pattern via __float_as_int(0x7fc00000). Identical to the global NaN constant." },
+  { name: "n.toFixed(digits)",          code: "(3.14).toFixed(2)",       st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_fixed(val, decimals) — writes into a static 32-byte char buffer." },
+  { name: "n.toPrecision(digits)",      code: "(12345).toPrecision(4)",  st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_precision(val, digits) in Codegen." },
+  { name: "n.toExponential(digits)",    code: "(1e6).toExponential(2)",  st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_number_to_exponential(val, digits) in Codegen." },
+  { name: "n.toString(radix)",          code: "(255).toString(16)",      st: "done",    eff: "na",  phase: "",  notes: "All radixes 2–36 supported via symm_number_to_string_radix(). Binary (2), octal (8), decimal (10), hex (16) all work. No-arg form emits the integer decimal string." },
+  { name: "n.toLocaleString()",         code: "(1234567).toLocaleString()", st: "na",   eff: "na",  phase: "",  notes: "Locale-aware number formatting requires ICU/locale tables — not available on GPU. Use n.toFixed() or n.toString() instead." },
+  { name: "global isNaN/isFinite",      code: "isNaN(x)",                st: "done",    eff: "na",  phase: "",  notes: "Both coerce their argument to a number first (unlike Number.isNaN/Number.isFinite). Implemented as CUDA intrinsic wrappers." },
+  { name: "global parseInt/parseFloat", code: "parseInt('FF', 16)",      st: "done",    eff: "na",  phase: "",  notes: "parseInt supports radix 2–36. parseFloat handles standard decimal notation including scientific notation." },
+  { name: "Math — all standard methods", code: "sin cos log pow sqrt …", st: "done",    eff: "na",  phase: "",  notes: "All 30+ methods mapped to CUDA single-precision intrinsics (sinf, cosf, logf, powf, sqrtf, …). GPU always runs in float32 — double-precision variants are not used." },
+  { name: "Math.sign/clz32/imul/fround", code: "Math.sign(x)",          st: "done",    eff: "na",  phase: "",  notes: "sign() → signbit intrinsic. clz32() → __clz() (count leading zeros on int32). imul() → 32-bit integer multiply (args cast to int). fround() → identity since GPU already uses float32." },
+  { name: "Math.random()",              code: "Math.random()",           st: "done",    eff: "na",  phase: "",  notes: "LCG PRNG seeded from (threadIdx + blockIdx × blockDim). Fast and deterministic per-thread — NOT cryptographically secure. Use crypto.getRandomValues() for security-sensitive randomness." },
+  { name: "Math.PI/E/LN2/LN10/LOG2E/SQRT2", code: "Math.PI",           st: "done",    eff: "na",  phase: "",  notes: "All standard Math constants defined as float literals in the MATH_REMAP prelude block." },
+  { name: "BigInt arithmetic",          code: "100n + 200n",             st: "partial", eff: "m",   phase: "A", notes: "typedef long long bigint — arithmetic operators (+, -, *, /) work via C++ operator overloading on long long. The n literal suffix is stripped by the lexer. Mixed BigInt+Number expressions require an explicit BigInt() or Number() cast." },
+  { name: "BigInt comparison",          code: "100n === 100n",           st: "partial", eff: "xs",  phase: "A", notes: "=== and !== between two BigInt (long long) values work via C++ integer comparison. Comparing BigInt to Number (100n === 100) is not handled — the types differ at the CUDA level and no implicit coercion is emitted." },
+  { name: "BigInt conversion",          code: "BigInt(42)",              st: "done",    eff: "na",  phase: "",  notes: "BigInt(v) dispatched to __device__ long long BigInt(long long), BigInt(float), and BigInt(const char*) overloads in Codegen." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "Array (built-in API)", icon: "📋", rows: [
-  { name: "Array.isArray",              code: "Array.isArray(v)",        st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Array.from",                 code: "Array.from(iterable)",    st: "done",    eff: "na",  phase: "",  notes: "Works for typed arrays and generators." },
-  { name: "Array.of",                   code: "Array.of(1,2,3)",         st: "partial", eff: "xs",  phase: "C", notes: "Add emitCall dispatch for Array.of → variadic initializer." },
-  { name: "arr.at(index)",              code: "arr.at(-1)",              st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_at(arr, len, idx) — negative index wraps to len+idx." },
-  { name: "arr.concat",                 code: "arr.concat(b)",           st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.copyWithin",             code: "arr.copyWithin(0,2)",     st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_copy_within(arr, len, target, start, end) — overlap-safe." },
-  { name: "arr.entries/keys/values",    code: "arr.entries()",           st: "partial", eff: "s",   phase: "C", notes: "Stub returns '[]' — GPU generators not wired to indexed arrays yet. Direct for-of loops work." },
-  { name: "arr.every/some",             code: "arr.every(x=>x>0)",       st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.fill",                   code: "arr.fill(0,2,5)",         st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_fill(arr, len, val, start, end) in Codegen." },
-  { name: "arr.filter",                 code: "arr.filter(x=>x>0)",      st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.find/findIndex",         code: "arr.find(x=>x.id===1)",   st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.findLast/findLastIndex", code: "arr.findLast(x=>x>0)",    st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_find_last / symm_arr_find_last_index — reverse scan." },
-  { name: "arr.flat",                   code: "arr.flat(2)",             st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_flat(arr, len) — one-level flatten. Depth param not yet supported." },
-  { name: "arr.flatMap",                code: "arr.flatMap(f)",          st: "partial", eff: "s",   phase: "C", notes: "Maps the function then flattens one level — emits symm_arr_map. Full interleaved flatten+map not yet wired." },
-  { name: "arr.forEach",                code: "arr.forEach(f)",          st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.includes",               code: "arr.includes(v)",         st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.indexOf/lastIndexOf",    code: "arr.indexOf(v)",          st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.join",                   code: "arr.join(',')",           st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.map",                    code: "arr.map(x=>x*2)",         st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.pop/push/shift/unshift", code: "arr.push(v)",             st: "done",    eff: "na",  phase: "",  notes: "Max capacity bounded by stack allocation size." },
-  { name: "arr.reduce/reduceRight",     code: "arr.reduce((a,b)=>a+b)",  st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.reverse",                code: "arr.reverse()",           st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.slice",                  code: "arr.slice(1,3)",          st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.sort",                   code: "arr.sort((a,b)=>a-b)",    st: "done",    eff: "na",  phase: "",  notes: "Insertion sort (n < 256 on GPU stack)." },
-  { name: "arr.splice",                 code: "arr.splice(1,1)",         st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "arr.toReversed/toSorted/toSpliced/with", code:"arr.toSorted()",st:"done",   eff:"na", phase:"",   notes:"symm_arr_to_reversed / to_sorted emits copy+sort. .with(i,v) emits inline set. .toSpliced simplified." },
-  { name: "arr.length",                 code: "arr.length",              st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "Typed arrays (Float32Array etc.)", code:"new Float32Array(n)",st:"done",     eff:"na",   phase:"",   notes:"Maps to CUDA device float array." },
+  { name: "Array.isArray",              code: "Array.isArray(v)",        st: "done",    eff: "na",  phase: "",  notes: "Dispatched by Codegen — checks the internal GpuArray type tag. Returns true for GpuArray instances, false for other types." },
+  { name: "Array.from",                 code: "Array.from(iterable)",    st: "done",    eff: "na",  phase: "",  notes: "Works for typed arrays and generators. The optional map function (Array.from(src, fn)) is supported; the thisArg third argument is ignored." },
+  { name: "Array.of",                   code: "Array.of(1,2,3)",         st: "partial", eff: "xs",  phase: "C", notes: "Not yet dispatched — emitCall does not map Array.of to a variadic GpuArray initializer. Workaround: use an array literal [1,2,3] instead." },
+  { name: "arr.at(index)",              code: "arr.at(-1)",              st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_at(arr, len, idx) — negative index wraps to len+idx (arr.at(-1) returns the last element)." },
+  { name: "arr.concat",                 code: "arr.concat(b)",           st: "done",    eff: "na",  phase: "",  notes: "Returns a new GpuArray with elements of both arrays concatenated. Total length bounded by the stack allocation limit." },
+  { name: "arr.copyWithin",             code: "arr.copyWithin(0,2)",     st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_copy_within(arr, len, target, start, end) — overlap-safe (memmove semantics)." },
+  { name: "arr.entries/keys/values",    code: "arr.entries()",           st: "done",    eff: "na",  phase: "",  notes: "symm_arr_entries / symm_arr_keys / symm_arr_values return JSON-encoded arrays — [[0,v0],[1,v1],…] / [0,1,2,…] / [v0,v1,…]. Codegen now dispatches to these helpers. Not true iterators but usable with JSON.parse or direct iteration." },
+  { name: "arr.every/some",             code: "arr.every(x=>x>0)",       st: "done",    eff: "na",  phase: "",  notes: "Emitted as sequential loops with early-exit on first false (every) or first true (some). Callback receives (element, index, array)." },
+  { name: "arr.fill",                   code: "arr.fill(0,2,5)",         st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_fill(arr, len, val, start, end) — fills the range in-place." },
+  { name: "arr.filter",                 code: "arr.filter(x=>x>0)",      st: "done",    eff: "na",  phase: "",  notes: "Returns a new GpuArray containing elements for which the callback returns truthy. Result length bounded by stack size." },
+  { name: "arr.find/findIndex",         code: "arr.find(x=>x.id===1)",   st: "done",    eff: "na",  phase: "",  notes: "Linear scan. find() returns the matching element or nullptr on miss. findIndex() returns -1 on miss." },
+  { name: "arr.findLast/findLastIndex", code: "arr.findLast(x=>x>0)",    st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_arr_find_last / symm_arr_find_last_index — reverse linear scan from the last element." },
+  { name: "arr.flat",                   code: "arr.flat(2)",             st: "partial", eff: "s",   phase: "C", notes: "Flattens one level via symm_arr_flat(arr, len). The depth argument is accepted but always ignored — only one level is ever flattened regardless of the value passed." },
+  { name: "arr.flatMap",                code: "arr.flatMap(f)",          st: "partial", eff: "s",   phase: "C", notes: "Emits symm_arr_map then a one-level flatten pass. Not bit-exact with the JS spec for callbacks that return nested arrays — the interleaved flatMap semantic is approximated." },
+  { name: "arr.forEach",                code: "arr.forEach(f)",          st: "done",    eff: "na",  phase: "",  notes: "Emitted as a for-loop calling f(element, index, array) on each element." },
+  { name: "arr.includes",               code: "arr.includes(v)",         st: "done",    eff: "na",  phase: "",  notes: "Linear scan with strict equality. NaN-safe: arr.includes(NaN) correctly returns true if NaN is in the array." },
+  { name: "arr.indexOf/lastIndexOf",    code: "arr.indexOf(v)",          st: "done",    eff: "na",  phase: "",  notes: "indexOf scans forward, lastIndexOf scans backward. Both return -1 on miss. Optional fromIndex argument supported." },
+  { name: "arr.join",                   code: "arr.join(',')",           st: "done",    eff: "na",  phase: "",  notes: "Converts each element to a string and concatenates with the separator. Writes into a fixed-size char buffer — very long arrays may truncate." },
+  { name: "arr.map",                    code: "arr.map(x=>x*2)",         st: "done",    eff: "na",  phase: "",  notes: "Returns a new GpuArray of the same length with the callback applied to each element. Callback receives (element, index, array)." },
+  { name: "arr.pop/push/shift/unshift", code: "arr.push(v)",             st: "done",    eff: "na",  phase: "",  notes: "All four mutate in-place. Max capacity is the stack allocation size — pushing past it is a no-op. unshift/shift are O(n) due to element shifting." },
+  { name: "arr.reduce/reduceRight",     code: "arr.reduce((a,b)=>a+b)",  st: "done",    eff: "na",  phase: "",  notes: "Standard left (reduce) and right (reduceRight) fold. Optional initialValue argument supported." },
+  { name: "arr.reverse",                code: "arr.reverse()",           st: "done",    eff: "na",  phase: "",  notes: "In-place reversal. Returns the same array (mutated), matching JS semantics." },
+  { name: "arr.slice",                  code: "arr.slice(1,3)",          st: "done",    eff: "na",  phase: "",  notes: "Returns a shallow copy of the subrange. Negative indices wrap from the end. Does not mutate the original." },
+  { name: "arr.sort",                   code: "arr.sort((a,b)=>a-b)",    st: "done",    eff: "na",  phase: "",  notes: "Insertion sort — correct and stable for n ≤ 256 (GPU stack limit). Comparator function recommended; default sort (no comparator) coerces to strings which is rarely correct on GPU." },
+  { name: "arr.splice",                 code: "arr.splice(1,1,'x')",     st: "done",    eff: "na",  phase: "",  notes: "Removes deleteCount elements at start and inserts replacement items. Returns removed elements as a new GpuArray." },
+  { name: "arr.toReversed/toSorted/toSpliced/with", code:"arr.toSorted()",st:"done",   eff:"na",   phase:"",   notes:"Immutable variants — each returns a new array, leaving the original unchanged. symm_arr_to_reversed emits copy+reverse. to_sorted emits copy+sort. .with(i,v) copies and sets one index. .toSpliced is a simplified copy+splice." },
+  { name: "arr.length",                 code: "arr.length",              st: "done",    eff: "na",  phase: "",  notes: "Read: returns the current element count. Write (arr.length = n): truncates or zero-pads the array to n elements." },
+  { name: "Typed arrays (Float32Array etc.)", code:"new Float32Array(n)",st:"done",     eff:"na",   phase:"",   notes:"Float32Array, Int32Array, Uint8Array, and other typed array constructors map to CUDA device-typed arrays. Standard element access and iteration work." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -455,28 +471,33 @@ const DATA = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "Map & Set", icon: "🗺️", rows: [
-  { name: "Map — set/get/has/size",     code: "map.set('k',v)",          st: "partial", eff: "m",   phase: "A", notes: "Current stub uses pointer comparison for keys — 'foo' != 'foo' if different literals. Fix: replace _e[i].k==k with symm_str_eq(_e[i].k, k). Also need a numeric-key variant." },
-  { name: "Map — delete/clear",         code: "map.delete('k')",         st: "partial", eff: "s",   phase: "A", notes: "delete needs to shift entries; clear resets _n=0." },
-  { name: "Map — forEach",              code: "map.forEach((v,k)=>…)",   st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_map_for_each(map, fn) — iterates _e[0.._n-1]." },
-  { name: "Map — keys/values/entries",  code: "map.keys()",              st: "done",    eff: "na",  phase: "",  notes: "symm_map_keys/values/entries() return JSON-array strings. Dispatched by Codegen." },
-  { name: "Map — for…of",              code: "for(const [k,v] of map)", st: "partial", eff: "s",   phase: "C", notes: "for…of over Map emits iteration over _e/_n internal array. Destructuring [k,v] is partial." },
-  { name: "Map — numeric key variant", code: "map.set(42, v)",          st: "done",    eff: "na",  phase: "",  notes: "Map struct has set(int,float)/get(int)/has(int) overloads. Int keys stored as '#42' prefix. Float keys cast to int." },
-  { name: "Set — add/has/size",         code: "set.add('x')",            st: "partial", eff: "s",   phase: "A", notes: "Same pointer-equality bug as Map. Fix with symm_str_eq." },
-  { name: "Set — delete/clear",         code: "set.delete('x')",         st: "partial", eff: "xs",  phase: "A", notes: "" },
-  { name: "Set — forEach / iteration",  code: "set.forEach(v=>…)",       st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_set_for_each(set, fn) — iterates _items[0.._count-1]." },
-  { name: "WeakMap / WeakSet",          code: "new WeakMap()",           st: "na",       eff: "na",  phase: "",  notes: "GC semantics not applicable on GPU." },
-  { name: "WeakRef / FinalizationRegistry", code:"new WeakRef(obj)",     st: "na",       eff: "na",  phase: "",  notes: "" },
+  { name: "Map constructor",            code: "new Map([[k,v],…])",      st: "partial", eff: "s",   phase: "B", notes: "new Map() (empty) works. new Map(entries) from an iterable of [key, value] pairs: the initializer path is partially wired — populate with map.set() calls after construction as a reliable workaround." },
+  { name: "Map — set/get/has/size",     code: "map.set('k',v)",          st: "done",    eff: "na",  phase: "",  notes: "String keys compared with strcmp() — correct equality semantics. size returns _n. Max 64 entries — adding beyond the limit silently drops the entry." },
+  { name: "Map — delete/clear",         code: "map.delete('k')",         st: "done",    eff: "na",  phase: "",  notes: "clear() resets _n=0. delete() scans _e[] and shifts remaining entries to close the gap. Both dispatched by Codegen via symm_map_delete / symm_map_clear." },
+  { name: "Map — forEach",              code: "map.forEach((v,k)=>…)",   st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_map_for_each(map, fn) — iterates _e[0.._n-1]. Callback receives (value, key, map) matching the JS spec." },
+  { name: "Map — keys/values/entries",  code: "map.keys()",              st: "partial", eff: "s",   phase: "C", notes: "symm_map_keys/values/entries() return JSON-encoded strings (e.g. '[\"a\",\"b\"]') — NOT actual iterators. for…of on the return value will not work. Use map.forEach() or the for…of map loop form for iteration." },
+  { name: "Map — for…of",              code: "for(const [k,v] of map)", st: "partial", eff: "s",   phase: "C", notes: "for…of over a Map emits iteration over the internal _e[0.._n-1] array. Destructuring [k,v] in the loop variable works for string keys. Nested destructuring and numeric-key maps may not destructure correctly." },
+  { name: "Map — numeric key variant", code: "map.set(42, v)",          st: "done",    eff: "na",  phase: "",  notes: "Map struct has set(int, val)/get(int)/has(int) overloads for numeric keys. Integer keys stored internally with a '#' prefix. Float keys are cast to int." },
+  { name: "Set constructor",            code: "new Set([1,2,3])",        st: "partial", eff: "s",   phase: "B", notes: "new Set() (empty) works. new Set(values) from an iterable: the array initializer path is partially wired — use set.add() calls after construction as a reliable workaround." },
+  { name: "Set — add/has/size",         code: "set.add('x')",            st: "done",    eff: "na",  phase: "",  notes: "String values compared with strcmp() — correct Set equality semantics. size returns _count. Max 64 entries — adding beyond the limit is a no-op." },
+  { name: "Set — delete/clear",         code: "set.delete('x')",         st: "done",    eff: "na",  phase: "",  notes: "clear() resets _count=0. delete() scans _items[] and shifts to close the gap. Both dispatched by Codegen via symm_set_delete / symm_set_clear." },
+  { name: "Set — forEach / iteration",  code: "set.forEach(v=>…)",       st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_set_for_each(set, fn) — iterates _items[0.._count-1]. Callback receives (value, value, set) matching the JS spec." },
+  { name: "Set — for…of",              code: "for(const v of set)",     st: "partial", eff: "s",   phase: "C", notes: "for…of over a Set emits iteration over the internal _items[0.._count-1] array. Works for string and numeric values. Use set.forEach() as a reliable alternative." },
+  { name: "Set — keys/values/entries",  code: "set.values()",           st: "partial", eff: "s",   phase: "C", notes: "symm_set_values/entries() return JSON-encoded strings — NOT iterators (same limitation as Map.keys()). Use set.forEach() for iteration." },
+  { name: "WeakMap / WeakSet",          code: "new WeakMap()",           st: "na",       eff: "na",  phase: "",  notes: "GC semantics do not apply on GPU — VRAM is slab-allocated and reset in O(1). WeakMap/WeakSet require weak references which have no equivalent in the CUDA memory model." },
+  { name: "WeakRef / FinalizationRegistry", code:"new WeakRef(obj)",     st: "na",       eff: "na",  phase: "",  notes: "Weak references require a garbage collector to clear them. GPU uses manual slab allocation with no GC. FinalizationRegistry callbacks cannot fire without a GC cycle." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "JSON", icon: "📄", rows: [
-  { name: "JSON.stringify (simple)",    code: "JSON.stringify({a:1})",   st: "done",    eff: "na",  phase: "",  notes: "symm_json_obj_str / symm_json_val / symm_write helpers in prelude." },
-  { name: "JSON.stringify (nested)",    code: "JSON.stringify({a:{b:1}})",st:"partial", eff: "m",   phase: "B", notes: "Nested struct serialisation requires recursive emitJsonValue codegen path." },
-  { name: "JSON.stringify (array)",     code: "JSON.stringify([1,2,3])", st: "done",    eff: "na",  phase: "",  notes: "symm_json_f32arr." },
-  { name: "JSON.stringify (replacer)",  code: "JSON.stringify(o,replacer)",st:"na",     eff: "na",  phase: "",  notes: "Dynamic replacer function not feasible." },
-  { name: "JSON.stringify (indent)",    code: "JSON.stringify(o,null,2)",st:"done",     eff: "na",  phase: "",  notes: "3-arg form dispatched — Codegen passes indent to symm_json_stringify_indent (cosmetic on GPU, returns flat JSON)." },
-  { name: "JSON.parse",                 code: "JSON.parse(str)",         st: "done",    eff: "na",  phase: "",  notes: "symm_json_parse() stores raw JSON string. symm_json_prop(json, key) extracts values on-the-fly with escape handling. Dispatched by Codegen for property access on parsed objects." },
-  { name: "JSON.parse (reviver)",       code: "JSON.parse(s, reviver)",  st: "na",      eff: "na",  phase: "",  notes: "" },
+  { name: "JSON.stringify (simple)",    code: "JSON.stringify({a:1})",   st: "done",    eff: "na",  phase: "",  notes: "Flat objects with scalar values stringify correctly via symm_json_obj_str / symm_json_val / symm_write helpers in the prelude." },
+  { name: "JSON.stringify (nested)",    code: "JSON.stringify({a:{b:1}})",st:"partial", eff: "m",   phase: "B", notes: "NOT yet working for nested structs — symm_json_stringify does not recurse into nested objects. The inner object is serialised as its struct name or a placeholder. Requires a recursive emitJsonValue path in Codegen." },
+  { name: "JSON.stringify (array)",     code: "JSON.stringify([1,2,3])", st: "done",    eff: "na",  phase: "",  notes: "Float arrays use symm_json_f32arr. String and mixed arrays use symm_json_val per element." },
+  { name: "JSON.stringify (array of objects)", code:"JSON.stringify([{a:1}])", st:"partial", eff:"m", phase:"B", notes:"Inherits the nested-struct limitation — each object element is not recursed into. Same fix required as JSON.stringify(nested)." },
+  { name: "JSON.stringify (replacer)",  code: "JSON.stringify(o,replacer)",st:"na",     eff: "na",  phase: "",  notes: "A replacer function requires dynamic per-property dispatch — not feasible in the static CUDA codegen model. Use a manual toJSON() method (called explicitly) as a workaround." },
+  { name: "JSON.stringify (indent)",    code: "JSON.stringify(o,null,2)",st:"done",     eff: "na",  phase: "",  notes: "3-arg form dispatched by Codegen. Cosmetic on GPU — symm_json_stringify_indent accepts the indent value but always returns compact (flat) JSON without whitespace." },
+  { name: "JSON.parse",                 code: "JSON.parse(str)",         st: "done",    eff: "na",  phase: "",  notes: "symm_json_parse() stores the raw JSON string in a _JsonVal struct. Property access (parsed.foo) is handled by symm_json_prop(json, key) which scans the raw string on-the-fly with escape handling. Does not build a full AST." },
+  { name: "JSON.parse (reviver)",       code: "JSON.parse(s, reviver)",  st: "na",      eff: "na",  phase: "",  notes: "A reviver function requires iterating the parsed tree and calling a callback per node. symm_json_parse stores the raw string without building a traversable AST — not feasible without a full JSON tree parser." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -492,13 +513,13 @@ const DATA = [
   { name: "Named capture groups",       code: "/(?<year>\\d{4})/",       st: "partial", eff: "l",   phase: "D", notes: "Regex engine skips the (?<name>...) name and matches the group, but capture values aren't stored/retrievable." },
   { name: "Backreferences \\1",         code: "/(a)\\1/",                st: "missing", eff: "l",   phase: "D", notes: "Groups are not captured; backreference comparison requires capture storage." },
   { name: "Lookahead (?=…) (?!…)",      code: "/foo(?=bar)/",            st: "done",    eff: "na",  phase: "",  notes: "symm_regex_match_at handles positive (?=...) and negative (?!...) lookahead via recursive check." },
-  { name: "Lookbehind (?<=…)",          code: "/(?<=foo)bar/",           st: "partial", eff: "xl",  phase: "D", notes: "Positive lookbehind: pattern skipped (no reverse match). Negative lookbehind not implemented." },
+  { name: "Lookbehind (?<=…)",          code: "/(?<=foo)bar/",           st: "missing", eff: "xl",  phase: "D", notes: "Lookbehind group is silently skipped — condition is not evaluated at all. Patterns with (?&lt;=...) or (?&lt;!...) match as if the lookbehind clause were absent. Lookahead (?=…)/(?!…) works correctly." },
   { name: "{n,m} quantifiers",          code: "/a{2,4}/",                st: "done",    eff: "na",  phase: "",  notes: "symm_regex_match_at handles {n}, {n,}, {n,m} counting loops for any character class or literal." },
   { name: "Flags: g (global)",          code: "/abc/g",                  st: "done",    eff: "na",  phase: "",  notes: "matchAll uses global flag." },
-  { name: "Flags: i (case-insensitive)",code: "/abc/i",                  st: "partial", eff: "s",   phase: "C", notes: "NFA needs to compare tolower(c1)==tolower(c2) in character match." },
+  { name: "Flags: i (case-insensitive)",code: "/abc/i",                  st: "partial", eff: "s",   phase: "C", notes: "test() correctly routes to symm_regex_test_i which applies case-folding. exec() and match() now use symm_regex_exec_i. Case-folding is ASCII-only (A-Z → a-z); complex NFA paths (character classes, quantifiers) remain case-sensitive." },
   { name: "Flags: m (multiline)",       code: "/^/m",                    st: "done",    eff: "na",  phase: "",  notes: "symm_regex_test_m() passes line start as str_start so ^ anchors at line boundaries. RegExp.test() selects it when 'm' flag present." },
-  { name: "Flags: s (dotAll)",          code: "/./s",                    st: "partial", eff: "xs",  phase: "C", notes: "The 's' flag is stored in RegExp.flags but the NFA still excludes \\n from '.'. Requires symm_regex_match_at_dotall variant." },
-  { name: "Flags: u (unicode)",         code: "/\\u{1F600}/u",           st: "na",      eff: "na",  phase: "",  notes: "Full Unicode DFA too large for GPU. UTF-8 literal matching works." },
+  { name: "Flags: s (dotAll)",          code: "/./s",                    st: "partial", eff: "xs",  phase: "C", notes: "The 's' flag is stored in RegExp.flags but has no runtime effect — '.' still excludes \\n. Needs a symm_regex_match_at_dotall variant where '.' matches any byte including \\n." },
+  { name: "Flags: u (unicode)",         code: "/\\u{1F600}/u",           st: "partial", eff: "xl",  phase: "F", notes: "UTF-8 byte literal patterns work. \\u{xxxx} escape sequences and Unicode property classes (\\p{Letter}) are not supported — full Unicode DFA/table (~250 KB) too large for GPU stack." },
   { name: "RegExp.test()",              code: "re.test(str)",            st: "done",    eff: "na",  phase: "",  notes: "" },
   { name: "RegExp.exec()",              code: "re.exec(str)",            st: "done",    eff: "na",  phase: "",  notes: "" },
   { name: "RegExp.matchAll()",          code: "str.matchAll(re)",        st: "done",    eff: "na",  phase: "",  notes: "" },
@@ -507,13 +528,19 @@ const DATA = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 { cat: "Date", icon: "📅", rows: [
-  { name: "Date.now()",                 code: "Date.now()",              st: "partial", eff: "m",   phase: "E", notes: "Stub returns 0. Need: CPU timer thread writes monotonic µs to a pinned VRAM location every 1 ms; kernel reads it." },
-  { name: "new Date(ms) — construct",   code: "new Date(1700000000000)", st: "partial", eff: "m",   phase: "F", notes: "Struct exists; field calculations not implemented." },
-  { name: "date.getFullYear/Month/Day", code: "d.getFullYear()",        st: "done",    eff: "na",  phase: "",  notes: "Proleptic Gregorian calendar arithmetic in Date struct. getFullYear/getMonth/getDate/getDay." },
-  { name: "date.getHours/Minutes/…",   code: "d.getHours()",           st: "done",    eff: "na",  phase: "",  notes: "getHours/getMinutes/getSeconds/getMilliseconds/getTimezoneOffset all implemented." },
-  { name: "date.toISOString()",         code: "d.toISOString()",        st: "done",    eff: "na",  phase: "",  notes: "Emits YYYY-MM-DDTHH:mm:ss.sssZ in a static 32-byte char buffer." },
-  { name: "date.getTime()",             code: "d.getTime()",            st: "done",    eff: "na",  phase: "",  notes: "Returns _ms field (long long). Same as Date.now() contract." },
-  { name: "Date.parse(str)",            code: "Date.parse('2024-01-01')",st:"done",   eff: "na",  phase: "",  notes: "ISO 8601 parser in Date::parse(). Handles YYYY-MM-DD and YYYY-MM-DDTHH:mm:ss.sssZ via Fliegel-Van Flandern JDN algorithm." },
+  { name: "Date.now()",                 code: "Date.now()",              st: "partial", eff: "m",   phase: "E", notes: "Stub always returns 0. Correct implementation requires a CPU timer thread writing a monotonic µs timestamp to a pinned VRAM location every ~1 ms; the kernel reads that slot. The io_stage infrastructure exists but the timer thread is not yet wired." },
+  { name: "new Date() — no args",       code: "new Date()",              st: "partial", eff: "m",   phase: "E", notes: "Calls Date.now() internally — returns a Date at Unix epoch (ms=0) since Date.now() is a stub. Will work correctly once Date.now() is fixed." },
+  { name: "new Date(ms) — from epoch",  code: "new Date(1700000000000)", st: "done",    eff: "na",  phase: "",  notes: "Stores the ms value in _ms (long long). All getter methods derive their values from _ms via Gregorian calendar arithmetic." },
+  { name: "new Date(year,month,day,…)", code: "new Date(2024,0,15,12)", st: "partial", eff: "s",   phase: "F", notes: "Component-form constructor not yet implemented — the year/month/day/hour/minute/second arguments are not converted to a _ms value. Workaround: Date.parse('2024-01-15T12:00:00Z') then new Date(ms)." },
+  { name: "date.getFullYear/Month/Date/Day", code: "d.getFullYear()",   st: "done",    eff: "na",  phase: "",  notes: "All derived from _ms via proleptic Gregorian calendar arithmetic. getMonth returns 0-indexed (0=January). getDay returns 0=Sunday." },
+  { name: "date.getHours/Minutes/Seconds/Ms", code: "d.getHours()",    st: "done",    eff: "na",  phase: "",  notes: "getHours/getMinutes/getSeconds/getMilliseconds derived from _ms modular arithmetic. getTimezoneOffset always returns 0 (UTC only — no timezone data on GPU)." },
+  { name: "date.setFullYear/Month/Date/…", code: "d.setFullYear(2025)", st: "missing", eff: "m",   phase: "F", notes: "No setter methods implemented — there is no path from component values back to _ms. Workaround: reconstruct the date using Date.parse() with a new ISO string." },
+  { name: "date.getTime()",             code: "d.getTime()",            st: "done",    eff: "na",  phase: "",  notes: "Returns the _ms field (long long milliseconds since Unix epoch)." },
+  { name: "date.toISOString()",         code: "d.toISOString()",        st: "done",    eff: "na",  phase: "",  notes: "Emits YYYY-MM-DDTHH:mm:ss.sssZ into a static 32-byte char buffer. UTC timezone only." },
+  { name: "date.toUTCString()",         code: "d.toUTCString()",        st: "partial", eff: "xs",  phase: "F", notes: "Not yet implemented as a distinct method — falls through to toISOString(). Correct output should be RFC 7231 format: 'Tue, 15 Jan 2024 12:00:00 GMT'." },
+  { name: "date.toDateString/toTimeString", code: "d.toDateString()",   st: "partial", eff: "xs",  phase: "F", notes: "Not yet implemented — falls through to toISOString(). Should return locale-independent 'Tue Jan 15 2024' and '12:00:00 GMT+0000' formats respectively." },
+  { name: "date.toLocaleDateString/toLocaleString", code:"d.toLocaleDateString()", st:"na", eff:"na", phase:"", notes:"Locale-aware formatting requires ICU/locale tables — not available on GPU. Use toISOString() for a portable ISO date string." },
+  { name: "Date.parse(str)",            code: "Date.parse('2024-01-01')",st:"done",    eff: "na",  phase: "",  notes: "ISO 8601 parser in Date::parse(). Handles YYYY-MM-DD and YYYY-MM-DDTHH:mm:ss.sssZ via the Fliegel-Van Flandern JDN algorithm. Returns milliseconds since Unix epoch." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -523,19 +550,19 @@ const DATA = [
   { name: "console.assert",            code: "console.assert(cond,msg)",st: "done",    eff: "na",  phase: "",  notes: "Dispatches to console.assert_(cond, msg) — writes to debug buffer if condition is false." },
   { name: "setTimeout / clearTimeout", code: "setTimeout(f, 100)",      st: "done",    eff: "na",  phase: "",  notes: "CPU-side TimerQueue fires callback; response via BatchScheduler." },
   { name: "setInterval / clearInterval",code:"setInterval(f, 1000)",    st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "queueMicrotask",            code: "queueMicrotask(f)",       st: "na",      eff: "na",  phase: "",  notes: "No microtask queue on GPU. Tier-1 async is synchronous." },
+  { name: "queueMicrotask",            code: "queueMicrotask(f)",       st: "partial", eff: "xs",  phase: "D", notes: "Implemented as immediate synchronous invocation — callback is called inline. Matches GPU's synchronous execution model but does not replicate task-queue ordering semantics (callback runs before, not after, the current call stack unwinds)." },
   { name: "URL",                        code: "new URL('https://…')",    st: "done",    eff: "na",  phase: "",  notes: "GPU-side struct with scheme/hostname/pathname parsing." },
   { name: "URLSearchParams",           code: "new URLSearchParams('a=1')",st:"done",   eff: "na",  phase: "",  notes: "" },
   { name: "TextEncoder",               code: "new TextEncoder().encode(s)",st:"done",  eff: "na",  phase: "",  notes: "UTF-8 byte array." },
   { name: "TextDecoder",               code: "new TextDecoder().decode(b)",st:"done",  eff: "na",  phase: "",  notes: "" },
-  { name: "Blob / File",               code: "new Blob([data])",        st: "missing", eff: "l",   phase: "F", notes: "Binary container. Store as ByteArray slice + MIME type field." },
-  { name: "FormData",                  code: "new FormData()",          st: "missing", eff: "xl",  phase: "F", notes: "Multipart boundary parser. GPU-side parsing of multipart/form-data bodies." },
-  { name: "fetch()",                    code: "await fetch(url, opts)",  st: "missing", eff: "xl",  phase: "E", notes: "Tier-3 split-kernel CPS. Kernel queues HTTP request to VRAM I/O queue; CPU proxy thread executes cURL/libuv; continuation kernel resumes." },
-  { name: "Request / Response / Headers",code:"new Request(url)",       st: "missing", eff: "l",   phase: "E", notes: "Headers: GpuObject of key→value. Request/Response: wraps Headers + body ByteArray." },
+  { name: "Blob / File",               code: "new Blob([data])",        st: "missing", eff: "l",   phase: "F", notes: "Not implemented. Design: a Blob is a ByteArray slice in VRAM with a MIME-type field. File adds name/lastModified metadata. Needed for multipart upload, binary response handling, and FormData." },
+  { name: "FormData",                  code: "new FormData()",          st: "missing", eff: "xl",  phase: "F", notes: "Not implemented. Requires a GPU-side multipart/form-data boundary parser and Blob support. Depends on Blob and Request/Response being done first." },
+  { name: "fetch()",                    code: "await fetch(url, opts)",  st: "missing", eff: "xl",  phase: "E", notes: "Not yet wired. Architecture is designed (Tier-3 split-kernel CPS): GPU kernel writes request to a VRAM I/O queue, CPU proxy thread executes the HTTP call via cURL/libuv, then a continuation kernel resumes with the response. The io_stage slot in SymmCtx exists; the proxy thread and continuation dispatch are not yet connected." },
+  { name: "Request / Response / Headers",code:"new Request(url)",       st: "missing", eff: "l",   phase: "E", notes: "Not implemented. Design: Headers is a GpuObject of key→value string pairs. Request wraps a URL string + Headers + optional body ByteArray. Response wraps status code + Headers + body. Needed before fetch() can be completed." },
   { name: "AbortController / AbortSignal",code:"new AbortController()", st: "done",    eff: "na",  phase: "",  notes: "VRAM bool flag + listener array." },
   { name: "ReadableStream / WritableStream",code:"new ReadableStream()",st:"missing",  eff: "xl",  phase: "E", notes: "VramPipe-backed stream. Needs pull-based producer protocol across kernel boundaries." },
-  { name: "TransformStream",           code: "new TransformStream()",   st: "missing", eff: "xl",  phase: "E", notes: "" },
-  { name: "WebSocket",                 code: "new WebSocket(url)",      st: "missing", eff: "xl",  phase: "E", notes: "Persistent CUDA stream per connection. WS frame parser kernel. CPU-side TLS + upgrade handshake." },
+  { name: "TransformStream",           code: "new TransformStream()",   st: "missing", eff: "xl",  phase: "E", notes: "Not implemented. A TransformStream wraps a ReadableStream and a WritableStream with a transform function between them. Depends on ReadableStream/WritableStream being done first — the same VramPipe and pull-protocol gap applies." },
+  { name: "WebSocket",                 code: "new WebSocket(url)",      st: "missing", eff: "xl",  phase: "E", notes: "Not implemented. Design: one persistent CUDA stream per connection, a GPU-side WS frame parser kernel, CPU-side TLS handshake and HTTP Upgrade via the proxy thread. The same Tier-3 split-kernel CPS gap as fetch() — no proxy thread dispatch yet wired." },
   { name: "crypto.getRandomValues",    code: "crypto.getRandomValues(arr)",st:"done",   eff:"na", phase:"",   notes:"crypto.getRandomValues(arr) fills float/uint8 array with LCG pseudo-random values seeded by thread+block index." },
   { name: "crypto.subtle.digest (SHA)",code:"crypto.subtle.digest('SHA-256',d)",st:"partial",eff:"m",phase:"D",notes:"GPU SHA-256 exists in protect/ kernel; not yet exposed to user code." },
   { name: "crypto.subtle.encrypt/decrypt",code:"subtle.encrypt(aes,key,data)",st:"partial",eff:"l",phase:"D",notes:"AES-GCM implementation exists in protect/. Expose via @symmetra/crypto." },
@@ -550,22 +577,24 @@ const DATA = [
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
-{ cat: "TypeScript Language Features", icon: "🟦", rows: [
-  { name: "Type annotations (all forms)",code:"x: string, fn(): void",  st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild before SymmParser sees the file." },
-  { name: "Generics (erased)",          code: "function f<T>(x: T)",    st: "done",    eff: "na",  phase: "",  notes: "Type params erased; C++ templates handle GPU generic code." },
-  { name: "Interfaces",                 code: "interface Foo { x: number }",st:"done",eff:"na",phase:"",notes:"Erased." },
-  { name: "Type aliases",               code: "type Point = {x,y}",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Union types",                code: "string | number",         st: "done",    eff: "na",  phase: "",  notes: "Erased; GPU uses const char* for string, float for number." },
-  { name: "Intersection types",         code: "A & B",                  st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Tuple types",                code: "[string, number]",        st: "done",    eff: "na",  phase: "",  notes: "Erased; becomes fixed-size GpuArray or struct." },
-  { name: "Conditional types",          code: "T extends U ? A : B",    st: "done",    eff: "na",  phase: "",  notes: "Erased (compile-time only)." },
-  { name: "Mapped types",               code: "{ [K in T]: V }",        st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Template literal types",     code: "`${string}Id`",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "infer keyword",              code: "infer R",                 st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "satisfies keyword",          code: "expr satisfies Type",     st: "done",    eff: "na",  phase: "",  notes: "Erased (TS 4.9+)." },
-  { name: "as const",                   code: "const x = [1,2] as const",st:"done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Non-null assertion (!)",      code: "x!.foo",                 st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Type assertions (as)",        code: "x as string",            st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+{ cat: "TypeScript Language Features", icon: "🟦",
+  catNote: "<strong>What \"erased\" means:</strong> Symmetra's pipeline has two steps before your code reaches the GPU. Step 1: esbuild strips every TypeScript-specific construct — type annotations, interfaces, generics, decorators, access modifiers — and outputs plain JavaScript. Step 2: that JavaScript enters SymmParser, which compiles it to CUDA. So <em>erased</em> means the syntax is valid in your <code>.ts</code> file, costs nothing at runtime, and reaches the GPU as the underlying JavaScript expression only. The TypeScript type-checker still validates it; Symmetra just never sees the type layer at all. You can write all standard TypeScript freely — only the runtime semantics matter.",
+  rows: [
+  { name: "Type annotations (all forms)",code:"x: string, fn(): void",  st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild (step 1). SymmParser receives plain JavaScript with no colon-annotations. The variable or parameter exists; only its type label is gone." },
+  { name: "Generics (erased)",          code: "function f<T>(x: T)",    st: "done",    eff: "na",  phase: "",  notes: "Type parameters erased by esbuild. At runtime SymmParser sees function f(x) — a regular function. Symmetra's Codegen uses C++ templates internally to produce GPU-generic code, but your &lt;T&gt; syntax is gone before that stage." },
+  { name: "Interfaces",                 code: "interface Foo { x: number }",st:"done",eff:"na",phase:"",notes:"Erased by esbuild — the entire interface declaration is removed. It produces no struct, no object, and no GPU code. Its only effect is type-checking your .ts source before compilation." },
+  { name: "Type aliases",               code: "type Point = {x,y}",     st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. type Point = ... generates nothing at runtime — when you write const p: Point = {x:1,y:2} SymmParser sees const p = {x:1,y:2}." },
+  { name: "Union types",                code: "string | number",         st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. The union is a TypeScript concept only — at runtime Symmetra's Codegen resolves the concrete type from context (const char* for strings, float for numbers)." },
+  { name: "Intersection types",         code: "A & B",                  st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild — the & combinator exists only in the type system. The runtime value is a plain object or struct with all fields merged." },
+  { name: "Tuple types",                code: "[string, number]",        st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. The positional type annotation is gone; at runtime the value becomes a fixed-size GpuArray or an anonymous struct with positional fields determined by Codegen." },
+  { name: "Conditional types",          code: "T extends U ? A : B",    st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild — evaluated entirely at TypeScript compile time. The chosen branch type is used for checking; no conditional logic reaches SymmParser." },
+  { name: "Mapped types",               code: "{ [K in T]: V }",        st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild — a type-system transformation only. Values typed with a mapped type are plain objects at runtime." },
+  { name: "Template literal types",     code: "`${string}Id`",           st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild — template literal types are a TypeScript type-checking feature. They produce no string operations at runtime." },
+  { name: "infer keyword",              code: "infer R",                 st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. infer is used inside conditional types to extract a type component — it is purely a type-level construct with no runtime presence." },
+  { name: "satisfies keyword",          code: "expr satisfies Type",     st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild (TS 4.9+). satisfies narrows the type of an expression at the TypeScript level — the expression itself is unchanged at runtime." },
+  { name: "as const",                   code: "const x = [1,2] as const",st:"done",    eff: "na",  phase: "",  notes: "Erased by esbuild. as const widens the TypeScript type to a readonly literal tuple — at runtime SymmParser sees the plain array literal [1,2]." },
+  { name: "Non-null assertion (!)",      code: "x!.foo",                 st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. The ! tells TypeScript 'trust me this value is not null or undefined'. SymmParser receives x.foo — no null-guard is inserted; you are asserting correctness yourself." },
+  { name: "Type assertions (as)",        code: "x as string",            st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. x as string becomes just x at runtime. No cast, no conversion, no check — purely a TypeScript type-checker instruction." },
   { name: "Const enums",                code: "const enum Dir { Up=0 }", st: "done",    eff: "na",  phase: "",  notes: "Inlined as integer literals by esbuild." },
   { name: "Regular enums (numeric)",    code: "enum Color { Red, Green }",st:"done",    eff: "na",  phase: "",  notes: "Parser emits Color_Red=0, Color_Green=1 as __device__ constexpr ints. Auto-increment + explicit values both work." },
   { name: "String enums",               code: "enum Dir { Up='UP' }",   st: "done",    eff: "na",  phase: "",  notes: "Parser emits Dir_Up='UP' as __device__ constexpr auto (const char*). Tests passing." },
@@ -574,32 +603,34 @@ const DATA = [
   { name: "Declaration merging",        code: "interface Foo {} interface Foo {}",st:"na",eff:"na",phase:"",notes:"Type-level only." },
   { name: "Module augmentation",        code: "declare module 'm' {}",   st: "na",      eff: "na",  phase: "",  notes: "Type-level only." },
   { name: "Ambient declarations",       code: "declare const x: number", st: "na",      eff: "na",  phase: "",  notes: "Type-level only." },
-  { name: "Access modifiers",           code: "public/private/protected",st: "na",      eff: "na",  phase: "",  notes: "Erased. GPU structs don't enforce access at runtime." },
-  { name: "readonly modifier",          code: "readonly x: number",      st: "na",      eff: "na",  phase: "",  notes: "Erased. Const correctness handled by C++ const." },
-  { name: "Definite assign assertion",  code: "x!: string",              st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+  { name: "Access modifiers",           code: "public/private/protected",st: "na",      eff: "na",  phase: "",  notes: "Erased by esbuild. GPU structs have no runtime access enforcement — all fields and methods are reachable from any call site. private/protected are TypeScript-only contracts for your editor and tsc; they disappear before SymmParser runs." },
+  { name: "readonly modifier",          code: "readonly x: number",      st: "na",      eff: "na",  phase: "",  notes: "Erased by esbuild. readonly is a TypeScript compile-time constraint — it does not make the field const in CUDA. If you need true immutability on GPU, do not mutate the field; Codegen does not insert guards." },
+  { name: "Definite assign assertion",  code: "x!: string",              st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. The ! tells TypeScript 'this property will be assigned before use, suppress the error'. SymmParser sees the field declaration without the assertion marker." },
   { name: "Index signatures",           code: "{ [key: string]: number }",st:"partial", eff: "m",   phase: "D", notes: "Partially supported via GpuObject. String key runtime lookup is O(n)." },
-  { name: "Type guards",                code: "function isStr(x): x is string",st:"done",eff:"na",phase:"",notes:"Erased (runtime: just the check expression)." },
-  { name: "Assertion functions",        code: "function assert(x): asserts x",st:"done",eff:"na",phase:"",notes:"Erased." },
+  { name: "Type guards",                code: "function isStr(x): x is string",st:"done",eff:"na",phase:"",notes:"Erased by esbuild. The ': x is string' return annotation is stripped — at runtime SymmParser sees a regular function returning a boolean. The guard predicate works as normal JS." },
+  { name: "Assertion functions",        code: "function assert(x): asserts x",st:"done",eff:"na",phase:"",notes:"Erased by esbuild. The 'asserts x' return annotation is stripped. At runtime the function runs its check and throws/returns normally — SymmParser sees a plain void function." },
   { name: "using / await using",        code: "using file = open(…)",    st: "partial", eff: "m",   phase: "F", notes: "Parser treats 'using' as 'const' — binding created. Symbol.dispose not called (GPU has no RAII/destructors)." },
-  { name: "Decorators (experimental)",  code: "@injectable class Foo {}",st: "missing", eff: "xl",  phase: "F", notes: "Class/method decorators compiled to wrapper functions. Stage 3 TC39 vs TS experimental differ." },
+  { name: "Decorators (experimental)",  code: "@injectable class Foo {}",st: "missing", eff: "xl",  phase: "F", notes: "Not yet implemented — @decorator syntax will cause a parse error. Implementation plan: emit decorator calls as __device__ wrapper functions around the class/method. Stage 3 TC39 decorators and legacy TS experimental decorators have different calling conventions and require separate handling." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
-{ cat: "TypeScript Utility Types", icon: "🛠️", rows: [
-  { name: "Partial<T>",                 code: "Partial<User>",           st: "done",    eff: "na",  phase: "",  notes: "Type-only. Erased." },
-  { name: "Required<T>",                code: "Required<Opts>",          st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Readonly<T>",                code: "Readonly<Obj>",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Record<K,V>",                code: "Record<string,number>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Pick<T,K>",                  code: "Pick<User,'id'|'name'>",  st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Omit<T,K>",                  code: "Omit<User,'password'>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Exclude/Extract",            code: "Exclude<A,B>",            st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "NonNullable<T>",             code: "NonNullable<T|null>",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Parameters/ReturnType",      code: "ReturnType<typeof fn>",   st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "InstanceType<T>",            code: "InstanceType<typeof Cls>",st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "Awaited<T>",                 code: "Awaited<Promise<T>>",     st: "done",    eff: "na",  phase: "",  notes: "Erased." },
-  { name: "NoInfer<T>",                 code: "NoInfer<T>",              st: "done",    eff: "na",  phase: "",  notes: "Erased (TS 5.4+)." },
-  { name: "Uppercase/Lowercase/Capitalize/Uncapitalize", code:"Uppercase<S>",st:"done",eff:"na",phase:"",notes:"Erased." },
-  { name: "ThisType<T>",                code: "ThisType<Ctx>",           st: "done",    eff: "na",  phase: "",  notes: "Erased." },
+{ cat: "TypeScript Utility Types", icon: "🛠️",
+  catNote: "All utility types live entirely in TypeScript's type system — they are compile-time transformations with no JavaScript output and no CUDA output. esbuild strips them in step 1 before SymmParser ever runs. Every entry here is ✅ Done because Symmetra accepts TypeScript source that uses them; they simply produce no runtime code. If you use <code>Partial&lt;User&gt;</code> in your code, SymmParser sees only the underlying object literal — the wrapper type is gone.",
+  rows: [
+  { name: "Partial<T>",                 code: "Partial<User>",           st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Makes all properties of T optional in the type system — runtime value is the same object with no structural change." },
+  { name: "Required<T>",                code: "Required<Opts>",          st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Makes all optional properties required in the type system only." },
+  { name: "Readonly<T>",                code: "Readonly<Obj>",           st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Marks all properties as readonly for the type-checker only — no const is emitted in CUDA." },
+  { name: "Record<K,V>",                code: "Record<string,number>",   st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Describes a key→value map type — at runtime the value is a plain GpuObject or Map." },
+  { name: "Pick<T,K>",                  code: "Pick<User,'id'|'name'>",  st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Selects a subset of T's keys for the type-checker. The runtime value is the full object — no projection happens." },
+  { name: "Omit<T,K>",                  code: "Omit<User,'password'>",   st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Excludes keys from T in the type system only — the runtime object still has all fields." },
+  { name: "Exclude/Extract",            code: "Exclude<A,B>",            st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Filters union type members at the type level — no runtime filtering." },
+  { name: "NonNullable<T>",             code: "NonNullable<T|null>",     st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Removes null/undefined from T in the type system. The runtime value is unchanged — no null-guard is inserted." },
+  { name: "Parameters/ReturnType",      code: "ReturnType<typeof fn>",   st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Extracts parameter or return types from a function type at compile time only." },
+  { name: "InstanceType<T>",            code: "InstanceType<typeof Cls>",st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Extracts the instance type of a constructor type — type-level only." },
+  { name: "Awaited<T>",                 code: "Awaited<Promise<T>>",     st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Unwraps a Promise type recursively at the type level — no runtime awaiting or unwrapping occurs." },
+  { name: "NoInfer<T>",                 code: "NoInfer<T>",              st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild (TS 5.4+). Prevents TypeScript from using this position to infer T — purely a type-inference hint." },
+  { name: "Uppercase/Lowercase/Capitalize/Uncapitalize", code:"Uppercase<S>",st:"done",eff:"na",phase:"",notes:"Erased by esbuild. Intrinsic string-manipulation types that transform string literal types at compile time — no string operations at runtime." },
+  { name: "ThisType<T>",                code: "ThisType<Ctx>",           st: "done",    eff: "na",  phase: "",  notes: "Erased by esbuild. Annotates the type of this inside an object literal — purely a type-system contract, no runtime impact." },
 ]},
 
 ]; // end DATA
@@ -616,12 +647,6 @@ function statusLabel(st) {
 }
 function statusClass(st) {
   return { done:'s-done', partial:'s-partial', missing:'s-missing', na:'s-na', cpu:'s-cpu' }[st] || '';
-}
-function effortHtml(e) {
-  if (e === 'na') return '<span style="color:var(--dim)">—</span>';
-  const cols = { xs:'var(--done)', s:'#8bcf4a', m:'var(--partial)', l:'var(--orange)', xl:'var(--missing)' };
-  const labels = { xs:'< 1 h', s:'½ day', m:'1–2 d', l:'3–5 d', xl:'1–2 w' };
-  return `<span class="effort-dot" style="background:${cols[e]}"></span>${labels[e] || e}`;
 }
 
 function render() {
@@ -651,10 +676,8 @@ function render() {
       <tr class="feat" data-st="${r.st}" data-name="${(r.name+(r.code||'')).toLowerCase()}" data-cat="${ci}">
         <td class="name">${r.name}${r.code ? `<br><code>${r.code.replace(/</g,'&lt;')}</code>`:''}` +
         `</td>
-        <td><span class="badge ${statusClass(r.st)}">${statusLabel(r.st)}</span></td>
-        <td class="effort">${effortHtml(r.eff)}</td>
-        <td class="phase">${r.phase ? 'Phase '+r.phase : ''}</td>
-        <td class="notes">${r.notes}</td>
+        <td style="width:10%;white-space:nowrap"><span class="badge ${statusClass(r.st)}">${statusLabel(r.st)}</span></td>
+        <td class="notes">${r.notes ? r.notes.replace(/</g,'&lt;') : ''}</td>
       </tr>`
     ).join('');
 
@@ -675,13 +698,12 @@ function render() {
         <span class="cat-toggle" id="tog-${ci}">▾</span>
       </div>
       <div class="cat-body" id="body-${ci}">
+        ${cat.catNote ? `<div class="cat-note">${cat.catNote}</div>` : ''}
         <table>
           <thead><tr>
-            <th style="width:30%">Feature / Example</th>
-            <th style="width:120px">Status</th>
-            <th style="width:90px">Effort</th>
-            <th style="width:80px">Phase</th>
-            <th>GPU Implementation Notes</th>
+            <th style="width:28%">Feature / Example</th>
+            <th style="width:10%">Status</th>
+            <th>Notes</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -712,7 +734,7 @@ function applyFilters() {
   let vis = 0, tot = 0;
   document.querySelectorAll('tr.feat').forEach(row => {
     const stMatch = currentFilter === 'all' || row.dataset.st === currentFilter;
-    const qMatch  = !q || row.dataset.name.includes(q) || row.querySelector('.notes')?.textContent.toLowerCase().includes(q);
+    const qMatch  = !q || row.dataset.name.includes(q) || row.querySelector('td.notes')?.textContent.toLowerCase().includes(q);
     const show = stMatch && qMatch;
     row.classList.toggle('hidden', !show);
     tot++;

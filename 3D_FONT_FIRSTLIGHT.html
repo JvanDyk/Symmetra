@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIRST LIGHT - 3D Font</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Arial', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px;
+        }
+
+        .text-3d {
+            font-size: 120px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            text-align: center;
+            line-height: 1.2;
+            margin: 40px 0;
+        }
+
+        /* 3D Effect - Main styling */
+        .text-3d-effect {
+            position: relative;
+            display: inline-block;
+            filter: drop-shadow(-3px -3px 0px rgba(255,255,255,0.1));
+        }
+
+        /* Create the 3D depth effect with multiple text shadows */
+        .text-3d {
+            color: #ffffff;
+            text-shadow:
+                /* Main shadows for 3D depth */
+                8px 8px 0px rgba(0, 0, 0, 0.4),
+                16px 16px 0px rgba(0, 0, 0, 0.3),
+                24px 24px 0px rgba(0, 0, 0, 0.2),
+                /* Right-side shadow for extra depth */
+                6px 0px 0px rgba(0, 0, 0, 0.3),
+                12px 0px 0px rgba(0, 0, 0, 0.2),
+                /* Bottom shadow */
+                0px 6px 0px rgba(0, 0, 0, 0.3),
+                0px 12px 0px rgba(0, 0, 0, 0.2),
+                /* Soften with blur */
+                10px 10px 20px rgba(0, 0, 0, 0.5);
+            transform: perspective(1200px) rotateX(2deg);
+            transition: all 0.3s ease;
+        }
+
+        .text-3d:hover {
+            text-shadow:
+                12px 12px 0px rgba(0, 0, 0, 0.5),
+                20px 20px 0px rgba(0, 0, 0, 0.4),
+                28px 28px 0px rgba(0, 0, 0, 0.3),
+                8px 0px 0px rgba(0, 0, 0, 0.4),
+                16px 0px 0px rgba(0, 0, 0, 0.3),
+                0px 8px 0px rgba(0, 0, 0, 0.4),
+                0px 16px 0px rgba(0, 0, 0, 0.3),
+                12px 12px 25px rgba(0, 0, 0, 0.6);
+            transform: perspective(1200px) rotateX(5deg) translateZ(10px);
+        }
+
+        /* SVG-based 3D letters */
+        svg {
+            filter: drop-shadow(8px 8px 0px rgba(0, 0, 0, 0.4))
+                    drop-shadow(16px 16px 0px rgba(0, 0, 0, 0.3))
+                    drop-shadow(24px 24px 0px rgba(0, 0, 0, 0.2));
+        }
+
+        .letter {
+            fill: white;
+            stroke: rgba(255, 255, 255, 0.1);
+            stroke-width: 0.5;
+        }
+
+        .letter-shadow {
+            fill: rgba(0, 0, 0, 0.3);
+            opacity: 0.8;
+        }
+
+        /* Demo Section */
+        .demo-section {
+            margin-top: 80px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h2 {
+            color: #ffffff;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .demo-text {
+            margin: 30px 0;
+            font-size: 80px;
+            color: white;
+            text-shadow:
+                8px 8px 0px rgba(0, 0, 0, 0.4),
+                16px 16px 0px rgba(0, 0, 0, 0.3),
+                24px 24px 0px rgba(0, 0, 0, 0.2),
+                6px 0px 0px rgba(0, 0, 0, 0.3),
+                12px 0px 0px rgba(0, 0, 0, 0.2),
+                0px 6px 0px rgba(0, 0, 0, 0.3),
+                0px 12px 0px rgba(0, 0, 0, 0.2),
+                10px 10px 20px rgba(0, 0, 0, 0.5);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            word-break: break-all;
+        }
+
+        .controls {
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        label {
+            color: #ffffff;
+            display: block;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        input, textarea {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        input::placeholder, textarea::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 12px 30px;
+            border-radius: 5px;
+            margin-top: 15px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .effect-slider {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .slider-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .info {
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 20px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Main Title -->
+        <div style="text-align: center;">
+            <div class="text-3d" id="mainText">FIRST LIGHT</div>
+        </div>
+
+        <!-- Demo Section -->
+        <div class="demo-section">
+            <h2>🎬 3D Font Generator</h2>
+
+            <div class="controls">
+                <label>Enter your text:</label>
+                <textarea id="textInput" placeholder="Type your text here...">FIRST LIGHT</textarea>
+
+                <button onclick="updateText()">Update Text</button>
+
+                <div class="effect-slider">
+                    <div class="slider-group">
+                        <label>Shadow Depth: <span id="shadowValue">24</span>px</label>
+                        <input type="range" id="shadowDepth" min="4" max="40" value="24" oninput="updateShadow()">
+                    </div>
+                    <div class="slider-group">
+                        <label>Font Size: <span id="sizeValue">80</span>px</label>
+                        <input type="range" id="fontSize" min="30" max="150" value="80" oninput="updateSize()">
+                    </div>
+                    <div class="slider-group">
+                        <label>Shadow Opacity: <span id="opacityValue">0.4</span></label>
+                        <input type="range" id="shadowOpacity" min="0.1" max="1" step="0.1" value="0.4" oninput="updateOpacity()">
+                    </div>
+                </div>
+
+                <div class="info">
+                    💡 <strong>How to use:</strong> Type your text above and adjust the sliders to customize the 3D effect.
+                    The effect works best with uppercase letters and bold fonts.
+                </div>
+            </div>
+
+            <div style="margin-top: 40px;">
+                <h2>Preview</h2>
+                <div class="demo-text" id="preview">FIRST LIGHT</div>
+            </div>
+
+            <div class="controls" style="margin-top: 40px;">
+                <h3 style="color: #ffffff; margin-bottom: 15px;">📋 CSS Code (Copy to use in your project)</h3>
+                <textarea id="cssCode" readonly style="font-size: 12px; height: 200px;"></textarea>
+                <button onclick="copyCss()">Copy CSS to Clipboard</button>
+            </div>
+
+            <div class="info" style="margin-top: 20px;">
+                <strong>✨ Font Features:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>100% CSS & text-shadow based (no image dependencies)</li>
+                    <li>Smooth hover animations with perspective</li>
+                    <li>Fully customizable shadow, depth, and opacity</li>
+                    <li>Works on all modern browsers</li>
+                    <li>Scalable to any screen size</li>
+                    <li>Lightweight and performant</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateText() {
+            const text = document.getElementById('textInput').value || 'FIRST LIGHT';
+            const preview = document.getElementById('preview');
+            const mainText = document.getElementById('mainText');
+
+            preview.textContent = text.toUpperCase();
+            mainText.textContent = text.toUpperCase();
+            updateCssCode();
+        }
+
+        function updateShadow() {
+            const depth = document.getElementById('shadowDepth').value;
+            document.getElementById('shadowValue').textContent = depth;
+            applyShadow();
+            updateCssCode();
+        }
+
+        function updateSize() {
+            const size = document.getElementById('fontSize').value;
+            document.getElementById('sizeValue').textContent = size;
+            document.getElementById('preview').style.fontSize = size + 'px';
+            updateCssCode();
+        }
+
+        function updateOpacity() {
+            const opacity = document.getElementById('shadowOpacity').value;
+            document.getElementById('opacityValue').textContent = opacity;
+            applyShadow();
+            updateCssCode();
+        }
+
+        function applyShadow() {
+            const depth = parseInt(document.getElementById('shadowDepth').value);
+            const opacity = parseFloat(document.getElementById('shadowOpacity').value);
+
+            const shadow = `
+                ${depth}px ${depth}px 0px rgba(0, 0, 0, ${opacity}),
+                ${depth * 2}px ${depth * 2}px 0px rgba(0, 0, 0, ${opacity * 0.75}),
+                ${depth * 3}px ${depth * 3}px 0px rgba(0, 0, 0, ${opacity * 0.5}),
+                ${depth * 0.75}px 0px 0px rgba(0, 0, 0, ${opacity * 0.75}),
+                ${depth * 1.5}px 0px 0px rgba(0, 0, 0, ${opacity * 0.5}),
+                0px ${depth * 0.75}px 0px rgba(0, 0, 0, ${opacity * 0.75}),
+                0px ${depth * 1.5}px 0px rgba(0, 0, 0, ${opacity * 0.5}),
+                ${depth * 1.25}px ${depth * 1.25}px ${depth * 2.5}px rgba(0, 0, 0, ${opacity + 0.1})
+            `;
+
+            document.getElementById('preview').style.textShadow = shadow;
+            document.getElementById('mainText').style.textShadow = shadow;
+        }
+
+        function updateCssCode() {
+            const depth = parseInt(document.getElementById('shadowDepth').value);
+            const opacity = parseFloat(document.getElementById('shadowOpacity').value);
+            const size = document.getElementById('fontSize').value;
+
+            const cssCode = `.text-3d {
+    font-size: ${size}px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 8px;
+    color: #ffffff;
+    text-shadow:
+        ${depth}px ${depth}px 0px rgba(0, 0, 0, ${opacity}),
+        ${depth * 2}px ${depth * 2}px 0px rgba(0, 0, 0, ${(opacity * 0.75).toFixed(2)}),
+        ${depth * 3}px ${depth * 3}px 0px rgba(0, 0, 0, ${(opacity * 0.5).toFixed(2)}),
+        ${depth * 0.75}px 0px 0px rgba(0, 0, 0, ${(opacity * 0.75).toFixed(2)}),
+        ${depth * 1.5}px 0px 0px rgba(0, 0, 0, ${(opacity * 0.5).toFixed(2)}),
+        0px ${depth * 0.75}px 0px rgba(0, 0, 0, ${(opacity * 0.75).toFixed(2)}),
+        0px ${depth * 1.5}px 0px rgba(0, 0, 0, ${(opacity * 0.5).toFixed(2)}),
+        ${depth * 1.25}px ${depth * 1.25}px ${(depth * 2.5).toFixed(0)}px rgba(0, 0, 0, ${(opacity + 0.1).toFixed(2)});
+    transform: perspective(1200px) rotateX(2deg);
+    transition: all 0.3s ease;
+}
+
+.text-3d:hover {
+    text-shadow:
+        ${depth * 1.5}px ${depth * 1.5}px 0px rgba(0, 0, 0, ${(opacity + 0.1).toFixed(2)}),
+        ${depth * 2.5}px ${depth * 2.5}px 0px rgba(0, 0, 0, ${(opacity * 0.9).toFixed(2)}),
+        ${depth * 3.5}px ${depth * 3.5}px 0px rgba(0, 0, 0, ${(opacity * 0.7).toFixed(2)}),
+        ${depth}px 0px 0px rgba(0, 0, 0, ${(opacity * 0.9).toFixed(2)}),
+        ${depth * 2}px 0px 0px rgba(0, 0, 0, ${(opacity * 0.7).toFixed(2)}),
+        0px ${depth}px 0px rgba(0, 0, 0, ${(opacity * 0.9).toFixed(2)}),
+        0px ${depth * 2}px 0px rgba(0, 0, 0, ${(opacity * 0.7).toFixed(2)}),
+        ${depth * 1.5}px ${depth * 1.5}px ${(depth * 3).toFixed(0)}px rgba(0, 0, 0, ${(opacity + 0.2).toFixed(2)});
+    transform: perspective(1200px) rotateX(5deg) translateZ(10px);
+}`;
+
+            document.getElementById('cssCode').value = cssCode;
+        }
+
+        function copyCss() {
+            const cssCode = document.getElementById('cssCode');
+            cssCode.select();
+            document.execCommand('copy');
+            alert('CSS code copied to clipboard! 📋');
+        }
+
+        // Initialize
+        updateCssCode();
+    </script>
+</body>
+</html>

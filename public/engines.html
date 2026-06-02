@@ -60,38 +60,15 @@
     }
 
     .nav-brand {
-      position: relative;
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       text-decoration: none;
-      line-height: 1;
-      padding-bottom: 0.55rem; /* room for Script below */
+      flex-shrink: 0;
     }
 
-    .nav-brand .b-main {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.9rem;
-      font-weight: 600;
-      letter-spacing: 2px;
-      background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      display: block;
-    }
-
-    .nav-brand .b-script {
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-style: italic;
-      font-weight: 700;
-      font-size: 0.88rem;
-      color: #ffffff;
-      position: absolute;
-      bottom: 0;
-      right: -3px;
-      transform: rotate(-14deg);
-      transform-origin: left bottom;
-      white-space: nowrap;
-      line-height: 1;
+    .nav-brand img {
+      height: 38px;
+      filter: drop-shadow(0 0 14px rgba(124, 111, 255, 0.22));
     }
 
     .nav-links {
@@ -511,6 +488,67 @@
 
     .hidden { display: none !important; }
 
+    /* ── Install Snippet ─────────────────────────────────────────────────── */
+    .install-snippet {
+      margin-top: 0.2rem;
+      border: 1px solid rgba(116, 152, 255, 0.14);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    .snippet-tabs {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid rgba(116, 152, 255, 0.1);
+      padding: 0 0.5rem;
+      gap: 0.1rem;
+    }
+
+    .snippet-tab {
+      padding: 0.38rem 0.7rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted2);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .snippet-tab.active { color: var(--accent-b); border-bottom-color: var(--accent-b); }
+    .snippet-tab:hover:not(.active) { color: var(--muted); }
+
+    .snippet-copy-btn {
+      margin-left: auto;
+      padding: 0.28rem 0.55rem;
+      font-size: 0.67rem;
+      font-family: 'IBM Plex Mono', monospace;
+      background: rgba(116, 152, 255, 0.08);
+      border: 1px solid rgba(116, 152, 255, 0.18);
+      border-radius: 4px;
+      color: var(--muted2);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .snippet-copy-btn:hover { background: rgba(116, 152, 255, 0.18); color: var(--text); }
+
+    .snippet-code {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.69rem;
+      line-height: 1.6;
+      color: #c9d1d9;
+      background: rgba(4, 7, 11, 0.85);
+      white-space: pre;
+      overflow-x: auto;
+    }
+
     @media (max-width: 600px) {
       .hero h1 { font-size: 1.5rem; }
       .engines-grid { grid-template-columns: 1fr; }
@@ -524,8 +562,7 @@
 <header class="header">
   <div class="header-inner">
     <a class="nav-brand" href="/">
-      <span class="b-main">SYMMETRA</span>
-      <span class="b-script">Script</span>
+      <img src="assets/logo.svg" alt="Symmetra Script">
     </a>
     <nav class="nav-links">
       <a href="/">Home</a>
@@ -590,7 +627,7 @@
 
 <footer>
   All benchmarks measured on NVIDIA RTX 5070 under sustained load · May 2026 ·
-  <a href="/">symmetra.io</a>
+  <a href="/">symmscript.com</a>
 </footer>
 
 <div id="toast"></div>
@@ -696,10 +733,11 @@ function card(e) {
   const badge     = e.available
     ? `<span class="badge badge-free">Free</span>`
     : `<span class="badge badge-coming-soon">Coming Soon</span>`;
+  const eid = esc(e.id);
 
   function dlBtn(platform, label, cls) {
     return `<button class="btn ${cls} btn-dl"
-              data-engine="${e.id}"
+              data-engine="${eid}"
               data-platform="${platform}"
               data-label="${label}">${label}</button>`;
   }
@@ -721,6 +759,53 @@ function card(e) {
       </div>
     </div>`
   : `<button class="btn btn-coming-soon" disabled>🔒 Coming Soon</button>`;
+
+  let snippet = '';
+  if (e.available) {
+    const slug = (e.identifier || e.id).toLowerCase();
+    const ver  = e.version || '1.0.0';
+    const name = e.displayName || e.name;
+
+    const winLines = [
+      `# ${name} — Windows x64`,
+      ``,
+      `# Option A: .msi installer (recommended)`,
+      `# Run the downloaded .msi file and follow the wizard`,
+      `# Then open a new terminal to verify:`,
+      `sym.exe doctor`,
+      ``,
+      `# Option B: .zip portable`,
+      `Expand-Archive ${slug}-v${ver}-windows-x64.zip -DestinationPath .\\${slug}`,
+      `.\\${slug}\\sym.exe doctor`,
+    ].join('\n');
+
+    const linuxLines = [
+      `# ${name} — Linux x64`,
+      ``,
+      `# Ubuntu / Debian (.deb)`,
+      `sudo dpkg -i ${slug}-v${ver}-linux-x64.deb`,
+      `sym doctor`,
+      ``,
+      `# RHEL / Fedora (.rpm)`,
+      `sudo rpm -i ${slug}-v${ver}-linux-x64.rpm`,
+      `sym doctor`,
+      ``,
+      `# Portable (.tar.gz)`,
+      `tar -xzf ${slug}-v${ver}-linux-x64.tar.gz`,
+      `cd ${slug} && ./sym doctor`,
+    ].join('\n');
+
+    snippet = `
+    <div class="install-snippet" id="snippet-${eid}">
+      <div class="snippet-tabs">
+        <button class="snippet-tab active" data-snip="${eid}" data-os="win">Windows</button>
+        <button class="snippet-tab"        data-snip="${eid}" data-os="linux">Linux</button>
+        <button class="snippet-copy-btn"   data-snip="${eid}">Copy</button>
+      </div>
+      <pre class="snippet-code" id="snip-win-${eid}">${esc(winLines)}</pre>
+      <pre class="snippet-code hidden" id="snip-linux-${eid}">${esc(linuxLines)}</pre>
+    </div>`;
+  }
 
   return `
     <div class="engine-card${e.available ? '' : ' locked'}">
@@ -751,6 +836,7 @@ function card(e) {
       </div>
       <p class="engine-desc">${esc(e.description)}</p>
       <div class="card-actions">${actions}</div>
+      ${snippet}
     </div>`;
 }
 
@@ -786,6 +872,10 @@ async function handleDownload(e) {
     btn.textContent = '✓ Downloading';
     setTimeout(() => { btn.disabled = false; btn.textContent = label; }, 3500);
 
+    // Auto-switch snippet tab to match clicked platform
+    const os = platform.startsWith('windows') ? 'win' : 'linux';
+    switchSnippet(engineId, os);
+
   } catch (err) {
     console.error(err);
     toast(err?.message ?? 'Download failed — please try again.', 'error');
@@ -810,6 +900,32 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Snippet tabs & copy ───────────────────────────────────────────────────
+function switchSnippet(engineId, os) {
+  document.querySelectorAll(`.snippet-tab[data-snip="${engineId}"]`).forEach(t => {
+    t.classList.toggle('active', t.dataset.os === os);
+  });
+  const winEl   = document.getElementById(`snip-win-${engineId}`);
+  const linuxEl = document.getElementById(`snip-linux-${engineId}`);
+  if (winEl)   winEl.classList.toggle('hidden', os !== 'win');
+  if (linuxEl) linuxEl.classList.toggle('hidden', os !== 'linux');
+}
+
+document.addEventListener('click', ev => {
+  if (ev.target.matches('.snippet-tab')) {
+    switchSnippet(ev.target.dataset.snip, ev.target.dataset.os);
+  }
+  if (ev.target.matches('.snippet-copy-btn')) {
+    const eid = ev.target.dataset.snip;
+    const active = document.querySelector(`#snippet-${eid} .snippet-code:not(.hidden)`);
+    if (!active) return;
+    navigator.clipboard.writeText(active.textContent).then(() => {
+      ev.target.textContent = 'Copied!';
+      setTimeout(() => { ev.target.textContent = 'Copy'; }, 1600);
+    });
+  }
+});
 
 // ── Newsletter subscribe ──────────────────────────────────────────────────
 document.getElementById('newsletter-form').addEventListener('submit', async (e) => {

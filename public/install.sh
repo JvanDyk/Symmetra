@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Symmetra installer for Linux
-# Usage: curl -fsSL https://symmetra.io/install.sh | bash
+# Usage: curl -fsSL https://symmscript.com/install.sh | bash
 
 set -euo pipefail
 
@@ -105,7 +105,7 @@ if [[ "$INSTALLED" != "true" ]]; then
         echo "    2. Place binary at: $INSTALL_DIR/sym"
         echo "    3. Run: chmod +x $INSTALL_DIR/sym"
         echo ""
-        echo "  Docs: https://symmetra.io/docs/getting-started"
+        echo "  Docs: https://symmscript.com/docs/getting-started"
         echo ""
         exit 1
     fi
@@ -145,5 +145,5 @@ echo "  sym doctor          # verify GPU + CUDA driver"
 echo "  sym ./server.ts     # compile and launch"
 echo "  sym check           # audit package.json compatibility"
 echo ""
-echo "  Docs: https://symmetra.io/docs/getting-started"
+echo "  Docs: https://symmscript.com/docs/getting-started"
 echo ""

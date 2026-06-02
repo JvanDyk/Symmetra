@@ -55,25 +55,33 @@ ldd --version
 
 ---
 
-## Install
+## Download an Engine
 
-**Windows — script:**
+Symmetra engines are distributed as pre-built packages from the **Engine Catalog** at
+[symmscript.com/engines](https://symmscript.com/engines).
+
+Select your engine, choose your platform, and download:
+
+| Platform | Formats available |
+|----------|-------------------|
+| Windows x64 | `.msi` installer · `.zip` portable |
+| Linux x64   | `.deb` (Ubuntu/Debian) · `.rpm` (RHEL/Fedora) · `.tar.gz` (universal) |
+
+**After downloading — Windows (.zip portable):**
 ```powershell
-iwr https://symmetra.dev/install.ps1 | iex
+Expand-Archive rule60-v1.0.0-windows-x64.zip -DestinationPath .\rule60
+.\rule60\sym.exe doctor
 ```
 
-**Windows — winget:**
-```powershell
-winget install symmetra.sym
-```
-
-**Linux:**
+**After downloading — Linux (.tar.gz):**
 ```bash
-curl -fsSL https://symmetra.dev/install.sh | bash
+tar -xzf rule60-v1.0.0-linux-x64.tar.gz
+cd rule60 && ./sym doctor
 ```
 
-After installing, open a **new terminal** (the PATH update requires a fresh shell):
+**After downloading — Linux (.deb):**
 ```bash
+sudo dpkg -i rule60-v1.0.0-linux-x64.deb
 sym doctor
 ```
 

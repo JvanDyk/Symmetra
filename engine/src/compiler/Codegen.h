@@ -66,6 +66,7 @@ private:
     bool _inGeneratorBody = false;          // true while emitting a generator function body
     std::set<std::string> _ctxBodyVars;     // vars that came from ctx.json() body reads
     std::set<std::string> _jsonParseVars;   // vars that hold JSON.parse() results
+    std::set<std::string> _iterableVars;    // vars with __sym_iterator__: Map, Set, new Map/Set
     std::set<std::string> _flatPrefixes;    // enum/namespace names whose members are Prefix_Member
 
     // Route context — set before emitting each handler; used for param extraction.

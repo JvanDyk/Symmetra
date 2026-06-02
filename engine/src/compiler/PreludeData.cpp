@@ -14,10 +14,19 @@ typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
 
 // ── Forward declarations (prevent "identifier undefined" errors) ──────────────
-__device__ long long _symm_now_ms();
+// _symm_now_ms is a __device__ variable seeded by NvrtcCompiler via cuModuleGetGlobal
+// (was formerly a function returning 0 — changed so cuModuleGetGlobal can locate it)
 __device__ bool symm_regex_test_i(const char* pattern, const char* str);
 __device__ bool symm_regex_test_m(const char* pattern, const char* str);
 __device__ bool symm_regex_test(const char* pattern, const char* str);
+__device__ int  symm_regex_match_at(const char* pattern, const char* str, const char* str_start, bool dotall);
+__device__ int  symm_regex_exec(const char* pattern, const char* str);
+__device__ int  symm_regex_exec_i(const char* pattern, const char* str);
+__device__ const char* symm_regex_match(const char* pattern, const char* str);
+__device__ const char* symm_str_match_all_full(const char* pattern, const char* str);
+__device__ const char* symm_str_replace_all(const char* s, const char* from, const char* to);
+__device__ const char* symm_str_replace(const char* s, const char* from, const char* to);
+__device__ int symm_write_int(char* buf, int v);
 __device__ bool symm_str_eq(const char* a, const char* b);
 __device__ const char* symm_sha256_hex(const char* input);
 __device__ int strcmp(const char* a, const char* b);
@@ -64,7 +73,11 @@ struct Date {
     long long _ms;
     __device__ Date() : _ms(0) {}
     __device__ Date(long long ms) : _ms(ms) {}
-    __device__ static long long now() { return _symm_now_ms(); }
+    // Component constructor: new Date(year, month, day[, hours, minutes, seconds, ms])
+    // month is 0-based (JS spec)
+    __device__ Date(int Y, int Mo, int D, int h=0, int mi=0, int s=0, int ms3=0)
+        : _ms(Date::_to_ms(Y, Mo+1, D, h, mi, s, ms3)) {}
+    __device__ static long long now() { return (long long)_symm_now_ms; }
     __device__ long long getTime() const { return _ms; }
 
     // Calendar arithmetic from Unix epoch (ms since 1970-01-01T00:00:00Z)
@@ -116,6 +129,109 @@ struct Date {
     __device__ int getMilliseconds() const { return (int)(_ms % 1000LL); }
     __device__ int getTimezoneOffset() const { return 0; } // UTC
 
+    // ── Setter helpers ────────────────────────────────────────────────────────
+    // Converts calendar components to Unix epoch milliseconds (Fliegel-Van Flandern)
+    __device__ static long long _to_ms(int Y, int Mo, int D, int h, int mi, int s, int ms3) {
+        long long a  = (14 - Mo) / 12;
+        long long yr = (long long)Y + 4800 - a;
+        long long mf = Mo + 12*a - 3;
+        long long jdn = D + (153*mf+2)/5 + 365*yr + yr/4 - yr/100 + yr/400 - 32045;
+        return (jdn - 2440588LL)*86400000LL + (long long)h*3600000LL
+             + (long long)mi*60000LL + (long long)s*1000LL + ms3;
+    }
+    __device__ long long setTime(long long ms)   { _ms = ms; return _ms; }
+    __device__ long long setMilliseconds(int ms3){ _ms = (_ms/1000LL)*1000LL + ms3; return _ms; }
+    __device__ long long setSeconds(int s)       {
+        _ms = _ms - (long long)getSeconds()*1000LL - getMilliseconds()
+            + (long long)s*1000LL;
+        return _ms;
+    }
+    __device__ long long setMinutes(int m)       {
+        _ms = _ms - (long long)getMinutes()*60000LL - (long long)getSeconds()*1000LL - getMilliseconds()
+            + (long long)m*60000LL;
+        return _ms;
+    }
+    __device__ long long setHours(int h)         {
+        long long day_ms = (_ms / 86400000LL) * 86400000LL;
+        _ms = day_ms + (long long)h*3600000LL + (long long)getMinutes()*60000LL
+            + (long long)getSeconds()*1000LL + getMilliseconds();
+        return _ms;
+    }
+    __device__ long long setDate(int d)          {
+        _ms = _to_ms(getFullYear(), getMonth()+1, d, getHours(), getMinutes(), getSeconds(), getMilliseconds());
+        return _ms;
+    }
+    __device__ long long setMonth(int m)         { // 0-based
+        _ms = _to_ms(getFullYear(), m+1, getDate(), getHours(), getMinutes(), getSeconds(), getMilliseconds());
+        return _ms;
+    }
+    __device__ long long setFullYear(int y)      {
+        _ms = _to_ms(y, getMonth()+1, getDate(), getHours(), getMinutes(), getSeconds(), getMilliseconds());
+        return _ms;
+    }
+    __device__ long long setFullYear(int y, int m, int d) {
+        _ms = _to_ms(y, m+1, d, getHours(), getMinutes(), getSeconds(), getMilliseconds());
+        return _ms;
+    }
+
+    // toUTCString / toDateString
+    __device__ const char* toUTCString() const {
+        // RFC 7231: "Mon, 15 Jan 2024 12:00:00 GMT"
+        static const char* _days[]   = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+        static const char* _months[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                        "Jul","Aug","Sep","Oct","Nov","Dec"};
+        static char buf[40];
+        int wd = getDay(), mo = getMonth(), d = getDate(), y = getFullYear();
+        int h  = getHours(), mi = getMinutes(), s = getSeconds();
+        int p = 0;
+        const char* ds = _days[wd < 7 ? wd : 0];
+        const char* ms = _months[mo < 12 ? mo : 0];
+        for (int i = 0; ds[i]; i++) buf[p++] = ds[i];
+        buf[p++] = ','; buf[p++] = ' ';
+        buf[p++] = '0' + d/10; buf[p++] = '0' + d%10; buf[p++] = ' ';
+        for (int i = 0; ms[i]; i++) buf[p++] = ms[i];
+        buf[p++] = ' ';
+        buf[p++] = '0'+y/1000; buf[p++] = '0'+(y/100)%10; buf[p++] = '0'+(y/10)%10; buf[p++] = '0'+y%10;
+        buf[p++] = ' ';
+        buf[p++] = '0'+h/10; buf[p++] = '0'+h%10; buf[p++] = ':';
+        buf[p++] = '0'+mi/10; buf[p++] = '0'+mi%10; buf[p++] = ':';
+        buf[p++] = '0'+s/10; buf[p++] = '0'+s%10;
+        const char* gmt = " GMT"; for (int i = 0; gmt[i]; i++) buf[p++] = gmt[i];
+        buf[p] = 0;
+        return buf;
+    }
+    __device__ const char* toDateString() const {
+        // "Mon Jan 15 2024"
+        static const char* _days[]   = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+        static const char* _months[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                                        "Jul","Aug","Sep","Oct","Nov","Dec"};
+        static char buf[24];
+        int wd = getDay(), mo = getMonth(), d = getDate(), y = getFullYear();
+        int p = 0;
+        const char* ds = _days[wd < 7 ? wd : 0];
+        const char* ms = _months[mo < 12 ? mo : 0];
+        for (int i = 0; ds[i]; i++) buf[p++] = ds[i];
+        buf[p++] = ' ';
+        for (int i = 0; ms[i]; i++) buf[p++] = ms[i];
+        buf[p++] = ' ';
+        buf[p++] = '0'+d/10; buf[p++] = '0'+d%10; buf[p++] = ' ';
+        buf[p++] = '0'+y/1000; buf[p++] = '0'+(y/100)%10; buf[p++] = '0'+(y/10)%10; buf[p++] = '0'+y%10;
+        buf[p] = 0;
+        return buf;
+    }
+    __device__ const char* toTimeString() const {
+        // "12:00:00 GMT+0000"
+        static char buf[24];
+        int h = getHours(), mi = getMinutes(), s = getSeconds();
+        int p = 0;
+        buf[p++] = '0'+h/10; buf[p++] = '0'+h%10; buf[p++] = ':';
+        buf[p++] = '0'+mi/10; buf[p++] = '0'+mi%10; buf[p++] = ':';
+        buf[p++] = '0'+s/10; buf[p++] = '0'+s%10;
+        const char* tz = " GMT+0000"; for (int i = 0; tz[i]; i++) buf[p++] = tz[i];
+        buf[p] = 0;
+        return buf;
+    }
+
     // toISOString → "YYYY-MM-DDTHH:mm:ss.sssZ"
     __device__ const char* toISOString() const {
         static char buf[32];
@@ -132,7 +248,9 @@ struct Date {
         buf[23]='Z'; buf[24]=0;
         return buf;
     }
-    __device__ const char* toLocaleDateString() const { return toISOString(); }
+    __device__ const char* toLocaleDateString()  const { return toDateString(); } // locale data N/A on GPU
+    __device__ const char* toLocaleTimeString()  const { return toTimeString(); }
+    __device__ const char* toLocaleString()      const { return toISOString(); }
     __device__ const char* toString()            const { return toISOString(); }
 
     // Date.parse — accepts "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm:ss[.sss]Z"
@@ -201,12 +319,46 @@ struct RegExp {
         if (!pattern || !str) return false;
         bool ci = _has_flag('i');
         bool ml = _has_flag('m');
+        bool da = _has_flag('s');
         if (ci) return symm_regex_test_i(pattern, str);
         if (ml) return symm_regex_test_m(pattern, str);
+        if (da) {
+            // dotAll: use NFA engine with dotall=true
+            for (int i = 0; str[i]; i++)
+                if (symm_regex_match_at(pattern, str+i, str, true) >= 0) return true;
+            return symm_regex_match_at(pattern, str, str, true) >= 0;
+        }
         return symm_regex_test(pattern, str);
+    }
+    // exec(str) → first match substring, or nullptr on no match
+    __device__ const char* exec(const char* str) const {
+        if (!pattern || !str) return nullptr;
+        bool ci = _has_flag('i');
+        bool da = _has_flag('s');
+        int idx;
+        if (ci)      idx = symm_regex_exec_i(pattern, str);
+        else if (da) {
+            idx = -1;
+            for (int i = 0; str[i]; i++)
+                if (symm_regex_match_at(pattern, str+i, str, true) >= 0) { idx = i; break; }
+        } else       idx = symm_regex_exec(pattern, str);
+        if (idx < 0) return nullptr;
+        return symm_regex_match(pattern, str + idx);
+    }
+    // match(str) → same as exec for non-global; full match list for /g
+    __device__ const char* match(const char* str) const {
+        if (!pattern || !str) return nullptr;
+        if (_has_flag('g')) return symm_str_match_all_full(pattern, str);
+        return exec(str);
+    }
+    // matchAll(str) → all match positions as JSON array
+    __device__ const char* matchAll(const char* str) const {
+        if (!pattern || !str) return "[]";
+        return symm_str_match_all_full(pattern, str);
     }
     // .source and .flags properties
     __device__ const char* source() const { return pattern ? pattern : ""; }
+    __device__ const char* getFlags() const { return flags ? flags : ""; }
 };
 
 // Case-insensitive regex test helper
@@ -231,8 +383,9 @@ __device__ bool symm_regex_test_i(const char* pattern, const char* str) {
 
 // ── GPU-side utility functions ─────────────────────────────────────────────────
 
-__device__ long long _symm_now_ms() { return 0; }
-__device__ long long _symm_start_ms = 0;
+// Seeded by NvrtcCompiler via cuModuleGetGlobal("_symm_now_ms") + cuMemcpyHtoD
+__device__ unsigned long long _symm_now_ms   = 0;
+__device__ unsigned long long _symm_start_ms = 0;
 
 __device__ int symm_strlen(const char* s) {
     int n = 0;
@@ -570,6 +723,23 @@ __device__ const char* symm_str_match_all_full(const char* pattern, const char* 
 __device__ const char* symm_str_match_all(const char* s, const char* pattern) {
     return symm_str_match_all_full(pattern, s);
 }
+// RegExp overloads — called when a regex literal or variable is used as the pattern arg
+__device__ const char* symm_str_match_all(const char* s, const RegExp& re) {
+    return re.matchAll(s);
+}
+__device__ int symm_str_index_of(const char* s, const RegExp& re) {
+    // str.search(re) → first match position
+    return symm_regex_exec(re.pattern, s);
+}
+__device__ const char* symm_str_replace(const char* s, const RegExp& re, const char* to) {
+    if (!s || !re.pattern || !to) return s;
+    // global flag → replace all; otherwise replace first only
+    if (re._has_flag('g')) return symm_str_replace_all(s, re.pattern, to);
+    return symm_str_replace(s, re.pattern, to);
+}
+__device__ const char* symm_str_replace_all(const char* s, const RegExp& re, const char* to) {
+    return symm_str_replace_all(s, re.pattern, to);
+}
 
 __device__ const char* symm_str_replace(const char* s, const char* from, const char* to) {
     if (!s || !from || !to) return s;
@@ -793,15 +963,71 @@ __device__ const char* symm_str_split(const char* s, const char* delim) {
         for (int j = 0; j < len; j++) {
             if (s[i + j] != delim[j]) { match = false; break; }
         }
-        if (match && len > 0) {
-            buf[pos++] = ',';
-            i += len;
-        } else {
-            buf[pos++] = s[i++];
-        }
+        if (match && len > 0) { buf[pos++] = ','; i += len; }
+        else buf[pos++] = s[i++];
     }
     buf[pos] = '\0';
     return buf;
+}
+
+// ── _StrParts: iterable result of str.split(sep) ─────────────────────────────
+// Supports for-of, [i] index access, .forEach(), and .length().
+// str.split(sep) is dispatched to symm_str_split_parts(str, sep) by Codegen.
+struct _StrParts {
+    static const int MAX = 64;
+    char _d[MAX][64];   // up to 64 parts, each up to 63 chars
+    int _n;
+    __device__ const char* operator[](int i) const {
+        if (i < 0) i += _n;
+        return (i >= 0 && i < _n) ? _d[i] : "";
+    }
+    __device__ int length() const { return _n; }
+    // Iterator protocol — enables for (const x of str.split(','))
+    struct _Iter {
+        const _StrParts* _p; int _i;
+        struct _Next { const char* value; bool done; };
+        __device__ _Next next() {
+            if (_i >= _p->_n) return {nullptr, true};
+            return {_p->_d[_i++], false};
+        }
+        __device__ _Iter& __sym_iterator__() { return *this; }
+    };
+    __device__ _Iter __sym_iterator__() const { return {this, 0}; }
+    template<typename Fn>
+    __device__ void forEach(Fn fn) const { for (int i = 0; i < _n; i++) fn(_d[i]); }
+    // map/filter/join support
+    __device__ const char* join(const char* sep) const {
+        static char buf[512]; int pos = 0;
+        for (int i = 0; i < _n && pos < 500; i++) {
+            if (i && sep) { for (int j = 0; sep[j] && pos < 500; j++) buf[pos++] = sep[j]; }
+            for (int j = 0; _d[i][j] && pos < 500; j++) buf[pos++] = _d[i][j];
+        }
+        buf[pos] = '\0'; return buf;
+    }
+};
+__device__ _StrParts symm_str_split_parts(const char* s, const char* sep) {
+    _StrParts r; r._n = 0;
+    if (!s) { r._d[0][0] = '\0'; r._n = 1; return r; }
+    int dl = (sep && sep[0]) ? symm_strlen(sep) : 1;
+    int i = 0, start = 0;
+    while (s[i] && r._n < _StrParts::MAX - 1) {
+        bool m = true;
+        if (!sep || !sep[0]) { // split on every char
+            if (s[i]) { r._d[r._n][0] = s[i]; r._d[r._n][1] = '\0'; r._n++; i++; continue; }
+            break;
+        }
+        for (int k = 0; k < dl; k++) if (s[i+k] != sep[k]) { m = false; break; }
+        if (m) {
+            int plen = 0;
+            for (int k = start; k < i && plen < 63; k++) r._d[r._n][plen++] = s[k];
+            r._d[r._n++][plen] = '\0'; start = i + dl; i += dl;
+        } else i++;
+    }
+    // Last part
+    int plen = 0;
+    for (int k = start; s[k] && plen < 63; k++) r._d[r._n][plen++] = s[k];
+    r._d[r._n++][plen] = '\0';
+    return r;
 }
 
 __device__ const char* symm_str_repeat(const char* s, int count) {
@@ -985,9 +1211,25 @@ struct RangeError : Error {
     __device__ RangeError(const char* m = "") : Error(m) {}
 };
 
+// Iterator for Map — returned by map.__sym_iterator__()
+// Supports for-of and C++17 structured bindings: for (const [k,v] of map)
+struct _MapIter {
+    struct Entry { const char* k; float v; };
+    const Entry* _e; int _n; int _pos;
+    struct _Next { Entry value; bool done; };
+    __device__ _Next next() {
+        if (_pos >= _n) return {{"", 0.f}, true};
+        return {_e[_pos++], false};
+    }
+    __device__ _MapIter& __sym_iterator__() { return *this; }
+};
+
 struct Map {
     struct Entry { const char* k; float v; };
     Entry _e[64]; int _n = 0;
+
+    // Iterator protocol — enables for (const [k,v] of map)
+    __device__ _MapIter __sym_iterator__() const { return {(const _MapIter::Entry*)_e, _n, 0}; }
 
     // String-key set/get/has
     __device__ void set(const char* k, float v) {
@@ -1049,6 +1291,10 @@ struct Map {
 
     __device__ void clear() { _n = 0; }
     __device__ int size() const { return _n; }
+    // Alias for delete() — "delete" is a C++ keyword so Codegen emits _delete_()
+    __device__ bool _delete_(const char* k) { return delete_key(k); }
+    __device__ bool _delete_(int k)         { return delete_key(k); }
+    __device__ bool _delete_(float k)       { return delete_key((int)k); }
     __device__ bool delete_key(const char* k) {
         for (int i=0;i<_n;i++) {
             if (strcmp(_e[i].k,k)==0) {
@@ -1106,18 +1352,40 @@ struct Map {
     }
 };
 
-// ── Array method stubs ──────────────────────────────────────────────────────────
-template<typename T> __device__ void symm_arr_map(T* dst, const T* src, int len) {
-    for (int i = 0; i < len; i++) dst[i] = src[i];
+// ── Array functional methods ─────────────────────────────────────────────────────
+// Codegen calls these as: symm_arr_map(arr, arr_len, fn)
+// The returned pointer shares a static buffer — use immediately or copy the result.
+
+// arr.map(fn) → apply fn to each element, return new array of same length
+template<typename T, typename Fn>
+__device__ T* symm_arr_map(const T* arr, int len, Fn fn) {
+    static T _map_buf[256];
+    for (int i = 0; i < len && i < 256; i++) _map_buf[i] = fn(arr[i]);
+    return _map_buf;
 }
-template<typename T> __device__ void symm_arr_filter(T* dst, const T* src, int len) {
-    for (int i = 0; i < len; i++) dst[i] = src[i];
+
+// arr.filter(fn) → keep elements where fn(x) is truthy, return new array
+// Note: returned length is not tracked by Codegen — use arr.filter(fn).length workaround.
+template<typename T, typename Fn>
+__device__ T* symm_arr_filter(const T* arr, int len, Fn fn) {
+    static T _filt_buf[256];
+    int n = 0;
+    for (int i = 0; i < len && n < 255; i++) if (fn(arr[i])) _filt_buf[n++] = arr[i];
+    return _filt_buf;
 }
 // symm_arr_reduce(arr, len, fn, init) — fold left with callback
 template<typename T, typename Fn>
 __device__ T symm_arr_reduce(const T* arr, int len, Fn fn, T init) {
     T acc = init;
     for (int i = 0; i < len; i++) acc = fn(acc, arr[i]);
+    return acc;
+}
+
+// symm_arr_reduce_right(arr, len, fn, init) — fold right with callback
+template<typename T, typename Fn>
+__device__ T symm_arr_reduce_right(const T* arr, int len, Fn fn, T init) {
+    T acc = init;
+    for (int i = len - 1; i >= 0; i--) acc = fn(acc, arr[i]);
     return acc;
 }
 
@@ -1297,7 +1565,30 @@ __device__ float parseFloat(const char* s) { return symm_parse_float(s); }
 static const char* PRELUDE_FRAG5 = R"(
 // ── Debug logging ring buffer (for console.log implementation) ──────────────
 __device__ unsigned long long _debug_ring_ptr = 0;
-__device__ void symm_debug_log_write(const char* msg) {}
+
+// Ring buffer layout: [head:u32][tail:u32][data:char[65528]]
+// atomicAdd on head gives each writer a unique reserved slot.
+__device__ void symm_debug_log_write(const char* msg) {
+    if (!msg || !_debug_ring_ptr) return;
+    const unsigned int DATA_SIZE = 65528u;
+    uint32_t* head = (uint32_t*)(uintptr_t)_debug_ring_ptr;
+    char*     data = (char*)(uintptr_t)(_debug_ring_ptr + 8u);
+
+    // Count message length (cap at 240 so length+msg always fits in one entry)
+    uint32_t len = 0;
+    while (msg[len] && len < 240u) len++;
+    uint32_t entry = 4u + len;
+
+    // Reserve space — atomicAdd returns the old head (our write position)
+    uint32_t pos = atomicAdd(head, entry) % DATA_SIZE;
+    if (pos + entry > DATA_SIZE) return;  // near wrap boundary — skip to avoid split
+
+    // Write [4-byte length][message bytes]
+    uint32_t* lp = (uint32_t*)(data + pos);
+    *lp = len;
+    char* dp = data + pos + 4u;
+    for (uint32_t i = 0; i < len; i++) dp[i] = msg[i];
+}
 
 // ── Console stub ───────────────────────────────────────────────────────────
 // Helper: convert a value to string for console output
@@ -1328,6 +1619,10 @@ __device__ const char* _symm_concat3(const char* a, const char* b, const char* c
     buf[p] = '\0'; return buf;
 }
 
+// Global timer state for console.time/timeEnd — 16 hash buckets
+// Must be __device__ global; static locals are invalid in NVRTC device functions.
+__device__ unsigned long long _console_time_slots[16] = {};
+
 struct _Console {
     __device__ void log() { symm_debug_log_write("[log]"); }
     __device__ void log(const char* msg) { symm_debug_log_write(msg); }
@@ -1356,8 +1651,38 @@ struct _Console {
     __device__ void assert_(bool cond, const char* msg = "") {
         if (!cond) symm_debug_log_write(msg[0] ? msg : "Assertion failed");
     }
-    template<typename T> __device__ void time(T) {}
-    template<typename T> __device__ void timeEnd(T) {}
+    // Per-label timer slots stored in __device__ global (16 buckets, djb2 hash)
+    // Static local vars are invalid in NVRTC device functions — use global instead.
+    __device__ void _time_write(const char* lbl, unsigned long long val) {
+        unsigned int h = 5381u;
+        for (int i = 0; lbl[i]; i++) h = ((h << 5) + h) ^ (unsigned char)lbl[i];
+        _console_time_slots[h & 15u] = val;
+    }
+    __device__ unsigned long long _time_read(const char* lbl) {
+        unsigned int h = 5381u;
+        for (int i = 0; lbl[i]; i++) h = ((h << 5) + h) ^ (unsigned char)lbl[i];
+        return _console_time_slots[h & 15u];
+    }
+    template<typename T> __device__ void time(T label) {
+        _time_write(_symm_to_str(label), clock64());
+    }
+    template<typename T> __device__ void timeEnd(T label) {
+        const char* lbl = _symm_to_str(label);
+        unsigned long long elapsed = clock64() - _time_read(lbl);
+        static char buf[80];
+        int p = 0;
+        for (int i = 0; lbl[i] && p < 48; i++) buf[p++] = lbl[i];
+        buf[p++] = ':'; buf[p++] = ' ';
+        // ~1700 cycles/µs at 1.7 GHz; output as approximate ms
+        unsigned long long us = elapsed / 1700ULL;
+        p += symm_write_int(buf + p, (int)(us / 1000));
+        buf[p++] = '.';
+        int frac = (int)(us % 1000);
+        buf[p++] = '0' + frac/100; buf[p++] = '0' + (frac/10)%10; buf[p++] = '0' + frac%10;
+        buf[p++] = 'm'; buf[p++] = 's';
+        buf[p] = 0;
+        symm_debug_log_write(buf);
+    }
     __device__ void count(const char* label = "default") { symm_debug_log_write(label); }
     __device__ void countReset(const char* label = "default") { (void)label; }
     __device__ void group(const char* label = "") { if (label[0]) symm_debug_log_write(label); }
@@ -1451,9 +1776,23 @@ struct _Symbol {
 };
 
 // ── Set: unordered collection ──────────────────────────────────────────────────
+// Iterator for Set — returned by set.__sym_iterator__()
+struct _SetIter {
+    const char* const* _items; int _count; int _pos;
+    struct _Next { const char* value; bool done; };
+    __device__ _Next next() {
+        if (_pos >= _count) return {nullptr, true};
+        return {_items[_pos++], false};
+    }
+    __device__ _SetIter& __sym_iterator__() { return *this; }
+};
+
 struct Set {
     const char* _items[256];
     int _count = 0;
+
+    // Iterator protocol — enables for (const v of set)
+    __device__ _SetIter __sym_iterator__() const { return {_items, _count, 0}; }
     __device__ void add(const char* item) {
         if (_count < 256 && !has(item)) { _items[_count++] = item; }
     }
@@ -1465,6 +1804,8 @@ struct Set {
     }
     __device__ int size() const { return _count; }
     __device__ void clear() { _count = 0; }
+    // Alias for delete() — C++ keyword; Codegen emits _delete_()
+    __device__ bool _delete_(const char* item) { return delete_item(item); }
     __device__ bool delete_item(const char* item) {
         for (int i = 0; i < _count; i++) {
             if (strcmp(_items[i], item) == 0) {
@@ -1743,7 +2084,7 @@ __device__ bool symm_char_matches_class(char c, const char* class_str) {
 }
 
 // Regex matcher with character classes, quantifiers, anchors, lookahead, alternation
-__device__ int symm_regex_match_at(const char* pattern, const char* str, const char* str_start) {
+__device__ int symm_regex_match_at(const char* pattern, const char* str, const char* str_start, bool dotall = false) {
     const char* p = pattern;
     const char* s = str;
 
@@ -1772,7 +2113,7 @@ __device__ int symm_regex_match_at(const char* pattern, const char* str, const c
                 p++;
 
                 // Check lookahead condition on current position
-                int test_result = symm_regex_match_at(look_start, s, str_start);
+                int test_result = symm_regex_match_at(look_start, s, str_start, dotall);
                 if ((positive && test_result < 0) || (!positive && test_result >= 0)) {
                     return -1;
                 }
@@ -1822,7 +2163,7 @@ __device__ int symm_regex_match_at(const char* pattern, const char* str, const c
             // Alternation - try next alternative
             p++;
         } else if (*p == '.') {
-            if (!*s || *s == '\n') return -1;
+            if (!*s || (!dotall && *s == '\n')) return -1;
             s++;
             p++;
             if (*p == '*') { while (*s && *s != '\n') s++; p++; }
@@ -1977,6 +2318,26 @@ __device__ int symm_regex_exec(const char* pattern, const char* str) {
         if (symm_regex_match_at(pattern, str + i, str) >= 0) return i;
     }
     if (symm_regex_match_at(pattern, str, str) >= 0) return 0;
+    return -1;
+}
+
+// Case-insensitive exec: finds first position where pattern matches ignoring case.
+// Handles simple literal patterns; complex NFA features are case-sensitive only.
+__device__ int symm_regex_exec_i(const char* pattern, const char* str) {
+    if (!pattern || !str) return -1;
+    int slen = 0; while (str[slen]) slen++;
+    for (int i = 0; i <= slen; i++) {
+        const char* p = pattern;
+        const char* t = str + i;
+        bool matched = true;
+        while (*p && *t) {
+            char pc = (*p >= 'A' && *p <= 'Z') ? (char)(*p + 32) : *p;
+            char tc = (*t >= 'A' && *t <= 'Z') ? (char)(*t + 32) : *t;
+            if (pc != tc) { matched = false; break; }
+            p++; t++;
+        }
+        if (matched && !*p) return i;
+    }
     return -1;
 }
 
@@ -2286,6 +2647,76 @@ __device__ T* symm_arr_reverse(T* arr, int len) {
     return arr;
 }
 
+// ── Array: shift (removes first element, shifts down) ────────────────────────────
+template<typename T>
+__device__ T symm_arr_shift(T* arr, int& len) {
+    if (len <= 0) return T();
+    T first = arr[0];
+    for (int i = 0; i < len - 1; i++) arr[i] = arr[i + 1];
+    len--;
+    return first;
+}
+
+// ── Array: unshift (inserts at beginning, shifts up) ────────────────────────────
+template<typename T>
+__device__ int symm_arr_unshift(T* arr, int& len, T val) {
+    if (len >= 1024) return len;
+    for (int i = len; i > 0; i--) arr[i] = arr[i - 1];
+    arr[0] = val;
+    len++;
+    return len;
+}
+
+// ── Array: splice (removes/inserts at position) ───────────────────────────────────
+template<typename T>
+__device__ T* symm_arr_splice(T* arr, int& len, int start, int deleteCount, T* items = nullptr, int itemCount = 0) {
+    if (start < 0) start = (len + start < 0) ? 0 : len + start;
+    if (start > len) start = len;
+    if (deleteCount < 0) deleteCount = 0;
+    if (deleteCount > len - start) deleteCount = len - start;
+
+    int netChange = itemCount - deleteCount;
+
+    if (netChange > 0) {
+        for (int i = len - 1; i >= start + deleteCount; i--) arr[i + netChange] = arr[i];
+    } else if (netChange < 0) {
+        for (int i = start + deleteCount; i < len; i++) arr[i + netChange] = arr[i];
+    }
+
+    for (int i = 0; i < itemCount; i++) arr[start + i] = items[i];
+    len += netChange;
+
+    return arr;
+}
+
+// ── Array: toSpliced (non-mutating splice) ──────────────────────────────────────
+template<typename T>
+__device__ T* symm_arr_to_spliced(const T* arr, int len, int start, int deleteCount) {
+    static T buf[256];
+    if (start < 0) start = (len + start < 0) ? 0 : len + start;
+    if (start > len) start = len;
+    if (deleteCount < 0) deleteCount = 0;
+    if (deleteCount > len - start) deleteCount = len - start;
+
+    int pos = 0;
+    for (int i = 0; i < start && pos < 255; i++) buf[pos++] = arr[i];
+    for (int i = start + deleteCount; i < len && pos < 255; i++) buf[pos++] = arr[i];
+    return buf;
+}
+
+// ── Array: with (non-mutating element replacement) ────────────────────────────────
+template<typename T>
+__device__ T* symm_arr_with(const T* arr, int len, int idx, T val) {
+    static T buf[256];
+    if (idx < 0) idx = len + idx;
+    if (idx < 0 || idx >= len) {
+        for (int i = 0; i < len && i < 255; i++) buf[i] = arr[i];
+        return buf;
+    }
+    for (int i = 0; i < len && i < 255; i++) buf[i] = (i == idx) ? val : arr[i];
+    return buf;
+}
+
 // ── Array: sort (insertion sort, in-place) ─────────────────────────────────────
 template<typename T>
 __device__ void symm_arr_sort(T* arr, int len) {
@@ -2305,20 +2736,19 @@ __device__ void symm_arr_sort_fn(T* arr, int len, Fn cmp) {
 }
 
 // ── Array: flat (one level deep — GPU can only flatten string arrays) ──────────
-__device__ const char* symm_arr_flat(const char** arr, int len) {
-    // Concatenate string elements into a flat JSON array
+// depth param accepted; currently one-level flatten is always applied (GPU stack limit)
+__device__ const char* symm_arr_flat(const char** arr, int len, int /*depth*/ = 1) {
     static char buf[1024]; int pos = 0;
     buf[pos++] = '[';
     bool first = true;
     for (int i = 0; i < len && pos < 990; i++) {
         const char* elem = arr[i];
         if (!elem) continue;
-        // If element looks like a JSON array, inline its contents
+        // If element looks like a JSON array, inline its contents (one level)
         if (elem[0] == '[') {
             const char* inner = elem + 1;
-            while (*inner && pos < 990) {
-                if (*inner == ']') break;
-                if (!first) { buf[pos++] = ','; first = false; }
+            while (*inner && *inner != ']' && pos < 990) {
+                if (!first) buf[pos++] = ',';
                 first = false;
                 buf[pos++] = *inner++;
             }
@@ -2333,7 +2763,7 @@ __device__ const char* symm_arr_flat(const char** arr, int len) {
     buf[pos++] = ']'; buf[pos] = 0; return buf;
 }
 template<typename T>
-__device__ T* symm_arr_flat(T* arr, int len) { return arr; } // numeric: no-op
+__device__ T* symm_arr_flat(T* arr, int len, int /*depth*/ = 1) { return arr; } // numeric arrays: already flat
 
 // ── Error subtypes ─────────────────────────────────────────────────────────────
 struct SyntaxError : Error {
@@ -2466,10 +2896,54 @@ __device__ const char* symm_str_at(const char* s, int idx) {
     return buf;
 }
 
+// ── JSON.stringify ─────────────────────────────────────────────────────────────
+// Generic serialiser. Handles strings, numbers, booleans, and null.
+// For user-defined structs, falls back to "[object Object]" (no reflection on GPU).
+// Codegen emits symm_json_stringify(val) for JSON.stringify(val).
+__device__ const char* symm_json_stringify(const char* s) {
+    if (!s) return "null";
+    static char buf[512];
+    int p = 0;
+    buf[p++] = '"';
+    for (int i = 0; s[i] && p < 508; i++) {
+        if      (s[i] == '"')  { buf[p++] = '\\'; buf[p++] = '"'; }
+        else if (s[i] == '\\') { buf[p++] = '\\'; buf[p++] = '\\'; }
+        else if (s[i] == '\n') { buf[p++] = '\\'; buf[p++] = 'n'; }
+        else if (s[i] == '\r') { buf[p++] = '\\'; buf[p++] = 'r'; }
+        else if (s[i] == '\t') { buf[p++] = '\\'; buf[p++] = 't'; }
+        else buf[p++] = s[i];
+    }
+    buf[p++] = '"'; buf[p] = 0;
+    return buf;
+}
+__device__ const char* symm_json_stringify(float v) {
+    static char buf[64];
+    if (v != v) return "null"; // NaN → null per JSON spec
+    symm_write_float(buf, v);
+    return buf;
+}
+__device__ const char* symm_json_stringify(int v) {
+    static char buf[32];
+    symm_write_int(buf, v);
+    return buf;
+}
+__device__ const char* symm_json_stringify(long long v) {
+    static char buf[32];
+    symm_write_int(buf, (int)v);
+    return buf;
+}
+__device__ const char* symm_json_stringify(bool v) { return v ? "true" : "false"; }
+// _SBuf — already contains JSON (built by ObjectExpr codegen); return its content as-is
+__device__ const char* symm_json_stringify(const _SBuf& sb) { return sb._b; }
+// Null / undefined
+__device__ const char* symm_json_stringify(void*)   { return "null"; }
+// Generic fallback for user structs — no runtime reflection available on GPU
+template<typename T>
+__device__ const char* symm_json_stringify(T) { return "[object Object]"; }
+
 // ── JSON.stringify with indent (simplified) ────────────────────────────────────
-// indent > 0 adds newlines; GPU stack-allocated so simplified
-__device__ const char* symm_json_stringify_indent(const char* json, int indent) {
-    // For GPU: just return the flat JSON (indent is cosmetic)
+__device__ const char* symm_json_stringify_indent(const char* json, int /*indent*/) {
+    // Indent is cosmetic on GPU — prelude always produces compact output
     return json ? json : "null";
 }
 
