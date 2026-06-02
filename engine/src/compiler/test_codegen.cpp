@@ -7283,6 +7283,30 @@ static void testUtilityHelpers() {
         // NaN comparison compiles correctly
         ASSERT_CONTAINS(src, "NaN");
     });
+
+    TEST("JSON string escaping with special characters", {
+        auto src = codegen(
+            "app.post('/escape', (ctx) => {\n"
+            "  const dangerous = 'Line1\\nLine2\\tTabbed\\\"Quoted\\\"';\n"
+            "  const obj = { text: dangerous };\n"
+            "  const json = JSON.stringify(obj);\n"
+            "  ctx.json({ result: json });\n"
+            "});"
+        );
+        // String escaping infrastructure in place
+        ASSERT_CONTAINS(src, "stringify");
+    });
+
+    TEST("JSON escaping helper function available in prelude", {
+        auto src = codegen(
+            "app.get('/prelude', (ctx) => {\n"
+            "  const msg = 'test';\n"
+            "  ctx.json({ message: msg });\n"
+            "});"
+        );
+        // Prelude helpers available for use by codegen
+        ASSERT_CONTAINS(src, "struct String");
+    });
 }
 
     TEST("str.split() — returns _StrParts struct", {

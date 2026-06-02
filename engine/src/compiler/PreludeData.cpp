@@ -1580,6 +1580,43 @@ struct Object {
     __device__ static bool setPrototypeOf(void* obj, void* proto) { return true; }
 };
 
+// JSON string escaping helper - properly escapes strings for JSON output
+// Handles: quotes, backslashes, newlines, tabs, carriage returns, control chars
+__device__ inline int symm_escape_json_string(const char* src, char* dst, int maxlen) {
+    if (!src) src = "";
+    int pos = 0;
+    for (const char* p = src; *p && pos < maxlen - 1; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '"') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = '"'; }
+        } else if (c == '\\') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = '\\'; }
+        } else if (c == '\n') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = 'n'; }
+        } else if (c == '\r') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = 'r'; }
+        } else if (c == '\t') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = 't'; }
+        } else if (c == '\b') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = 'b'; }
+        } else if (c == '\f') {
+            if (pos + 1 < maxlen) { dst[pos++] = '\\'; dst[pos++] = 'f'; }
+        } else if (c < 32) {
+            // Control character - escape as \uXXXX
+            if (pos + 5 < maxlen) {
+                dst[pos++] = '\\'; dst[pos++] = 'u'; dst[pos++] = '0'; dst[pos++] = '0';
+                const char* hex = "0123456789abcdef";
+                dst[pos++] = hex[c >> 4];
+                dst[pos++] = hex[c & 15];
+            }
+        } else {
+            dst[pos++] = c;
+        }
+    }
+    dst[pos] = '\0';
+    return pos;
+}
+
 struct String {
     // String constructor - creates a string from value
     __device__ static const char* create(const char* s) { return s ? s : ""; }
