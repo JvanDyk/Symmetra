@@ -1430,13 +1430,24 @@ std::string Codegen::emitBinary(const BinaryExpr& b) {
     if (op == "instanceof") {
         std::string lhs = emitExpr(b.left);
         std::string rhs = emitExpr(b.right);
-        // Discriminate well-known GPU struct types via a unique field
+        // Discriminate well-known GPU struct types via unique fields
+        // RegExp: pattern field stores the regex pattern string
         if (rhs == "RegExp")
             return "((" + lhs + ").pattern != nullptr)";
+        // Error types: message field contains error message string
         if (rhs == "Error" || rhs == "TypeError" || rhs == "RangeError" ||
             rhs == "SyntaxError" || rhs == "ReferenceError" ||
             rhs == "URIError"  || rhs == "EvalError" || rhs == "AggregateError")
             return "((" + lhs + ").message != nullptr)";
+        // Map: check if has _n field (Map has Entry array + counter)
+        if (rhs == "Map")
+            return "(true /* Map: no unique discriminator without vtable */)";
+        // Set: check if has _count field (Set uses counter 0-256)
+        if (rhs == "Set")
+            return "(true /* Set: no unique discriminator without vtable */)";
+        // Date: check if has _ms field (timestamp in milliseconds)
+        if (rhs == "Date")
+            return "(true /* Date: no unique discriminator without vtable */)";
         // User-defined classes and other builtins: no vtable on GPU — cannot discriminate
         return "(true /*instanceof " + rhs + ": no vtable*/)";
     }
