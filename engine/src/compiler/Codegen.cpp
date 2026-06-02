@@ -2074,7 +2074,23 @@ std::string Codegen::emitCall(const CallExpr& c) {
             if (prop == "fromEntries" || prop == "assign") {
                 return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             }
-            if (prop == "keys" || prop == "values" || prop == "entries") {
+            if (prop == "entries") {
+                // Object.entries(obj) — extract [key, value] pairs from Map/Set
+                if (c.args.size() >= 1) {
+                    std::string target = emitExpr(c.args[0]);
+                    return "symm_map_entries_as_json(" + target + ")";
+                }
+                return "\"[]\"";
+            }
+            if (prop == "values") {
+                // Object.values(obj) — extract values from Map/Set
+                if (c.args.size() >= 1) {
+                    std::string target = emitExpr(c.args[0]);
+                    return "symm_map_values_as_json(" + target + ")";
+                }
+                return "\"[]\"";
+            }
+            if (prop == "keys") {
                 return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
             }
             if (prop == "freeze" || prop == "seal" || prop == "create") {

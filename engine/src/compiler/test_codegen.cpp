@@ -7497,6 +7497,97 @@ static void testArrayMethodEnhancements() {
     });
 }
 
+static void testObjectMethodExtensions() {
+    std::cout << "\n=== Object Method Extensions (Phase 3.3.5) ===\n";
+
+    TEST("Object.entries() extracts [key, value] pairs", {
+        auto src = codegen(
+            "app.get('/entries', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('x', 10.0);\n"
+            "  map.set('y', 20.0);\n"
+            "  const entries = Object.entries(map);\n"
+            "  ctx.json({ entries });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_entries_as_json");
+    });
+
+    TEST("Object.keys() returns key array", {
+        auto src = codegen(
+            "app.get('/keys', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('a', 1.0);\n"
+            "  map.set('b', 2.0);\n"
+            "  const keys = Object.keys(map);\n"
+            "  ctx.json({ keys });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_keys_as_json");
+    });
+
+    TEST("Object.values() extracts values", {
+        auto src = codegen(
+            "app.get('/values', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('a', 1.0);\n"
+            "  map.set('b', 2.0);\n"
+            "  const values = Object.values(map);\n"
+            "  ctx.json({ values });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_values_as_json");
+    });
+
+    TEST("Object.hasOwn() checks key existence", {
+        auto src = codegen(
+            "app.get('/hasown', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('exists', 1.0);\n"
+            "  const has = Object.hasOwn(map, 'exists');\n"
+            "  ctx.json({ hasKey: has });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, ".has(");
+    });
+
+    TEST("Object.getOwnPropertyNames() enumerates properties", {
+        auto src = codegen(
+            "app.get('/propnames', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('prop1', 1.0);\n"
+            "  map.set('prop2', 2.0);\n"
+            "  const names = Object.getOwnPropertyNames(map);\n"
+            "  ctx.json({ propertyNames: names });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_map_keys_as_json");
+    });
+
+    TEST("Object.is() performs NaN-safe equality", {
+        auto src = codegen(
+            "app.get('/objectis', (ctx) => {\n"
+            "  const result1 = Object.is(NaN, NaN);\n"
+            "  const result2 = Object.is(-0, +0);\n"
+            "  ctx.json({ nanEqual: result1, negZeroEqual: result2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "_symm_object_is");
+    });
+
+    TEST("Map.entries() instance method works", {
+        auto src = codegen(
+            "app.get('/mapentries', (ctx) => {\n"
+            "  const map = new Map();\n"
+            "  map.set('key1', 1.0);\n"
+            "  const entries = map.entries();\n"
+            "  ctx.json({ entries });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "entries");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -11447,6 +11538,9 @@ int main() {
 
     // Phase 3.3: Array Method Enhancements
     symm::testArrayMethodEnhancements();
+
+    // Phase 3.3.5: Object Method Extensions
+    symm::testObjectMethodExtensions();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

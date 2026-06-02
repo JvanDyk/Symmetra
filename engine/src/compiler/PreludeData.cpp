@@ -1247,6 +1247,59 @@ __device__ inline const char* symm_map_keys_as_json(const Map& m) {
     return buf;
 }
 
+// Extract Map entries as JSON array of [key, value] pairs
+// Returns "[[\"key1\", value1], [\"key2\", value2], ...]"
+__device__ inline const char* symm_map_entries_as_json(const Map& m) {
+    static char buf[1024];
+    buf[0] = '[';
+    int pos = 1;
+    for (int i = 0; i < m._n && pos < 1000; i++) {
+        if (i > 0) buf[pos++] = ',';
+        buf[pos++] = '[';
+        buf[pos++] = '"';
+        const char* k = m._e[i].k;
+        if (k) {
+            while (*k && pos < 998) {
+                if (*k == '"' || *k == '\\') buf[pos++] = '\\';
+                buf[pos++] = *k++;
+            }
+        }
+        buf[pos++] = '"';
+        buf[pos++] = ',';
+        // Format value as number
+        float v = m._e[i].v;
+        char num_buf[32];
+        int num_len = snprintf(num_buf, sizeof(num_buf), "%.6g", v);
+        for (int j = 0; j < num_len && pos < 1000; j++) {
+            buf[pos++] = num_buf[j];
+        }
+        buf[pos++] = ']';
+    }
+    buf[pos++] = ']';
+    buf[pos] = '\0';
+    return buf;
+}
+
+// Object.values() — extract values from Map as JSON array
+// Returns "[value1, value2, ...]"
+__device__ inline const char* symm_map_values_as_json(const Map& m) {
+    static char buf[512];
+    buf[0] = '[';
+    int pos = 1;
+    for (int i = 0; i < m._n && pos < 490; i++) {
+        if (i > 0) buf[pos++] = ',';
+        float v = m._e[i].v;
+        char num_buf[32];
+        int num_len = snprintf(num_buf, sizeof(num_buf), "%.6g", v);
+        for (int j = 0; j < num_len && pos < 500; j++) {
+            buf[pos++] = num_buf[j];
+        }
+    }
+    buf[pos++] = ']';
+    buf[pos] = '\0';
+    return buf;
+}
+
 struct Map {
     struct Entry { const char* k; float v; };
     Entry _e[64]; int _n = 0;
