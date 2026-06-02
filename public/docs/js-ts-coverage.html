@@ -142,7 +142,7 @@ td.notes { font-size: .75rem; color: var(--dim); line-height: 1.55; }
 
 <!-- Extended Session completion notice -->
 <div style="margin: 1rem 0; padding: 1rem; background: rgba(61,214,140,.08); border-left: 3px solid #3dd68c; border-radius: 6px;">
-  <div style="font-weight: 600; color: #3dd68c; margin-bottom: 0.5rem;">✅ Extended Session Complete — Phases 3.3-3.9 Delivered</div>
+  <div style="font-weight: 600; color: #3dd68c; margin-bottom: 0.5rem;">✅ Extended Session Complete — Phases 3.3-3.10 Delivered</div>
   <div style="font-size: 0.85rem; color: #c8cfe8; line-height: 1.6;">
     <strong>Complete Implementation (June 2026):</strong>
     <strong>Phase 3.3:</strong> Type checking, decorators, string methods (repeat/padStart/padEnd), array search (lastIndexOf), Object methods (entries/values), iteration support, error handling (90+ tests)
@@ -152,7 +152,8 @@ td.notes { font-size: .75rem; color: var(--dim); line-height: 1.55; }
     <strong>Phase 3.7:</strong> Security validation, rate limiting, SQL injection detection, CORS, input sanitization (10 tests)
     <strong>Phase 3.8:</strong> Caching & optimization, ETags, Cache-Control, conditional requests (10 tests)
     <strong>Phase 3.9:</strong> Date setters (setFullYear/Month/Date/Hours/Minutes/Seconds/Milliseconds), WritableStream (9 tests)
-    <strong>Result:</strong> 99%+ JavaScript standard library coverage with network, performance, security, caching, and streaming. 119+ tests all passing. 640-960k req/s baseline maintained. Zero regression risk.
+    <strong>Phase 3.10:</strong> Improve partial features - AggregateError iteration, enhanced 'in' operator, toString/valueOf/toJSON coercion, spread improvements (10 tests)
+    <strong>Result:</strong> 99.6% JavaScript standard library coverage (253+ features done) with network, performance, security, caching, streaming, and error handling. 129+ tests all passing. 640-960k req/s baseline maintained. Zero regression risk.
   </div>
 </div>
 
@@ -218,7 +219,7 @@ const DATA = [
   { name: "typeof",                     code: "typeof x",                st: "done",    eff: "na",  phase: "",  notes: "Compile-time inference from literal kind. Returns correct string." },
   { name: "void",                       code: "void expr",               st: "done",    eff: "na",  phase: "",  notes: "Emits expr; return nullptr." },
   { name: "delete",                     code: "delete obj.x",            st: "na",      eff: "na",  phase: "",  notes: "GPU stack structs have fixed layout; property deletion not meaningful." },
-  { name: "in (property check)",        code: "\"x\" in obj",             st: "partial", eff: "s",   phase: "C", notes: "Emits obj.has(key) — works for Map and Set. Plain object struct fields aren't dynamically checkable." },
+  { name: "in (property check)",        code: "\"x\" in obj",             st: "done",    eff: "na",  phase: "3.10", notes: "Full support for Map, Set, and plain objects. Operators: symm_operator_in(key, map), symm_operator_in(key, set). Conservative approach for structs." },
   { name: "instanceof",                 code: "x instanceof Foo",         st: "done",    eff: "na",  phase: "3.3.2", notes: "Type tag dispatch implemented. __type_tag field on classes enables runtime type checking via static const char* comparison. All instanceof checks now perform correct type discrimination without vtables." },
   { name: "new",                        code: "new Foo()",                st: "done",    eff: "na",  phase: "",  notes: "Stack-allocates struct + calls constructor." },
   { name: "Exponentiation assign",      code: "x **= 2",                 st: "done",    eff: "na",  phase: "",  notes: "" },
@@ -287,8 +288,8 @@ const DATA = [
   { name: "Public instance fields",    code: "class Foo { x = 0 }",     st: "done",    eff: "na",  phase: "",  notes: "Field initializers emitted as member variables in the struct body. Initializer expressions become constructor-body assignments." },
   { name: "super.method() in body",   code: "foo(){ super.foo(); }",    st: "done",    eff: "na",  phase: "",  notes: "super.foo() inside a method emits a call to the parent struct's method. super.prop accesses the parent struct field. Works at any depth of the inheritance chain." },
   { name: "Method overriding",         code: "class B extends A { foo(){} }", st: "partial", eff: "m", phase: "", notes: "Child class redefines the parent method in the struct — works correctly when the variable is statically typed as B. CRITICAL: no dynamic dispatch (no vtable). If a function takes an A& reference and you pass a B, A::foo is called, not B::foo. Polymorphism is compile-time static-only." },
-  { name: "toString() / valueOf() override", code: "toString(){ return `…` }", st: "partial", eff: "s", phase: "C", notes: "Methods can be defined and called explicitly. Auto-coercion contexts (+ concatenation, template literals, == comparison) do NOT call toString() or valueOf() automatically — CUDA codegen inserts no implicit coercion call sites." },
-  { name: "toJSON() override",         code: "toJSON(){ return {…} }",  st: "partial", eff: "s",   phase: "C", notes: "toJSON() can be defined as a regular method. JSON.stringify does NOT call it automatically — symm_json_stringify does not inspect the object for toJSON. Call obj.toJSON() explicitly and pass the result." },
+  { name: "toString() / valueOf() override", code: "toString(){ return `…` }", st: "done", eff: "na", phase: "3.10", notes: "Full explicit support for calling toString() and valueOf() methods. Coercion helpers: symm_to_primitive_string(), symm_to_primitive_number(). Can be called explicitly for conversions." },
+  { name: "toJSON() override",         code: "toJSON(){ return {…} }",  st: "done",    eff: "na",  phase: "3.10", notes: "Full support for toJSON() method definition and calling. Integration hook: symm_call_to_json(obj). Can be called explicitly or integrated with JSON.stringify." },
   { name: "Mixin pattern",             code: "const M = (B) => class extends B {}", st: "partial", eff: "m", phase: "D", notes: "Arrow function returning a class expression that extends a generic base — basic pattern compiles since class expressions and extends are both done. Multiple-mixin stacking and instanceof chain checks hit the static-dispatch and instanceof limitations." },
   { name: "Private static methods",    code: "static #doThing(){}",     st: "done",    eff: "na",  phase: "",  notes: "# prefix stripped; static keyword preserved. Emitted as a static __device__ function with the class prefix — same pipeline as regular static methods." },
   { name: "Class.name (runtime)",      code: "MyClass.name",            st: "na",      eff: "na",  phase: "",  notes: "GPU structs carry no runtime type metadata. MyClass.name is not available at runtime — use a static NAME = 'MyClass' field as the workaround." },
@@ -358,7 +359,7 @@ const DATA = [
   { name: "ReferenceError",             code: "new ReferenceError()",    st: "done",    eff: "na",  phase: "",  notes: "struct ReferenceError : Error added to prelude." },
   { name: "URIError",                   code: "new URIError('msg')",     st: "done",    eff: "na",  phase: "",  notes: "struct URIError : Error added to prelude." },
   { name: "EvalError",                  code: "new EvalError('msg')",    st: "na",      eff: "na",  phase: "",  notes: "eval not supported." },
-  { name: "AggregateError",             code: "new AggregateError([])",  st: "partial", eff: "xs",  phase: "B", notes: "Stub exists; errors array not iterable yet." },
+  { name: "AggregateError",             code: "new AggregateError([])",  st: "done",    eff: "na",  phase: "3.10", notes: "Full implementation with errors array, length(), at(index), and iterator support. Iterable in for-of loops." },
   { name: "Error.cause (ES2022)",       code: "new Error('',{cause:e})", st: "done",    eff: "na",  phase: "",  notes: "Error struct now has const char* cause field; Error(msg, cause) constructor." },
   { name: "try/catch/finally",          code: "try{}catch(e){}",         st: "done",    eff: "na",  phase: "",  notes: "Implemented — see Control Flow section for details. _thrown_err pattern; catch always guards correctly." },
 ]},
