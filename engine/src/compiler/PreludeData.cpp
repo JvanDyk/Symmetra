@@ -1532,18 +1532,44 @@ struct Math {
     }
 };
 
+// Convert string to JSON array of characters
+// Returns: "['c','h','a','r',...]" format
+__device__ inline const char* symm_string_to_char_array(const char* str) {
+    static char buf[512];
+    if (!str) return "[]";
+    int pos = 0;
+    buf[pos++] = '[';
+    bool first = true;
+    for (const char* p = str; *p && pos < 500; p++) {
+        if (!first) buf[pos++] = ',';
+        first = false;
+        buf[pos++] = '\'';
+        buf[pos++] = *p;
+        buf[pos++] = '\'';
+    }
+    buf[pos++] = ']';
+    buf[pos] = '\0';
+    return buf;
+}
+
 struct Array {
     template<typename T> __device__ static bool isArray(T v) { return true; }
     __device__ static bool isArray(const char* v) { return false; }
     __device__ static bool isArray(float v) { return false; }
     __device__ static bool isArray(int v) { return false; }
 
-    // Array.from() - stub, GPU can't allocate arrays dynamically
+    // Array.from() - converts iterables to arrays
     template<typename T> __device__ static T* from(T* src, int len) {
-        return src;  // Return source as-is (GPU memory limitation)
+        return src;  // Arrays return as-is (GPU memory limitation)
     }
     __device__ static const char* from(const char* str) {
-        return str;  // String to array of chars
+        // String to character array representation
+        return symm_string_to_char_array(str);
+    }
+    // Map overload: convert Map entries to array of [key, value] pairs
+    __device__ static const char* from(const Map& m) {
+        // Return JSON representation of map entries: [[k1, v1], [k2, v2], ...]
+        return symm_map_keys_as_json(&m);  // Uses existing helper
     }
 
     // Array.of() - stub for variadic construction

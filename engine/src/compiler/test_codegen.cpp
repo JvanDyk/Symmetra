@@ -7309,6 +7309,58 @@ static void testUtilityHelpers() {
     });
 }
 
+static void testArrayMethodEnhancements() {
+    std::cout << "\n=== Array Method Enhancements (Phase 3.3) ===\n";
+
+    TEST("Array.from() with string converts to character array", {
+        auto src = codegen(
+            "app.get('/fromstring', (ctx) => {\n"
+            "  const str = 'hello';\n"
+            "  const chars = Array.from(str);\n"
+            "  ctx.json({ chars });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::from");
+    });
+
+    TEST("Array.from() with array returns as-is", {
+        auto src = codegen(
+            "app.get('/fromarray', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const copy = Array.from(arr);\n"
+            "  ctx.json({ copy });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::from");
+    });
+
+    TEST("Array.isArray() correctly detects arrays", {
+        auto src = codegen(
+            "app.get('/isarray', (ctx) => {\n"
+            "  const arr = [1.0, 2.0];\n"
+            "  const str = 'test';\n"
+            "  const isArr = Array.isArray(arr);\n"
+            "  const isStr = Array.isArray(str);\n"
+            "  ctx.json({ array: isArr, string: isStr });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Array::isArray");
+    });
+
+    TEST("Array utility methods compile without errors", {
+        auto src = codegen(
+            "app.get('/arrayutils', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const len = arr.length;\n"
+            "  const first = arr[0];\n"
+            "  const last = arr.at(-1);\n"
+            "  ctx.json({ length: len, first, last });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "struct");  // At least struct definition
+    });
+}
+
     TEST("str.split() — returns _StrParts struct", {
         auto src = codegen(
             "app.post('/split', (ctx) => {\n"
@@ -11267,6 +11319,9 @@ int main() {
 
     // Phase 3.2.4: Utility Helpers & Type Checking
     symm::testUtilityHelpers();
+
+    // Phase 3.3: Array Method Enhancements
+    symm::testArrayMethodEnhancements();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

@@ -2024,8 +2024,13 @@ std::string Codegen::emitCall(const CallExpr& c) {
                 return "symm_array_is_array(" + arg0 + ")";
             }
             if (prop == "from") {
-                // Array.from(iterable) — emit the source; codegen expects array-like
-                return c.args.empty() ? "nullptr" : emitExpr(c.args[0]);
+                // Array.from(iterable) — convert iterables to arrays
+                // Supports: arrays, strings, Maps, and array-like objects
+                if (c.args.empty()) return "nullptr";
+                std::string arg = emitExpr(c.args[0]);
+                // Note: For strings, Maps, and other iterables, the runtime will dispatch appropriately
+                // Arrays return as-is (GPU memory limitation)
+                return "Array::from(" + arg + ")";
             }
             if (prop == "of") {
                 // Array.of(a,b,c) — emit as a typed initializer list.
