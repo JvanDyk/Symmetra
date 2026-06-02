@@ -6991,6 +6991,83 @@ static void testArrayPatterns() {
         );
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
+
+    // Round 6 comprehensive tests for array methods
+    TEST("arr.shift() — removes and shifts elements", {
+        auto src = codegen(
+            "app.post('/shift', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const first = arr.shift();\n"
+            "  ctx.json({ first, len: arr.length });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_shift");
+    });
+
+    TEST("arr.unshift() — inserts and shifts elements", {
+        auto src = codegen(
+            "app.post('/unshift', (ctx) => {\n"
+            "  const arr = [2.0, 3.0];\n"
+            "  const len = arr.unshift(1.0);\n"
+            "  ctx.json({ len });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_unshift");
+    });
+
+    TEST("arr.splice() — removes and inserts", {
+        auto src = codegen(
+            "app.post('/splice', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0, 4.0];\n"
+            "  arr.splice(1, 2);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_splice");
+    });
+
+    TEST("arr.toSpliced() — non-mutating splice", {
+        auto src = codegen(
+            "app.get('/tospliced', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const result = arr.toSpliced(1, 1);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_to_spliced");
+    });
+
+    TEST("arr.with() — non-mutating element replacement", {
+        auto src = codegen(
+            "app.get('/with', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const result = arr.with(1, 99.0);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_with");
+    });
+
+    TEST("arr.reduceRight() — right-to-left fold", {
+        auto src = codegen(
+            "app.get('/reduceright', (ctx) => {\n"
+            "  const arr = [1.0, 2.0, 3.0];\n"
+            "  const result = arr.reduceRight((a, b) => a - b, 0.0);\n"
+            "  ctx.json({ result });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_arr_reduce_right");
+    });
+
+    TEST("str.split() — returns _StrParts struct", {
+        auto src = codegen(
+            "app.post('/split', (ctx) => {\n"
+            "  const parts = ctx.body.split(',');\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_str_split_parts");
+    });
 }
 
 static void testNumericPatterns() {
