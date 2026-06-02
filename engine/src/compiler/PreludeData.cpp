@@ -2180,6 +2180,211 @@ struct URL {
     __device__ URL(const char* s = "") : _valid(false) { _href[0]=0; }
 };
 
+// Enhanced URL parsing helper
+__device__ inline bool symm_parse_url(const char* url, char* scheme, char* host, char* path) {
+    if (!url || !url[0]) return false;
+
+    // Parse scheme (http, https, ws, wss)
+    int i = 0, s = 0;
+    while (url[i] && url[i] != ':' && s < 10) scheme[s++] = url[i++];
+    scheme[s] = 0;
+
+    if (url[i] == ':' && url[i+1] == '/' && url[i+2] == '/') {
+        i += 3;  // Skip ://
+        // Parse host
+        s = 0;
+        while (url[i] && url[i] != '/' && s < 128) host[s++] = url[i++];
+        host[s] = 0;
+        // Rest is path
+        s = 0;
+        while (url[i] && s < 256) path[s++] = url[i++];
+        path[s] = 0;
+        return true;
+    }
+    return false;
+}
+
+// HTTP method constants
+struct HttpMethod {
+    static const char* GET() { return "GET"; }
+    static const char* POST() { return "POST"; }
+    static const char* PUT() { return "PUT"; }
+    static const char* DELETE() { return "DELETE"; }
+    static const char* PATCH() { return "PATCH"; }
+    static const char* HEAD() { return "HEAD"; }
+    static const char* OPTIONS() { return "OPTIONS"; }
+};
+
+// HTTP Response headers
+struct Response {
+    int _status;
+    const char* _body;
+    Map _headers;
+
+    __device__ Response() : _status(0), _body(""), _headers() {}
+    __device__ Response(int status, const char* body) : _status(status), _body(body), _headers() {}
+
+    __device__ int status() const { return _status; }
+    __device__ const char* text() const { return _body ? _body : ""; }
+    __device__ const char* json() const { return _body ? _body : "{}"; }
+    __device__ bool ok() const { return _status >= 200 && _status < 300; }
+};
+
+// Fetch request options
+struct FetchOptions {
+    const char* method;
+    const char* body;
+    Map headers;
+    int timeout_ms;
+    bool credentials;
+
+    __device__ FetchOptions()
+        : method("GET"), body(""), headers(), timeout_ms(30000), credentials(false) {}
+};
+
+// Fetch API stubs
+__device__ inline SyncPromise<Response> symm_fetch(const char* url) {
+    Response r(200, "");
+    return SyncPromise<Response>(r);
+}
+
+__device__ inline SyncPromise<Response> symm_fetch(const char* url, const FetchOptions& opts) {
+    Response r(opts.body ? 201 : 200, opts.body);
+    return SyncPromise<Response>(r);
+}
+
+// WebSocket state tracking
+struct WebSocket {
+    const char* _url;
+    int _state;  // 0=connecting, 1=open, 2=closing, 3=closed
+    int _buffered_messages;
+
+    __device__ WebSocket(const char* url = "")
+        : _url(url), _state(0), _buffered_messages(0) {}
+
+    __device__ int readyState() const { return _state; }
+    __device__ bool isOpen() const { return _state == 1; }
+    __device__ int bufferedAmount() const { return _buffered_messages; }
+};
+
+// WebSocket message queuing
+__device__ inline bool symm_ws_send(WebSocket& ws, const char* data) {
+    if (ws._state != 1) return false;  // Not open
+    ws._buffered_messages++;
+    return true;
+}
+
+__device__ inline const char* symm_ws_receive(WebSocket& ws) {
+    if (ws._buffered_messages > 0) {
+        ws._buffered_messages--;
+        return "";  // Would return actual message
+    }
+    return nullptr;
+}
+
+// HTTP header helpers
+__device__ inline const char* symm_content_type_json() {
+    return "application/json";
+}
+
+__device__ inline const char* symm_content_type_form() {
+    return "application/x-www-form-urlencoded";
+}
+
+__device__ inline const char* symm_content_type_text() {
+    return "text/plain";
+}
+
+__device__ inline const char* symm_content_type_html() {
+    return "text/html";
+}
+
+__device__ inline const char* symm_authorization_bearer(const char* token) {
+    static char buf[512];
+    snprintf(buf, sizeof(buf), "Bearer %s", token ? token : "");
+    return buf;
+}
+
+// Response status helpers
+__device__ inline bool symm_is_success(int status) {
+    return status >= 200 && status < 300;
+}
+
+__device__ inline bool symm_is_redirect(int status) {
+    return status >= 300 && status < 400;
+}
+
+__device__ inline bool symm_is_client_error(int status) {
+    return status >= 400 && status < 500;
+}
+
+__device__ inline bool symm_is_server_error(int status) {
+    return status >= 500 && status < 600;
+}
+
+// Status code message
+__device__ inline const char* symm_status_message(int code) {
+    if (code == 200) return "OK";
+    if (code == 201) return "Created";
+    if (code == 204) return "No Content";
+    if (code == 301 || code == 302) return "Redirect";
+    if (code == 400) return "Bad Request";
+    if (code == 401) return "Unauthorized";
+    if (code == 403) return "Forbidden";
+    if (code == 404) return "Not Found";
+    if (code == 500) return "Internal Server Error";
+    if (code == 502) return "Bad Gateway";
+    if (code == 503) return "Service Unavailable";
+    return "Unknown";
+}
+
+// Streaming response support
+struct StreamingResponse {
+    const char* _chunk;
+    int _chunk_size;
+    bool _done;
+
+    __device__ StreamingResponse()
+        : _chunk(""), _chunk_size(0), _done(false) {}
+
+    __device__ int chunkSize() const { return _chunk_size; }
+    __device__ const char* getChunk() const { return _chunk; }
+    __device__ bool isDone() const { return _done; }
+};
+
+// Streaming chunk formatting
+__device__ inline const char* symm_format_stream_chunk(const char* data, int size) {
+    static char buf[1024];
+    // HTTP chunked encoding format: size(hex)\r\ndata\r\n
+    int pos = 0;
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "%x\r\n", size);
+    for (int i = 0; i < size && pos < 1000; i++) buf[pos++] = data[i];
+    buf[pos++] = '\r'; buf[pos++] = '\n';
+    buf[pos] = 0;
+    return buf;
+}
+
+// ReadableStream state tracking
+struct ReadableStream {
+    int _state;  // 0=readable, 1=closed, 2=errored
+    const char* _queued_data;
+    int _queued_size;
+
+    __device__ ReadableStream()
+        : _state(0), _queued_data(""), _queued_size(0) {}
+
+    __device__ bool canRead() const { return _state == 0; }
+    __device__ bool isClosed() const { return _state == 1; }
+};
+
+// Stream reading helper
+__device__ inline const char* symm_stream_read(ReadableStream& stream) {
+    if (stream._state != 0) return nullptr;  // Not readable
+    const char* data = stream._queued_data;
+    stream._queued_size = 0;
+    return data;
+}
+
 // ── Promise stub ──────────────────────────────────────────────────────────────
 template<typename T>
 struct SyncPromise {

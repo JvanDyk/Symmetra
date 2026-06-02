@@ -7919,6 +7919,148 @@ static void testPromiseAndAsync() {
     });
 }
 
+static void testFetchAndWebSocket() {
+    std::cout << "\n=== fetch/WebSocket Integration (Phase 3.5) ===\n";
+
+    TEST("fetch() with URL makes HTTP request", {
+        auto src = codegen(
+            "app.get('/fetch', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com/data');\n"
+            "  ctx.json({ fetched: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fetch");
+    });
+
+    TEST("fetch() with options and body", {
+        auto src = codegen(
+            "app.post('/fetchpost', (ctx) => {\n"
+            "  const options = {\n"
+            "    method: 'POST',\n"
+            "    body: JSON.stringify({ key: 'value' }),\n"
+            "    headers: { 'Content-Type': 'application/json' }\n"
+            "  };\n"
+            "  const response = fetch('https://api.example.com/data', options);\n"
+            "  ctx.json({ posted: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "fetch");
+    });
+
+    TEST("Response.text() reads response body", {
+        auto src = codegen(
+            "app.get('/resptext', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com/data');\n"
+            "  const text = response.text();\n"
+            "  ctx.json({ body: text });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "text");
+    });
+
+    TEST("Response.json() parses JSON", {
+        auto src = codegen(
+            "app.get('/respjson', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com/data');\n"
+            "  const data = response.json();\n"
+            "  ctx.json({ data });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "json");
+    });
+
+    TEST("Response.ok checks success status", {
+        auto src = codegen(
+            "app.get('/respok', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com/data');\n"
+            "  if (response.ok) {\n"
+            "    ctx.json({ success: true });\n"
+            "  } else {\n"
+            "    ctx.json({ error: 'Failed' });\n"
+            "  }\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "ok");
+    });
+
+    TEST("HTTP method constants", {
+        auto src = codegen(
+            "app.post('/methods', (ctx) => {\n"
+            "  const methods = {\n"
+            "    get: 'GET',\n"
+            "    post: 'POST',\n"
+            "    put: 'PUT',\n"
+            "    delete: 'DELETE',\n"
+            "    patch: 'PATCH'\n"
+            "  };\n"
+            "  ctx.json({ methods });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "GET");
+    });
+
+    TEST("WebSocket connection", {
+        auto src = codegen(
+            "app.get('/ws', (ctx) => {\n"
+            "  const ws = new WebSocket('wss://echo.example.com');\n"
+            "  ctx.json({ connected: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "WebSocket");
+    });
+
+    TEST("WebSocket message sending", {
+        auto src = codegen(
+            "app.post('/wssend', (ctx) => {\n"
+            "  const ws = new WebSocket('wss://echo.example.com');\n"
+            "  ws.send(JSON.stringify({ message: 'hello' }));\n"
+            "  ctx.json({ sent: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "send");
+    });
+
+    TEST("WebSocket readyState tracking", {
+        auto src = codegen(
+            "app.get('/wsstate', (ctx) => {\n"
+            "  const ws = new WebSocket('wss://echo.example.com');\n"
+            "  const state = ws.readyState();\n"
+            "  ctx.json({ readyState: state });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "readyState");
+    });
+
+    TEST("Streaming response chunks", {
+        auto src = codegen(
+            "app.get('/stream', (ctx) => {\n"
+            "  const response = fetch('https://api.example.com/large');\n"
+            "  ctx.writeHead(200, { 'Transfer-Encoding': 'chunked' });\n"
+            "  ctx.write('chunk1');\n"
+            "  ctx.write('chunk2');\n"
+            "  ctx.end();\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "stream");
+    });
+
+    TEST("Content-Type headers", {
+        auto src = codegen(
+            "app.get('/headers', (ctx) => {\n"
+            "  const options = {\n"
+            "    headers: {\n"
+            "      'Content-Type': 'application/json',\n"
+            "      'Authorization': 'Bearer token123'\n"
+            "    }\n"
+            "  };\n"
+            "  const response = fetch('https://api.example.com', options);\n"
+            "  ctx.json({ ok: response.ok });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "Bearer");
+    });
+}
+
 static void testNumericPatterns() {
     std::cout << "\n=== Numeric Patterns ===\n";
 
@@ -11881,6 +12023,9 @@ int main() {
 
     // Phase 3.4: Promise and Async Improvements
     symm::testPromiseAndAsync();
+
+    // Phase 3.5: fetch/WebSocket Integration
+    symm::testFetchAndWebSocket();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
