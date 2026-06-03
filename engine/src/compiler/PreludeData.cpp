@@ -4358,6 +4358,297 @@ __device__ inline const char* symm_format_for_await_status(const ForAwaitContext
     return buf;
 }
 
+// ── Phase 4.3: Module System (Dynamic Imports, import.meta) ──────────────────
+
+// Module metadata (import.meta)
+struct ModuleMeta {
+    const char* _url;               // Module URL/path
+    const char* _id;                // Module ID (for identification)
+    unsigned long long _load_time;  // When module was loaded
+    int _loaded;                    // 1=loaded, 0=loading
+    const char* _type;              // "module" or "commonjs"
+    const char* _span_id;           // Link to Phase 3.18 tracing
+};
+
+// Module record (represents loaded module)
+struct ModuleRecord {
+    const char* _url;
+    const char* _id;
+    ModuleMeta _meta;
+    const char* _namespace[16];     // Exported names
+    const char* _exports[16];       // Exported values
+    int _export_count;
+    int _loaded;                    // 1=loaded, 0=loading, -1=failed
+    const char* _error;             // Error if failed
+    unsigned long long _load_start;
+    unsigned long long _load_end;
+    const char* _span_id;
+};
+
+// Module loader (manages module loading)
+struct ModuleLoader {
+    ModuleRecord _modules[16];      // Loaded modules (up to 16)
+    int _module_count;
+    const char* _base_url;          // Base URL for resolution
+    int _loading_count;             // Currently loading
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ ModuleLoader(const char* base_url = ".")
+        : _module_count(0), _base_url(base_url), _loading_count(0),
+          _created_time(clock64()) {}
+
+    // Add loaded module
+    __device__ bool addModule(const ModuleRecord& module) {
+        if (_module_count >= 16) return false;
+        _modules[_module_count] = module;
+        _module_count++;
+        return true;
+    }
+
+    // Find module by URL
+    __device__ ModuleRecord* findModule(const char* url) {
+        for (int i = 0; i < _module_count; i++) {
+            if (_modules[i]._url == url) {
+                return &_modules[i];
+            }
+        }
+        return NULL;
+    }
+
+    __device__ int getModuleCount() const { return _module_count; }
+    __device__ int getLoadingCount() const { return _loading_count; }
+};
+
+// ImportPromise: Promise for import() calls
+struct ImportPromise {
+    const char* _module_url;        // URL being imported
+    const char* _id;                // Import ID
+    int _state;                     // 0=pending, 1=loaded, 2=failed
+    ModuleRecord* _module;          // Loaded module (if succeeded)
+    const char* _error;             // Error message (if failed)
+    unsigned long long _started;
+    unsigned long long _completed;
+    const char* _span_id;           // Link to Phase 3.18 tracing
+
+    __device__ ImportPromise(const char* url = "")
+        : _module_url(url), _id(NULL), _state(0), _module(NULL),
+          _error(NULL), _started(clock64()), _completed(0) {}
+
+    // Mark as loaded
+    __device__ void markLoaded(ModuleRecord* module) {
+        _state = 1;  // loaded
+        _module = module;
+        _completed = clock64();
+    }
+
+    // Mark as failed
+    __device__ void markFailed(const char* error) {
+        _state = 2;  // failed
+        _error = error;
+        _completed = clock64();
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isLoaded() const { return _state == 1; }
+    __device__ bool isFailed() const { return _state == 2; }
+    __device__ unsigned long long getLoadTime() const {
+        if (_completed == 0) return 0;
+        return _completed - _started;
+    }
+};
+
+// ImportMap: URL resolution mapping
+struct ImportMap {
+    const char* _imports[16];       // Import specifiers (e.g., "lodash")
+    const char* _urls[16];          // Resolved URLs (e.g., "/vendor/lodash.js")
+    int _mapping_count;
+    unsigned long long _created_time;
+
+    __device__ ImportMap() : _mapping_count(0), _created_time(clock64()) {}
+
+    // Add mapping
+    __device__ bool addMapping(const char* specifier, const char* url) {
+        if (_mapping_count >= 16) return false;
+        _imports[_mapping_count] = specifier;
+        _urls[_mapping_count] = url;
+        _mapping_count++;
+        return true;
+    }
+
+    // Resolve specifier to URL
+    __device__ const char* resolve(const char* specifier) {
+        for (int i = 0; i < _mapping_count; i++) {
+            if (_imports[i] == specifier) {
+                return _urls[i];
+            }
+        }
+        return specifier;  // Return specifier as-is if not mapped
+    }
+
+    __device__ int getMappingCount() const { return _mapping_count; }
+};
+
+// Module cache: LRU cache of loaded modules
+struct ModuleCache {
+    const char* _urls[32];          // Module URLs
+    ModuleRecord* _modules[32];     // Module records
+    unsigned long long _access_times[32];  // Last access time
+    int _cache_count;
+    int _hits;
+    int _misses;
+
+    __device__ ModuleCache() : _cache_count(0), _hits(0), _misses(0) {}
+
+    // Get from cache
+    __device__ ModuleRecord* get(const char* url) {
+        for (int i = 0; i < _cache_count; i++) {
+            if (_urls[i] == url) {
+                _access_times[i] = clock64();  // Update LRU
+                _hits++;
+                return _modules[i];
+            }
+        }
+        _misses++;
+        return NULL;
+    }
+
+    // Put in cache
+    __device__ bool put(const char* url, ModuleRecord* module) {
+        if (_cache_count < 32) {
+            _urls[_cache_count] = url;
+            _modules[_cache_count] = module;
+            _access_times[_cache_count] = clock64();
+            _cache_count++;
+            return true;
+        }
+        // LRU eviction: remove least recently used
+        int lru_idx = 0;
+        unsigned long long lru_time = _access_times[0];
+        for (int i = 1; i < _cache_count; i++) {
+            if (_access_times[i] < lru_time) {
+                lru_time = _access_times[i];
+                lru_idx = i;
+            }
+        }
+        _urls[lru_idx] = url;
+        _modules[lru_idx] = module;
+        _access_times[lru_idx] = clock64();
+        return true;
+    }
+
+    __device__ float getHitRate() const {
+        int total = _hits + _misses;
+        return total > 0 ? (float)_hits / total : 0.0f;
+    }
+};
+
+// Helper: Create module meta
+__device__ inline ModuleMeta symm_create_module_meta(const char* url, const char* span_id) {
+    ModuleMeta meta;
+    meta._url = url;
+    meta._id = url;
+    meta._load_time = clock64();
+    meta._loaded = 0;  // Not yet loaded
+    meta._type = "module";
+    meta._span_id = span_id;
+    return meta;
+}
+
+// Helper: Create module record
+__device__ inline ModuleRecord symm_create_module_record(const char* url, const char* span_id) {
+    ModuleRecord record;
+    record._url = url;
+    record._id = url;
+    record._meta = symm_create_module_meta(url, span_id);
+    record._export_count = 0;
+    record._loaded = 0;  // Not yet loaded
+    record._error = NULL;
+    record._load_start = clock64();
+    record._load_end = 0;
+    record._span_id = span_id;
+    return record;
+}
+
+// Helper: Create import promise
+__device__ inline ImportPromise symm_create_import_promise(const char* url, const char* span_id) {
+    ImportPromise promise(url);
+    promise._span_id = span_id;
+    return promise;
+}
+
+// Helper: Create module loader
+__device__ inline ModuleLoader symm_create_module_loader(const char* base_url, const char* span_id) {
+    ModuleLoader loader(base_url);
+    loader._span_id = span_id;
+    return loader;
+}
+
+// Helper: Create import map
+__device__ inline ImportMap symm_create_import_map() {
+    return ImportMap();
+}
+
+// Helper: Format module meta as JSON
+__device__ inline const char* symm_format_module_meta(const ModuleMeta& meta) {
+    static char buf[384];
+    snprintf(buf, sizeof(buf),
+        "{\"url\":\"%s\",\"type\":\"%s\",\"loaded\":%d,\"load_time_us\":%llu}",
+        meta._url ? meta._url : "", meta._type ? meta._type : "module",
+        meta._loaded, (clock64() - meta._load_time) / 1000);
+    return buf;
+}
+
+// Helper: Format module record as JSON
+__device__ inline const char* symm_format_module_record(const ModuleRecord& record) {
+    static char buf[512];
+    const char* status = "loading";
+    if (record._loaded == 1) status = "loaded";
+    else if (record._loaded == -1) status = "failed";
+
+    snprintf(buf, sizeof(buf),
+        "{\"url\":\"%s\",\"status\":\"%s\",\"exports\":%d,\"error\":\"%s\","
+        "\"duration_us\":%llu}",
+        record._url ? record._url : "", status, record._export_count,
+        record._error ? record._error : "",
+        (record._load_end > 0 ? record._load_end - record._load_start : 0) / 1000);
+    return buf;
+}
+
+// Helper: Format import promise as JSON
+__device__ inline const char* symm_format_import_promise_status(const ImportPromise& promise) {
+    static char buf[384];
+    const char* state_str = "pending";
+    if (promise.isLoaded()) state_str = "loaded";
+    else if (promise.isFailed()) state_str = "failed";
+
+    snprintf(buf, sizeof(buf),
+        "{\"url\":\"%s\",\"state\":\"%s\",\"load_time_us\":%llu}",
+        promise._module_url ? promise._module_url : "", state_str,
+        promise.getLoadTime() / 1000);
+    return buf;
+}
+
+// Helper: Format module loader status as JSON
+__device__ inline const char* symm_format_module_loader_status(const ModuleLoader& loader) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"modules\":%d,\"loading\":%d,\"base_url\":\"%s\"}",
+        loader._module_count, loader._loading_count,
+        loader._base_url ? loader._base_url : ".");
+    return buf;
+}
+
+// Helper: Format module cache stats as JSON
+__device__ inline const char* symm_format_module_cache_stats(const ModuleCache& cache) {
+    static char buf[256];
+    float hit_rate = cache.getHitRate();
+    snprintf(buf, sizeof(buf),
+        "{\"cached\":%d,\"hits\":%d,\"misses\":%d,\"hit_rate\":%.1f}",
+        cache._cache_count, cache._hits, cache._misses, hit_rate * 100.0f);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation

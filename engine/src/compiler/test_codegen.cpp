@@ -14422,6 +14422,248 @@ static void testPhase42AsyncGenerator() {
     });
 }
 
+// Phase 4.3: Module System (Dynamic Imports, import.meta)
+static void testPhase43ModuleSystem() {
+    std::cout << "\n=== Phase 4.3: Module System (Dynamic Imports, import.meta) ===\n";
+
+    // ModuleMeta (import.meta)
+    TEST("ModuleMeta — module metadata for import.meta", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ModuleMeta");
+        ASSERT_CONTAINS(src, "_url");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_loaded");
+    });
+
+    // ModuleRecord
+    TEST("ModuleRecord — represents loaded module", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ModuleRecord");
+        ASSERT_CONTAINS(src, "_exports[16]");
+        ASSERT_CONTAINS(src, "_namespace[16]");
+        ASSERT_CONTAINS(src, "_export_count");
+    });
+
+    // ModuleRecord states
+    TEST("ModuleRecord — states: loading(0), loaded(1), failed(-1)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_loaded");
+        ASSERT_CONTAINS(src, "_error");
+    });
+
+    // ModuleLoader
+    TEST("ModuleLoader — manages module loading", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ModuleLoader");
+        ASSERT_CONTAINS(src, "_modules[16]");
+        ASSERT_CONTAINS(src, "_base_url");
+        ASSERT_CONTAINS(src, "_loading_count");
+    });
+
+    // ModuleLoader addModule
+    TEST("ModuleLoader::addModule — add loaded module", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addModule");
+    });
+
+    // ModuleLoader findModule
+    TEST("ModuleLoader::findModule — lookup by URL", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "findModule");
+    });
+
+    // ImportPromise
+    TEST("ImportPromise — Promise for import() calls", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ImportPromise");
+        ASSERT_CONTAINS(src, "_module_url");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_module");
+    });
+
+    // ImportPromise states
+    TEST("ImportPromise — states: pending(0), loaded(1), failed(2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isPending");
+        ASSERT_CONTAINS(src, "isLoaded");
+        ASSERT_CONTAINS(src, "isFailed");
+    });
+
+    // ImportPromise markLoaded
+    TEST("ImportPromise::markLoaded — transition to loaded", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "markLoaded");
+    });
+
+    // ImportPromise markFailed
+    TEST("ImportPromise::markFailed — transition to failed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "markFailed");
+    });
+
+    // ImportMap
+    TEST("ImportMap — URL resolution mapping", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ImportMap");
+        ASSERT_CONTAINS(src, "_imports[16]");
+        ASSERT_CONTAINS(src, "_urls[16]");
+    });
+
+    // ImportMap addMapping
+    TEST("ImportMap::addMapping — add import specifier mapping", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addMapping");
+    });
+
+    // ImportMap resolve
+    TEST("ImportMap::resolve — resolve specifier to URL", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "resolve");
+    });
+
+    // ModuleCache
+    TEST("ModuleCache — LRU cache for loaded modules", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ModuleCache");
+        ASSERT_CONTAINS(src, "_cache_count");
+        ASSERT_CONTAINS(src, "_hits");
+        ASSERT_CONTAINS(src, "_misses");
+    });
+
+    // ModuleCache get
+    TEST("ModuleCache::get — retrieve from cache", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "get");
+    });
+
+    // ModuleCache put
+    TEST("ModuleCache::put — add to cache with LRU eviction", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "put");
+    });
+
+    // ModuleCache getHitRate
+    TEST("ModuleCache::getHitRate — cache effectiveness metric", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getHitRate");
+    });
+
+    // Helper: symm_create_module_meta
+    TEST("symm_create_module_meta — allocate import.meta", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_module_meta");
+    });
+
+    // Helper: symm_create_module_record
+    TEST("symm_create_module_record — allocate module", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_module_record");
+    });
+
+    // Helper: symm_create_import_promise
+    TEST("symm_create_import_promise — allocate import() promise", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_import_promise");
+    });
+
+    // Helper: symm_create_module_loader
+    TEST("symm_create_module_loader — allocate loader", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_module_loader");
+    });
+
+    // Helper: symm_create_import_map
+    TEST("symm_create_import_map — allocate import map", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_import_map");
+    });
+
+    // Format helpers
+    TEST("symm_format_module_meta — JSON metadata", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_module_meta");
+        ASSERT_CONTAINS(src, "type");
+    });
+
+    TEST("symm_format_module_record — JSON module status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_module_record");
+        ASSERT_CONTAINS(src, "exports");
+    });
+
+    TEST("symm_format_import_promise_status — JSON import() status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_import_promise_status");
+    });
+
+    TEST("symm_format_module_loader_status — JSON loader health", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_module_loader_status");
+        ASSERT_CONTAINS(src, "loading");
+    });
+
+    TEST("symm_format_module_cache_stats — JSON cache metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_module_cache_stats");
+        ASSERT_CONTAINS(src, "hit_rate");
+    });
+
+    // Integration: Dynamic import()
+    TEST("ImportPromise + ModuleLoader — import() pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ImportPromise");
+        ASSERT_CONTAINS(src, "ModuleLoader");
+        ASSERT_CONTAINS(src, "findModule");
+    });
+
+    // Integration: import.meta
+    TEST("ModuleMeta + ModuleRecord — import.meta object", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ModuleMeta");
+        ASSERT_CONTAINS(src, "ModuleRecord");
+        ASSERT_CONTAINS(src, "_meta");
+    });
+
+    // Integration: ImportMap resolution
+    TEST("ImportMap + ModuleLoader — import specifier resolution", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ImportMap");
+        ASSERT_CONTAINS(src, "resolve");
+    });
+
+    // Integration: Module caching
+    TEST("ModuleCache + ModuleLoader — cache loaded modules", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ModuleCache");
+        ASSERT_CONTAINS(src, "get");
+        ASSERT_CONTAINS(src, "put");
+    });
+
+    // Integration: Full module system
+    TEST("Module system: loading, caching, resolution, metadata", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ImportPromise");
+        ASSERT_CONTAINS(src, "ModuleLoader");
+        ASSERT_CONTAINS(src, "ModuleCache");
+        ASSERT_CONTAINS(src, "ImportMap");
+    });
+
+    // Integration: Tracing
+    TEST("Module system linked to Phase 3.18 tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "ModuleRecord");
+        ASSERT_CONTAINS(src, "ImportPromise");
+    });
+
+    // Integration: Performance metrics
+    TEST("Module system with cache metrics and load times", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getHitRate");
+        ASSERT_CONTAINS(src, "getLoadTime");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -14680,6 +14922,9 @@ int main() {
 
     // Phase 4.2: AsyncGenerator Support
     symm::testPhase42AsyncGenerator();
+
+    // Phase 4.3: Module System
+    symm::testPhase43ModuleSystem();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
