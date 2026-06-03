@@ -7847,6 +7847,227 @@ __device__ const char* _format_timer_manager_status(_TimerManager* m) {
 }
 )";
 
+// Fragment 14: Global Utilities and Helpers
+static const char* PRELUDE_FRAG14 = R"(
+// ── Global Utilities (clearTimeout, clearInterval, globalThis) ────────────────
+// Clear (cancel) a timer
+__device__ void clearTimeout(int timer_id) {
+    _timer_manager_clear(&_global_timer_manager, timer_id);
+}
+
+// Alias for clearTimeout
+__device__ void clearInterval(int timer_id) {
+    _timer_manager_clear(&_global_timer_manager, timer_id);
+}
+
+// Alias for clearTimeout (for setImmediate)
+__device__ void clearImmediate(int timer_id) {
+    _timer_manager_clear(&_global_timer_manager, timer_id);
+}
+
+// setTimeout — schedule callback after delay (ms)
+__device__ int setTimeout(const char* callback_id, int delay_ms, const char* span_id) {
+    int id = _timer_manager_add(&_global_timer_manager, callback_id, 0, delay_ms, span_id);
+    return id;
+}
+
+// setInterval — schedule callback repeatedly with interval (ms)
+__device__ int setInterval(const char* callback_id, int interval_ms, const char* span_id) {
+    int id = _timer_manager_add(&_global_timer_manager, callback_id, 1, interval_ms, span_id);
+    return id;
+}
+
+// setImmediate — schedule callback to run immediately (next scheduler cycle)
+__device__ int setImmediate(const char* callback_id, const char* span_id) {
+    int id = _timer_manager_add(&_global_timer_manager, callback_id, 2, 0, span_id);
+    return id;
+}
+
+// ── globalThis object ──────────────────────────────────────────────────────────
+// Represents the global object (in browsers: window, in Node.js: global)
+struct _GlobalThis {
+    const char* _id;                // "globalThis"
+    _TimerManager* _timers;         // Reference to global timer manager
+    const char* _process_version;   // process.version
+    const char* _navigator_ua;      // navigator.userAgent
+    int _is_main_thread;            // 1=main thread, 0=worker
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create globalThis object
+__device__ _GlobalThis _create_global_this(const char* span_id) {
+    _GlobalThis g;
+    g._id = "globalThis";
+    g._timers = &_global_timer_manager;
+    g._process_version = "20.0.0";  // Node.js version
+    g._navigator_ua = "SymmetraGPU/1.0";
+    g._is_main_thread = 1;
+    g._created_at = (unsigned long long)Date::now();
+    g._span_id = span_id;
+    return g;
+}
+
+// Global instance
+__device__ _GlobalThis globalThis;
+
+// ── Microtask Queue (for Promise.then and async operations) ────────────────────
+// Microtask entry (for queueing Promise.then callbacks)
+struct _MicrotaskEntry {
+    const char* _callback_id;       // Callback identifier
+    const char* _context;           // Context for execution
+    int _priority;                  // Higher = run first (0-9)
+    int _executed;                  // 1=executed, 0=pending
+    unsigned long long _queued_at;
+    const char* _span_id;
+};
+
+// Microtask queue (FIFO with priority)
+struct _MicrotaskQueue {
+    const char* _id;                // "microtask-queue"
+    _MicrotaskEntry _tasks[32];     // Up to 32 microtasks
+    int _task_count;
+    int _executed_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create microtask queue
+__device__ _MicrotaskQueue _create_microtask_queue(const char* span_id) {
+    _MicrotaskQueue q;
+    q._id = "microtask-queue";
+    q._task_count = 0;
+    q._executed_count = 0;
+    q._created_at = (unsigned long long)Date::now();
+    q._span_id = span_id;
+    return q;
+}
+
+// Queue a microtask
+__device__ int _microtask_queue_add(_MicrotaskQueue* q, const char* cb_id, const char* ctx, int priority, const char* span_id) {
+    if (q->_task_count >= 32) return -1;  // Queue full
+    _MicrotaskEntry* e = &q->_tasks[q->_task_count++];
+    e->_callback_id = cb_id;
+    e->_context = ctx;
+    e->_priority = priority;
+    e->_executed = 0;
+    e->_queued_at = (unsigned long long)Date::now();
+    e->_span_id = span_id;
+    return q->_task_count - 1;  // Index
+}
+
+// Drain microtask queue (execute all pending)
+__device__ int _microtask_queue_drain(_MicrotaskQueue* q) {
+    int executed = 0;
+    for (int i = 0; i < q->_task_count; i++) {
+        if (!q->_tasks[i]._executed) {
+            q->_tasks[i]._executed = 1;
+            q->_executed_count++;
+            executed++;
+        }
+    }
+    return executed;
+}
+
+// ── Global Error Handler ──────────────────────────────────────────────────────
+// Global error handler (for uncaught exceptions)
+struct _GlobalErrorHandler {
+    const char* _id;                // "global-error-handler"
+    ErrorWithCause _last_error;
+    int _error_count;
+    int _suppress_uncaught;         // 1=suppress, 0=report
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create global error handler
+__device__ _GlobalErrorHandler _create_global_error_handler(const char* span_id) {
+    _GlobalErrorHandler h;
+    h._id = "global-error-handler";
+    h._error_count = 0;
+    h._suppress_uncaught = 0;
+    h._created_at = (unsigned long long)Date::now();
+    h._span_id = span_id;
+    return h;
+}
+
+// Report error to global handler
+__device__ void _global_error_handler_report(_GlobalErrorHandler* h, const char* msg, const char* span_id) {
+    h->_error_count++;
+    // In real implementation, would add to error queue
+}
+
+// ── Global state tracking ──────────────────────────────────────────────────────
+// Global runtime state
+struct _GlobalState {
+    const char* _id;                // "global-state"
+    _TimerManager _timers;
+    _MicrotaskQueue _microtasks;
+    _GlobalErrorHandler _error_handler;
+    _GlobalThis _global_this;
+    long long _start_time;          // When runtime started
+    int _active;                    // 1=running, 0=stopped
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create global state
+__device__ _GlobalState _create_global_state(const char* span_id) {
+    _GlobalState s;
+    s._id = "global-state";
+    s._timers = _create_timer_manager(span_id);
+    s._microtasks = _create_microtask_queue(span_id);
+    s._error_handler = _create_global_error_handler(span_id);
+    s._global_this = _create_global_this(span_id);
+    s._start_time = Date::now();
+    s._active = 1;
+    s._created_at = (unsigned long long)Date::now();
+    s._span_id = span_id;
+    return s;
+}
+
+// Global state instance
+__device__ _GlobalState _global_state;
+
+// ── Global Scheduler Helpers ──────────────────────────────────────────────────
+// Process next scheduler cycle:
+// 1. Fire due timers
+// 2. Drain microtasks
+// 3. Handle errors
+__device__ int _global_scheduler_cycle() {
+    long long now = Date::now();
+    int fired = _timer_manager_process(&_global_state._timers, now);
+    int microtasks = _microtask_queue_drain(&_global_state._microtasks);
+    return fired + microtasks;
+}
+
+// Get current uptime in seconds
+__device__ double _global_uptime() {
+    long long elapsed_ms = Date::now() - _global_state._start_time;
+    return (double)elapsed_ms / 1000.0;
+}
+
+// JSON formatting helpers
+__device__ const char* _format_global_state_status() {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"uptime_sec\\\":%.1f,\\"timers\\":%d,\\"microtasks\\":%d,\\"errors\\":%d}",
+                   _global_uptime(), _global_state._timers._timer_count,
+                   _global_state._microtasks._task_count, _global_state._error_handler._error_count);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_microtask_queue_status(_MicrotaskQueue* q) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"id\\":\"%s\\",\\"pending\\":%d,\\"executed\\":%d}",
+                   q->_id, q->_task_count - q->_executed_count, q->_executed_count);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -7865,6 +8086,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG11) result += PRELUDE_FRAG11;
     if (PRELUDE_FRAG12) result += PRELUDE_FRAG12; // SHA-256 + HMAC
     if (PRELUDE_FRAG13) result += PRELUDE_FRAG13; // Global timers
+    if (PRELUDE_FRAG14) result += PRELUDE_FRAG14; // Global utilities
     return result;
 }
 

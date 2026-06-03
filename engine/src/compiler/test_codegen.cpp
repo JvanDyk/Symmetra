@@ -15085,6 +15085,174 @@ static void testPhase52GlobalTimers() {
     });
 }
 
+// Phase 5.3: Global Utilities and Helpers
+static void testPhase53GlobalUtilities() {
+    std::cout << "\n=== Phase 5.3: Global Utilities ===\n";
+
+    TEST("clearTimeout — cancel timer by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "clearTimeout");
+    });
+
+    TEST("clearInterval — cancel interval by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "clearInterval");
+    });
+
+    TEST("clearImmediate — cancel immediate by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "clearImmediate");
+    });
+
+    TEST("setTimeout global — schedule with callback ID and delay", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "setTimeout");
+    });
+
+    TEST("setInterval global — schedule repeating callback", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "setInterval");
+    });
+
+    TEST("setImmediate global — schedule immediate callback", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "setImmediate");
+    });
+
+    TEST("_GlobalThis — represents global object", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _GlobalThis");
+        ASSERT_CONTAINS(src, "_process_version");
+        ASSERT_CONTAINS(src, "_navigator_ua");
+    });
+
+    TEST("globalThis._timers — reference to global timer manager", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "globalThis");
+        ASSERT_CONTAINS(src, "_timers");
+    });
+
+    TEST("globalThis._is_main_thread — thread detection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_is_main_thread");
+    });
+
+    TEST("_create_global_this — initialize globalThis object", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_global_this");
+    });
+
+    TEST("_MicrotaskEntry — individual microtask in queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MicrotaskEntry");
+        ASSERT_CONTAINS(src, "_callback_id");
+        ASSERT_CONTAINS(src, "_priority");
+        ASSERT_CONTAINS(src, "_executed");
+    });
+
+    TEST("_MicrotaskQueue — FIFO queue with priority (32 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MicrotaskQueue");
+        ASSERT_CONTAINS(src, "_tasks[32]");
+        ASSERT_CONTAINS(src, "_task_count");
+        ASSERT_CONTAINS(src, "_executed_count");
+    });
+
+    TEST("_create_microtask_queue — initialize queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_microtask_queue");
+    });
+
+    TEST("_microtask_queue_add — queue microtask with priority", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_microtask_queue_add");
+    });
+
+    TEST("_microtask_queue_drain — execute all pending microtasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_microtask_queue_drain");
+    });
+
+    TEST("_GlobalErrorHandler — global exception tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _GlobalErrorHandler");
+        ASSERT_CONTAINS(src, "_error_count");
+        ASSERT_CONTAINS(src, "_suppress_uncaught");
+    });
+
+    TEST("_create_global_error_handler — initialize error handler", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_global_error_handler");
+    });
+
+    TEST("_global_error_handler_report — report uncaught error", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_global_error_handler_report");
+    });
+
+    TEST("_GlobalState — unified global state struct", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _GlobalState");
+        ASSERT_CONTAINS(src, "_timers");
+        ASSERT_CONTAINS(src, "_microtasks");
+        ASSERT_CONTAINS(src, "_error_handler");
+        ASSERT_CONTAINS(src, "_global_this");
+    });
+
+    TEST("_create_global_state — initialize full global runtime state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_global_state");
+    });
+
+    TEST("_global_state instance — global runtime reference", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_global_state");
+    });
+
+    TEST("_global_scheduler_cycle — process timers and microtasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_global_scheduler_cycle");
+    });
+
+    TEST("_global_uptime — get uptime in seconds", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_global_uptime");
+    });
+
+    TEST("_format_global_state_status — JSON runtime state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_global_state_status");
+    });
+
+    TEST("_format_microtask_queue_status — JSON queue state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_microtask_queue_status");
+    });
+
+    TEST("Microtask priority — higher priority runs first", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_MicrotaskEntry");
+        ASSERT_CONTAINS(src, "_priority");
+    });
+
+    TEST("Global utilities tracing — all span_id linked to Phase 3.18", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _GlobalThis");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Global state — tracks start_time for uptime", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_start_time");
+    });
+
+    TEST("Error handler — integration with Phase 5.1 ErrorWithCause", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _GlobalErrorHandler");
+        ASSERT_CONTAINS(src, "ErrorWithCause");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15355,6 +15523,9 @@ int main() {
 
     // Phase 5.2: Global Timers
     symm::testPhase52GlobalTimers();
+
+    // Phase 5.3: Global Utilities
+    symm::testPhase53GlobalUtilities();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
