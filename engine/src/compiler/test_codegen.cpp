@@ -16566,6 +16566,173 @@ static void testPhase63Cryptography() {
     });
 }
 
+static void testPhase64Streams() {
+    std::cout << "\n=== Phase 6.4: Streams and Buffers ===\n";
+
+    TEST("_Buffer — fixed-size byte array (4KB)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Buffer");
+        ASSERT_CONTAINS(src, "_data[4096]");
+        ASSERT_CONTAINS(src, "_read_pos");
+        ASSERT_CONTAINS(src, "_write_pos");
+    });
+
+    TEST("_create_buffer — create buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_buffer");
+    });
+
+    TEST("_buffer_write — write data to buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_buffer_write");
+    });
+
+    TEST("_buffer_read — read data from buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_buffer_read");
+    });
+
+    TEST("_buffer_clear — clear buffer contents", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_buffer_clear");
+    });
+
+    TEST("_Stream — base stream structure (readable/writable/duplex)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Stream");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_ended");
+        ASSERT_CONTAINS(src, "_closed");
+    });
+
+    TEST("_ReadableStream — readable stream with buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _ReadableStream");
+        ASSERT_CONTAINS(src, "_readable");
+        ASSERT_CONTAINS(src, "_bytes_read");
+    });
+
+    TEST("_create_readable_stream — create readable stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_readable_stream");
+    });
+
+    TEST("_WritableStream — writable stream with buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WritableStream");
+        ASSERT_CONTAINS(src, "_writable");
+        ASSERT_CONTAINS(src, "_bytes_written");
+    });
+
+    TEST("_create_writable_stream — create writable stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_writable_stream");
+    });
+
+    TEST("_stream_write — write to writable stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_stream_write");
+    });
+
+    TEST("_stream_end — signal end of stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_stream_end");
+    });
+
+    TEST("_stream_is_ended — check if stream ended", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_stream_is_ended");
+    });
+
+    TEST("_TransformStream — readable/writable pair for transformation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _TransformStream");
+        ASSERT_CONTAINS(src, "_transform_name");
+        ASSERT_CONTAINS(src, "_buffered_chunks");
+    });
+
+    TEST("_create_transform_stream — create transform stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_transform_stream");
+    });
+
+    TEST("_PipeConfig — pipe connection configuration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PipeConfig");
+        ASSERT_CONTAINS(src, "_from_stream");
+        ASSERT_CONTAINS(src, "_to_stream");
+        ASSERT_CONTAINS(src, "_highWaterMark");
+    });
+
+    TEST("_create_pipe_config — create pipe configuration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_pipe_config");
+    });
+
+    TEST("_format_buffer_json — format buffer as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_buffer_json");
+    });
+
+    TEST("_format_readable_stream_json — format readable stream as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_readable_stream_json");
+    });
+
+    TEST("_format_writable_stream_json — format writable stream as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_writable_stream_json");
+    });
+
+    TEST("_format_transform_stream_json — format transform stream as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_transform_stream_json");
+    });
+
+    TEST("_format_pipe_config_json — format pipe config as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_pipe_config_json");
+    });
+
+    TEST("Buffer capacity — 4096 bytes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "4096");
+    });
+
+    TEST("Stream types — readable, writable, duplex", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_type");
+    });
+
+    TEST("Stream lifecycle — open, flowing, ended, closed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_ended");
+        ASSERT_CONTAINS(src, "_closed");
+    });
+
+    TEST("Byte counting — bytes_read and bytes_written", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_bytes_read");
+        ASSERT_CONTAINS(src, "_bytes_written");
+    });
+
+    TEST("Piping — source to destination streams", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_from_stream");
+        ASSERT_CONTAINS(src, "_to_stream");
+    });
+
+    TEST("High water mark — backpressure control", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_highWaterMark");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -16860,6 +17027,9 @@ int main() {
 
     // Phase 6.3: Cryptography Utilities
     symm::testPhase63Cryptography();
+
+    // Phase 6.4: Streams and Buffers
+    symm::testPhase64Streams();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

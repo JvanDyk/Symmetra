@@ -10179,6 +10179,243 @@ __device__ const char* _format_crypto_suite_status(_CryptoSuite* cs) {
 
 )";
 
+// Fragment 22: Stream and Buffer Utilities
+static const char* PRELUDE_FRAG22 = R"(
+
+// ── Stream and Buffer Data Structures ──────────────────────────────────────────
+
+// Buffer (fixed-size byte array)
+struct _Buffer {
+    const char* _id;                // Buffer identifier
+    unsigned char _data[4096];      // Up to 4KB data
+    int _length;                    // Actual bytes
+    int _capacity;                  // Max capacity (4096)
+    int _read_pos;                  // Read position
+    int _write_pos;                 // Write position
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Stream base structure
+struct _Stream {
+    const char* _id;                // Stream identifier
+    const char* _type;              // "readable", "writable", "duplex"
+    int _ended;                     // 1=ended, 0=open
+    int _closed;                    // 1=closed
+    int _errored;                   // 1=errored
+    int _paused;                    // 1=paused, 0=flowing
+    unsigned long long _bytes_written;
+    unsigned long long _bytes_read;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Readable stream
+struct _ReadableStream {
+    const char* _id;                // Stream identifier
+    int _readable;                  // 1=readable
+    _Buffer _buffer;                // Internal buffer
+    int _ended;                     // 1=ended
+    unsigned long long _bytes_read;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Writable stream
+struct _WritableStream {
+    const char* _id;                // Stream identifier
+    int _writable;                  // 1=writable
+    _Buffer _buffer;                // Internal buffer
+    int _ended;                     // 1=ended
+    unsigned long long _bytes_written;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Transform stream
+struct _TransformStream {
+    const char* _id;                // Stream identifier
+    const char* _transform_name;    // "compress", "decompress", "cipher"
+    _ReadableStream _readable;
+    _WritableStream _writable;
+    int _buffered_chunks;           // Chunks queued
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Pipe configuration
+struct _PipeConfig {
+    const char* _from_stream;       // Source stream ID
+    const char* _to_stream;         // Destination stream ID
+    int _end_on_finish;             // 1=auto-end
+    long long _highWaterMark;       // Buffer threshold
+    int _connected;                 // 1=connected
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── Stream Operations ──────────────────────────────────────────────────────────
+
+// Create buffer
+__device__ _Buffer _create_buffer(const char* id) {
+    _Buffer buf;
+    buf._id = id;
+    buf._length = 0;
+    buf._capacity = 4096;
+    buf._read_pos = 0;
+    buf._write_pos = 0;
+    buf._created_at = _symm_now_ms;
+    buf._span_id = 0;
+    return buf;
+}
+
+// Buffer write
+__device__ void _buffer_write(_Buffer* buf, const unsigned char* data, int len) {
+    if (buf->_write_pos + len > 4096) len = 4096 - buf->_write_pos;
+    for (int i = 0; i < len; i++) {
+        buf->_data[buf->_write_pos + i] = data[i];
+    }
+    buf->_write_pos += len;
+    buf->_length = buf->_write_pos;
+}
+
+// Buffer read
+__device__ const unsigned char* _buffer_read(_Buffer* buf, int len) {
+    if (buf->_read_pos + len > buf->_write_pos) {
+        len = buf->_write_pos - buf->_read_pos;
+    }
+    const unsigned char* ptr = &buf->_data[buf->_read_pos];
+    buf->_read_pos += len;
+    return ptr;
+}
+
+// Buffer clear
+__device__ void _buffer_clear(_Buffer* buf) {
+    buf->_read_pos = 0;
+    buf->_write_pos = 0;
+    buf->_length = 0;
+}
+
+// Create readable stream
+__device__ _ReadableStream _create_readable_stream(const char* id) {
+    _ReadableStream s;
+    s._id = id;
+    s._readable = 1;
+    s._buffer = _create_buffer(id);
+    s._ended = 0;
+    s._bytes_read = 0;
+    s._created_at = _symm_now_ms;
+    s._span_id = 0;
+    return s;
+}
+
+// Create writable stream
+__device__ _WritableStream _create_writable_stream(const char* id) {
+    _WritableStream s;
+    s._id = id;
+    s._writable = 1;
+    s._buffer = _create_buffer(id);
+    s._ended = 0;
+    s._bytes_written = 0;
+    s._created_at = _symm_now_ms;
+    s._span_id = 0;
+    return s;
+}
+
+// Create transform stream
+__device__ _TransformStream _create_transform_stream(const char* id, const char* transform) {
+    _TransformStream s;
+    s._id = id;
+    s._transform_name = transform;
+    s._readable = _create_readable_stream(id);
+    s._writable = _create_writable_stream(id);
+    s._buffered_chunks = 0;
+    s._created_at = _symm_now_ms;
+    s._span_id = 0;
+    return s;
+}
+
+// Stream write
+__device__ void _stream_write(_WritableStream* stream, const unsigned char* data, int len) {
+    _buffer_write(&stream->_buffer, data, len);
+    stream->_bytes_written += len;
+}
+
+// Stream end (signal no more data)
+__device__ void _stream_end(_WritableStream* stream) {
+    stream->_ended = 1;
+}
+
+// Check if stream is ended
+__device__ int _stream_is_ended(_WritableStream* stream) {
+    return stream->_ended;
+}
+
+// Create pipe configuration
+__device__ _PipeConfig _create_pipe_config(const char* from, const char* to) {
+    _PipeConfig p;
+    p._from_stream = from;
+    p._to_stream = to;
+    p._end_on_finish = 1;
+    p._highWaterMark = 16384;
+    p._connected = 1;
+    p._created_at = _symm_now_ms;
+    p._span_id = 0;
+    return p;
+}
+
+// Format buffer as JSON
+__device__ const char* _format_buffer_json(_Buffer* buf) {
+    static char output[256];
+    int len = 0;
+    len += sprintf(output+len, "{\\"id\\":\"%s\\",\\"length\\":%d,\\"capacity\\":%d,\\"read_pos\\":%d,\\"write_pos\\":%d}",
+                   buf->_id, buf->_length, buf->_capacity, buf->_read_pos, buf->_write_pos);
+    output[len] = 0;
+    return output;
+}
+
+// Format stream as JSON
+__device__ const char* _format_readable_stream_json(_ReadableStream* stream) {
+    static char output[256];
+    int len = 0;
+    len += sprintf(output+len, "{\\"id\\":\"%s\\",\\"readable\\":%d,\\"ended\\":%d,\\"bytes_read\\":%llu}",
+                   stream->_id, stream->_readable, stream->_ended, stream->_bytes_read);
+    output[len] = 0;
+    return output;
+}
+
+// Format writable stream as JSON
+__device__ const char* _format_writable_stream_json(_WritableStream* stream) {
+    static char output[256];
+    int len = 0;
+    len += sprintf(output+len, "{\\"id\\":\"%s\\",\\"writable\\":%d,\\"ended\\":%d,\\"bytes_written\\":%llu}",
+                   stream->_id, stream->_writable, stream->_ended, stream->_bytes_written);
+    output[len] = 0;
+    return output;
+}
+
+// Format transform stream as JSON
+__device__ const char* _format_transform_stream_json(_TransformStream* stream) {
+    static char output[256];
+    int len = 0;
+    len += sprintf(output+len, "{\\"id\\":\"%s\\",\\"transform\\":\"%s\\",\\"buffered\\":%d}",
+                   stream->_id, stream->_transform_name, stream->_buffered_chunks);
+    output[len] = 0;
+    return output;
+}
+
+// Format pipe config as JSON
+__device__ const char* _format_pipe_config_json(_PipeConfig* pipe) {
+    static char output[256];
+    int len = 0;
+    len += sprintf(output+len, "{\\"from\\":\"%s\\",\\"to\\":\"%s\\",\\"connected\\":%d,\\"hwm\\":%lld}",
+                   pipe->_from_stream, pipe->_to_stream, pipe->_connected, pipe->_highWaterMark);
+    output[len] = 0;
+    return output;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -10205,6 +10442,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG19) result += PRELUDE_FRAG19; // File system
     if (PRELUDE_FRAG20) result += PRELUDE_FRAG20; // HTTP utilities
     if (PRELUDE_FRAG21) result += PRELUDE_FRAG21; // Cryptography
+    if (PRELUDE_FRAG22) result += PRELUDE_FRAG22; // Streams and buffers
     return result;
 }
 
