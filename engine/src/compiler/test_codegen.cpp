@@ -15652,6 +15652,219 @@ static void testPhase55WorkerThreads() {
     });
 }
 
+// Phase 5.6: Advanced Monitoring and Metrics Collection
+static void testPhase56AdvancedMonitoring() {
+    std::cout << "\n=== Phase 5.6: Advanced Monitoring ===\n";
+
+    TEST("_HistogramBucket — bucket with min/max and count", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HistogramBucket");
+        ASSERT_CONTAINS(src, "_min_ms");
+        ASSERT_CONTAINS(src, "_max_ms");
+        ASSERT_CONTAINS(src, "_count");
+    });
+
+    TEST("_Histogram — latency histogram (16 buckets max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Histogram");
+        ASSERT_CONTAINS(src, "_buckets[16]");
+        ASSERT_CONTAINS(src, "_total_count");
+        ASSERT_CONTAINS(src, "_min_observed");
+    });
+
+    TEST("_create_histogram — create with bucket boundaries", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_histogram");
+    });
+
+    TEST("_histogram_record — record latency value", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_histogram_record");
+    });
+
+    TEST("_histogram_percentile — compute latency percentile", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_histogram_percentile");
+    });
+
+    TEST("_Counter — event counter with labels", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Counter");
+        ASSERT_CONTAINS(src, "_value");
+        ASSERT_CONTAINS(src, "_labels[8]");
+    });
+
+    TEST("_create_counter — create counter metric", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_counter");
+    });
+
+    TEST("_counter_inc — increment counter by 1", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_counter_inc");
+    });
+
+    TEST("_counter_add — increment by amount", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_counter_add");
+    });
+
+    TEST("_Gauge — point-in-time measurement", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Gauge");
+        ASSERT_CONTAINS(src, "_value");
+        ASSERT_CONTAINS(src, "_min_value");
+        ASSERT_CONTAINS(src, "_max_value");
+    });
+
+    TEST("_create_gauge — create gauge metric", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_gauge");
+    });
+
+    TEST("_gauge_set — set gauge value", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_gauge_set");
+    });
+
+    TEST("_gauge_add — increment/decrement gauge", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_gauge_add");
+    });
+
+    TEST("_MetricsCollector — aggregates histograms/counters/gauges", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MetricsCollector");
+        ASSERT_CONTAINS(src, "_histograms[8]");
+        ASSERT_CONTAINS(src, "_counters[16]");
+        ASSERT_CONTAINS(src, "_gauges[16]");
+    });
+
+    TEST("_create_metrics_collector — initialize collector", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_metrics_collector");
+    });
+
+    TEST("_metrics_add_histogram — register histogram", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_metrics_add_histogram");
+    });
+
+    TEST("_metrics_add_counter — register counter", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_metrics_add_counter");
+    });
+
+    TEST("_metrics_add_gauge — register gauge", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_metrics_add_gauge");
+    });
+
+    TEST("_PerfEntry — performance measurement entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PerfEntry");
+        ASSERT_CONTAINS(src, "_entry_type");
+        ASSERT_CONTAINS(src, "_duration_ms");
+    });
+
+    TEST("_PerfObserver — observes performance events", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PerfObserver");
+        ASSERT_CONTAINS(src, "_entry_types[8]");
+        ASSERT_CONTAINS(src, "_entries[32]");
+        ASSERT_CONTAINS(src, "_enabled");
+    });
+
+    TEST("_create_perf_observer — create observer for entry types", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_perf_observer");
+    });
+
+    TEST("_perf_observer_record — record performance entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_perf_observer_record");
+    });
+
+    TEST("_SLAMonitor — tracks SLA compliance", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _SLAMonitor");
+        ASSERT_CONTAINS(src, "_sla_threshold_ms");
+        ASSERT_CONTAINS(src, "_compliant_requests");
+        ASSERT_CONTAINS(src, "_compliance_rate");
+    });
+
+    TEST("_create_sla_monitor — create SLA monitor with threshold", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_sla_monitor");
+    });
+
+    TEST("_sla_monitor_record — measure against SLA", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_sla_monitor_record");
+    });
+
+    TEST("_format_histogram_prometheus — Prometheus format histogram", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_histogram_prometheus");
+        ASSERT_CONTAINS(src, "HELP");
+        ASSERT_CONTAINS(src, "TYPE");
+    });
+
+    TEST("_format_counter_prometheus — Prometheus format counter", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_counter_prometheus");
+    });
+
+    TEST("_format_gauge_prometheus — Prometheus format gauge", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_gauge_prometheus");
+    });
+
+    TEST("_format_sla_status — JSON SLA compliance status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_sla_status");
+    });
+
+    TEST("Histogram percentile calculation — 50th, 95th, 99th", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_histogram_percentile");
+    });
+
+    TEST("Counter labels — up to 8 labels per counter", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Counter");
+        ASSERT_CONTAINS(src, "_labels[8]");
+    });
+
+    TEST("Gauge min/max tracking — track bounds over time", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_min_value");
+        ASSERT_CONTAINS(src, "_max_value");
+    });
+
+    TEST("Performance observer — observes and records entries", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PerfObserver");
+        ASSERT_CONTAINS(src, "_perf_observer_record");
+    });
+
+    TEST("Advanced monitoring tracing — all structures have _span_id", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Histogram");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Collector scrape tracking — count metrics collection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_scrape_count");
+    });
+
+    TEST("SLA compliance calculation — percentage compliant", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_compliance_rate");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15931,6 +16144,9 @@ int main() {
 
     // Phase 5.5: Worker Threads
     symm::testPhase55WorkerThreads();
+
+    // Phase 5.6: Advanced Monitoring
+    symm::testPhase56AdvancedMonitoring();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

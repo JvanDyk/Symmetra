@@ -8736,6 +8736,333 @@ __device__ const char* _format_worker_manager_status(_WorkerPoolManager* m) {
 }
 )";
 
+// Fragment 17: Advanced Monitoring and Metrics Collection
+static const char* PRELUDE_FRAG17 = R"(
+// ── Histogram for latency tracking ────────────────────────────────────────────
+// Bucket for histogram (tracks count in range)
+struct _HistogramBucket {
+    long long _min_ms;              // Min boundary (milliseconds)
+    long long _max_ms;              // Max boundary
+    long long _count;               // Count of samples in bucket
+    double _sum_ms;                 // Sum of all values
+};
+
+// Histogram for measuring latencies
+struct _Histogram {
+    const char* _name;              // "http_request_latency"
+    _HistogramBucket _buckets[16];  // Up to 16 buckets
+    int _bucket_count;
+    long long _total_count;         // Total samples
+    long long _min_observed;        // Minimum observed value
+    long long _max_observed;        // Maximum observed value
+    double _sum_observed;           // Sum for average calculation
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create histogram with bucket boundaries
+__device__ _Histogram _create_histogram(const char* name, long long boundaries[16], int count, const char* span_id) {
+    _Histogram h;
+    h._name = name;
+    h._bucket_count = (count > 16) ? 16 : count;
+    h._total_count = 0;
+    h._min_observed = LLONG_MAX;
+    h._max_observed = LLONG_MIN;
+    h._sum_observed = 0.0;
+    h._created_at = (unsigned long long)Date::now();
+    h._span_id = span_id;
+
+    for (int i = 0; i < h._bucket_count; i++) {
+        h._buckets[i]._min_ms = (i == 0) ? 0 : boundaries[i-1];
+        h._buckets[i]._max_ms = boundaries[i];
+        h._buckets[i]._count = 0;
+        h._buckets[i]._sum_ms = 0.0;
+    }
+    return h;
+}
+
+// Record value in histogram
+__device__ void _histogram_record(_Histogram* h, long long value_ms) {
+    h->_total_count++;
+    h->_sum_observed += value_ms;
+    if (value_ms < h->_min_observed) h->_min_observed = value_ms;
+    if (value_ms > h->_max_observed) h->_max_observed = value_ms;
+
+    for (int i = 0; i < h->_bucket_count; i++) {
+        if (value_ms <= h->_buckets[i]._max_ms) {
+            h->_buckets[i]._count++;
+            h->_buckets[i]._sum_ms += value_ms;
+            break;
+        }
+    }
+}
+
+// Get histogram percentile (e.g., 95th percentile)
+__device__ long long _histogram_percentile(_Histogram* h, int percentile) {
+    long long target = (h->_total_count * percentile) / 100;
+    long long cumulative = 0;
+
+    for (int i = 0; i < h->_bucket_count; i++) {
+        cumulative += h->_buckets[i]._count;
+        if (cumulative >= target) {
+            return (h->_buckets[i]._min_ms + h->_buckets[i]._max_ms) / 2;
+        }
+    }
+    return h->_max_observed;
+}
+
+// ── Counter for event counting ────────────────────────────────────────────────
+// Simple counter metric
+struct _Counter {
+    const char* _name;              // "requests_total"
+    long long _value;               // Current count
+    const char* _labels[8];         // Up to 8 labels (status:200, method:GET)
+    int _label_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create counter
+__device__ _Counter _create_counter(const char* name, const char* span_id) {
+    _Counter c;
+    c._name = name;
+    c._value = 0;
+    c._label_count = 0;
+    c._created_at = (unsigned long long)Date::now();
+    c._span_id = span_id;
+    return c;
+}
+
+// Increment counter
+__device__ void _counter_inc(_Counter* c) {
+    c->_value++;
+}
+
+// Increment by amount
+__device__ void _counter_add(_Counter* c, long long amount) {
+    c->_value += amount;
+}
+
+// ── Gauge for point-in-time measurements ──────────────────────────────────────
+// Gauge metric (can go up or down)
+struct _Gauge {
+    const char* _name;              // "memory_used_bytes"
+    long long _value;               // Current value
+    long long _min_value;           // Minimum observed
+    long long _max_value;           // Maximum observed
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create gauge
+__device__ _Gauge _create_gauge(const char* name, const char* span_id) {
+    _Gauge g;
+    g._name = name;
+    g._value = 0;
+    g._min_value = LLONG_MAX;
+    g._max_value = LLONG_MIN;
+    g._created_at = (unsigned long long)Date::now();
+    g._span_id = span_id;
+    return g;
+}
+
+// Set gauge value
+__device__ void _gauge_set(_Gauge* g, long long value) {
+    g->_value = value;
+    if (value < g->_min_value) g->_min_value = value;
+    if (value > g->_max_value) g->_max_value = value;
+}
+
+// Increment/decrement gauge
+__device__ void _gauge_add(_Gauge* g, long long delta) {
+    g->_value += delta;
+    if (g->_value < g->_min_value) g->_min_value = g->_value;
+    if (g->_value > g->_max_value) g->_max_value = g->_value;
+}
+
+// ── Metrics Collector (aggregates all metrics) ────────────────────────────────
+// Collector for all metrics
+struct _MetricsCollector {
+    const char* _id;                // "metrics-collector"
+    _Histogram _histograms[8];      // Up to 8 histograms
+    int _histogram_count;
+    _Counter _counters[16];         // Up to 16 counters
+    int _counter_count;
+    _Gauge _gauges[16];             // Up to 16 gauges
+    int _gauge_count;
+    long long _scrape_count;        // Number of times scraped
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create metrics collector
+__device__ _MetricsCollector _create_metrics_collector(const char* span_id) {
+    _MetricsCollector mc;
+    mc._id = "metrics-collector";
+    mc._histogram_count = 0;
+    mc._counter_count = 0;
+    mc._gauge_count = 0;
+    mc._scrape_count = 0;
+    mc._created_at = (unsigned long long)Date::now();
+    mc._span_id = span_id;
+    return mc;
+}
+
+// Add histogram to collector
+__device__ int _metrics_add_histogram(_MetricsCollector* mc, _Histogram h) {
+    if (mc->_histogram_count >= 8) return -1;
+    mc->_histograms[mc->_histogram_count++] = h;
+    return mc->_histogram_count - 1;
+}
+
+// Add counter to collector
+__device__ int _metrics_add_counter(_MetricsCollector* mc, _Counter c) {
+    if (mc->_counter_count >= 16) return -1;
+    mc->_counters[mc->_counter_count++] = c;
+    return mc->_counter_count - 1;
+}
+
+// Add gauge to collector
+__device__ int _metrics_add_gauge(_MetricsCollector* mc, _Gauge g) {
+    if (mc->_gauge_count >= 16) return -1;
+    mc->_gauges[mc->_gauge_count++] = g;
+    return mc->_gauge_count - 1;
+}
+
+// ── Performance Observer (hooks for performance measurements) ──────────────────
+// Performance entry for observed events
+struct _PerfEntry {
+    const char* _name;              // "http_request"
+    const char* _entry_type;        // "measure" or "mark"
+    long long _duration_ms;         // Duration in milliseconds
+    long long _start_time_ms;       // Start timestamp
+    const char* _detail;            // Additional details
+};
+
+// Performance observer
+struct _PerfObserver {
+    const char* _id;                // "perf-observer"
+    const char* _entry_types[8];    // Types to observe
+    int _type_count;
+    _PerfEntry _entries[32];        // Up to 32 observed entries
+    int _entry_count;
+    int _enabled;                   // 1=enabled, 0=disabled
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create performance observer
+__device__ _PerfObserver _create_perf_observer(const char* entry_types[8], int count, const char* span_id) {
+    _PerfObserver po;
+    po._id = "perf-observer";
+    po._type_count = (count > 8) ? 8 : count;
+    po._entry_count = 0;
+    po._enabled = 1;
+    po._created_at = (unsigned long long)Date::now();
+    po._span_id = span_id;
+
+    for (int i = 0; i < po._type_count; i++) {
+        po._entry_types[i] = entry_types[i];
+    }
+    return po;
+}
+
+// Record performance entry
+__device__ int _perf_observer_record(_PerfObserver* po, const char* name, const char* type,
+                                      long long duration_ms, const char* detail) {
+    if (!po->_enabled || po->_entry_count >= 32) return -1;
+
+    _PerfEntry* entry = &po->_entries[po->_entry_count++];
+    entry->_name = name;
+    entry->_entry_type = type;
+    entry->_duration_ms = duration_ms;
+    entry->_start_time_ms = (long long)Date::now();
+    entry->_detail = detail;
+    return po->_entry_count - 1;
+}
+
+// ── SLA Monitor (tracks SLA compliance) ──────────────────────────────────────
+// Service level agreement monitoring
+struct _SLAMonitor {
+    const char* _id;                // "sla-monitor"
+    long long _sla_threshold_ms;    // SLA threshold in milliseconds
+    long long _total_requests;      // Total requests measured
+    long long _compliant_requests;  // Requests within SLA
+    long long _violating_requests;  // Requests exceeding SLA
+    double _compliance_rate;        // Percentage compliant
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create SLA monitor
+__device__ _SLAMonitor _create_sla_monitor(long long threshold_ms, const char* span_id) {
+    _SLAMonitor sm;
+    sm._id = "sla-monitor";
+    sm._sla_threshold_ms = threshold_ms;
+    sm._total_requests = 0;
+    sm._compliant_requests = 0;
+    sm._violating_requests = 0;
+    sm._compliance_rate = 100.0;
+    sm._created_at = (unsigned long long)Date::now();
+    sm._span_id = span_id;
+    return sm;
+}
+
+// Record measurement against SLA
+__device__ void _sla_monitor_record(_SLAMonitor* sm, long long duration_ms) {
+    sm->_total_requests++;
+    if (duration_ms <= sm->_sla_threshold_ms) {
+        sm->_compliant_requests++;
+    } else {
+        sm->_violating_requests++;
+    }
+    sm->_compliance_rate = (double)sm->_compliant_requests * 100.0 / (double)sm->_total_requests;
+}
+
+// ── JSON Formatting for Prometheus ────────────────────────────────────────────
+__device__ const char* _format_histogram_prometheus(_Histogram* h) {
+    static char buf[512];
+    double avg = (h->_total_count > 0) ? (h->_sum_observed / h->_total_count) : 0.0;
+    int len = 0;
+    len += sprintf(buf+len, "# HELP %s Latency histogram\n", h->_name);
+    len += sprintf(buf+len, "# TYPE %s histogram\n", h->_name);
+    len += sprintf(buf+len, "%s_count %lld\n", h->_name, h->_total_count);
+    len += sprintf(buf+len, "%s_sum %.1f\n", h->_name, h->_sum_observed);
+    len += sprintf(buf+len, "%s_avg %.1f", h->_name, avg);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_counter_prometheus(_Counter* c) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "# HELP %s Counter\n", c->_name);
+    len += sprintf(buf+len, "# TYPE %s counter\n", c->_name);
+    len += sprintf(buf+len, "%s %lld", c->_name, c->_value);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_gauge_prometheus(_Gauge* g) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "# HELP %s Gauge\n", g->_name);
+    len += sprintf(buf+len, "# TYPE %s gauge\n", g->_name);
+    len += sprintf(buf+len, "%s %lld", g->_name, g->_value);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_sla_status(_SLAMonitor* sm) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"threshold_ms\\":%lld,\\"total\\":%lld,\\"compliant\\":%lld,\\"compliance_rate\\\":%.1f%%}",
+                   sm->_sla_threshold_ms, sm->_total_requests, sm->_compliant_requests, sm->_compliance_rate);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -8757,6 +9084,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG14) result += PRELUDE_FRAG14; // Global utilities
     if (PRELUDE_FRAG15) result += PRELUDE_FRAG15; // Advanced scheduling
     if (PRELUDE_FRAG16) result += PRELUDE_FRAG16; // Worker threads
+    if (PRELUDE_FRAG17) result += PRELUDE_FRAG17; // Advanced monitoring
     return result;
 }
 
