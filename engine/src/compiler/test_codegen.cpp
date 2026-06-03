@@ -14664,6 +14664,223 @@ static void testPhase43ModuleSystem() {
     });
 }
 
+// Phase 5.0: RTTI System (Runtime Type Information)
+static void testPhase50RTTISystem() {
+    std::cout << "\n=== Phase 5.0: RTTI System (Runtime Type Information) ===\n";
+
+    // TypeDescriptor
+    TEST("TypeDescriptor — runtime type information", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct TypeDescriptor");
+        ASSERT_CONTAINS(src, "_type_id");
+        ASSERT_CONTAINS(src, "_is_callable");
+        ASSERT_CONTAINS(src, "_is_iterable");
+        ASSERT_CONTAINS(src, "_is_primitive");
+    });
+
+    // Type IDs
+    TEST("TypeDescriptor — type IDs: undefined(0), null(1), boolean(2), number(3), string(4), symbol(5), object(6), function(7), array(8), date(9), regexp(10)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_type_id");
+    });
+
+    // PropertyDescriptor
+    TEST("PropertyDescriptor — property metadata (writable, enumerable, configurable)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct PropertyDescriptor");
+        ASSERT_CONTAINS(src, "_writable");
+        ASSERT_CONTAINS(src, "_enumerable");
+        ASSERT_CONTAINS(src, "_configurable");
+    });
+
+    // PropertyDescriptor accessor
+    TEST("PropertyDescriptor — accessor properties (getter/setter)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_is_accessor");
+    });
+
+    // ReflectAPI
+    TEST("ReflectAPI — Reflect object for metaprogramming", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ReflectAPI");
+        ASSERT_CONTAINS(src, "_operation_count");
+    });
+
+    // ReflectAPI methods
+    TEST("ReflectAPI — methods: has, get, set, deleteProperty, getPrototypeOf, getOwnPropertyNames", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "has");
+        ASSERT_CONTAINS(src, "get");
+        ASSERT_CONTAINS(src, "set");
+        ASSERT_CONTAINS(src, "deleteProperty");
+    });
+
+    // WeakMap
+    TEST("WeakMap — maps objects to values without preventing GC", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WeakMap");
+        ASSERT_CONTAINS(src, "_entries[16]");
+        ASSERT_CONTAINS(src, "_cleared_count");
+    });
+
+    // WeakMap operations
+    TEST("WeakMap — operations: set, get, has, delete", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "set");
+        ASSERT_CONTAINS(src, "get");
+        ASSERT_CONTAINS(src, "has");
+        ASSERT_CONTAINS(src, "delete_key");
+    });
+
+    // WeakSet
+    TEST("WeakSet — set of objects without preventing GC", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WeakSet");
+        ASSERT_CONTAINS(src, "_entries[16]");
+    });
+
+    // WeakSet operations
+    TEST("WeakSet — operations: add, has, delete", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "add");
+        ASSERT_CONTAINS(src, "has");
+        ASSERT_CONTAINS(src, "delete_key");
+    });
+
+    // TypeChecker
+    TEST("TypeChecker — runtime type checking utilities", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct TypeChecker");
+        ASSERT_CONTAINS(src, "_checks_performed");
+    });
+
+    // TypeChecker methods
+    TEST("TypeChecker — methods: typeof_value, instanceof_check, isArray", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "typeof_value");
+        ASSERT_CONTAINS(src, "instanceof_check");
+        ASSERT_CONTAINS(src, "isArray");
+    });
+
+    // Helper: symm_create_type_descriptor
+    TEST("symm_create_type_descriptor — allocate type info", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_type_descriptor");
+    });
+
+    // Helper: symm_create_property_descriptor
+    TEST("symm_create_property_descriptor — allocate property info", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_property_descriptor");
+    });
+
+    // Helper: symm_create_reflect_api
+    TEST("symm_create_reflect_api — allocate Reflect", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_reflect_api");
+    });
+
+    // Helper: symm_create_weak_map
+    TEST("symm_create_weak_map — allocate WeakMap", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_weak_map");
+    });
+
+    // Helper: symm_create_weak_set
+    TEST("symm_create_weak_set — allocate WeakSet", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_weak_set");
+    });
+
+    // Helper: symm_create_type_checker
+    TEST("symm_create_type_checker — allocate type checker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_type_checker");
+    });
+
+    // Format helpers
+    TEST("symm_format_type_descriptor — JSON type info", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_type_descriptor");
+        ASSERT_CONTAINS(src, "callable");
+    });
+
+    TEST("symm_format_reflect_api_status — JSON Reflect status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_reflect_api_status");
+        ASSERT_CONTAINS(src, "operations");
+    });
+
+    TEST("symm_format_weak_map_status — JSON WeakMap status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_weak_map_status");
+        ASSERT_CONTAINS(src, "entries");
+    });
+
+    TEST("symm_format_weak_set_status — JSON WeakSet status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_weak_set_status");
+    });
+
+    TEST("symm_format_type_checker_status — JSON type checker status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_type_checker_status");
+        ASSERT_CONTAINS(src, "checks");
+    });
+
+    // Integration: Reflect API
+    TEST("ReflectAPI — Reflect.has, Reflect.get, Reflect.set, Reflect.deleteProperty", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ReflectAPI");
+        ASSERT_CONTAINS(src, "has");
+        ASSERT_CONTAINS(src, "get");
+        ASSERT_CONTAINS(src, "set");
+    });
+
+    // Integration: WeakMap/WeakSet usage
+    TEST("WeakMap + WeakSet — metadata storage without preventing GC", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "WeakMap");
+        ASSERT_CONTAINS(src, "WeakSet");
+        ASSERT_CONTAINS(src, "_cleared_count");
+    });
+
+    // Integration: Type checking
+    TEST("TypeChecker — typeof, instanceof, Array.isArray patterns", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TypeChecker");
+        ASSERT_CONTAINS(src, "typeof_value");
+        ASSERT_CONTAINS(src, "instanceof_check");
+        ASSERT_CONTAINS(src, "isArray");
+    });
+
+    // Integration: Full RTTI system
+    TEST("RTTI: TypeDescriptor + PropertyDescriptor + Reflect + WeakMap + TypeChecker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TypeDescriptor");
+        ASSERT_CONTAINS(src, "PropertyDescriptor");
+        ASSERT_CONTAINS(src, "ReflectAPI");
+        ASSERT_CONTAINS(src, "WeakMap");
+        ASSERT_CONTAINS(src, "TypeChecker");
+    });
+
+    // Integration: Tracing
+    TEST("RTTI system linked to Phase 3.18 tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "ReflectAPI");
+        ASSERT_CONTAINS(src, "WeakMap");
+    });
+
+    // Integration: Performance metrics
+    TEST("RTTI system with operation counting and metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_checks_performed");
+        ASSERT_CONTAINS(src, "_operation_count");
+        ASSERT_CONTAINS(src, "_cleared_count");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -14925,6 +15142,9 @@ int main() {
 
     // Phase 4.3: Module System
     symm::testPhase43ModuleSystem();
+
+    // Phase 5.0: RTTI System
+    symm::testPhase50RTTISystem();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

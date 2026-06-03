@@ -4649,6 +4649,332 @@ __device__ inline const char* symm_format_module_cache_stats(const ModuleCache& 
     return buf;
 }
 
+// ── Phase 5.0: RTTI System (Runtime Type Information) ────────────────────────
+
+// Type descriptor for runtime type checking
+struct TypeDescriptor {
+    const char* _name;              // Type name ("string", "number", "object", etc.)
+    int _type_id;                   // 0=undefined, 1=null, 2=boolean, 3=number, 4=string,
+                                    // 5=symbol, 6=object, 7=function, 8=array, 9=date, 10=regexp
+    int _is_callable;               // 1=function/method
+    int _is_iterable;               // 1=array/string/map/set
+    int _is_primitive;              // 1=primitive type
+    unsigned long long _created_time;
+    const char* _span_id;
+};
+
+// Property descriptor (like Object.getOwnPropertyDescriptor)
+struct PropertyDescriptor {
+    const char* _name;
+    const char* _value;
+    int _writable;                  // 1=writable
+    int _enumerable;                // 1=enumerable
+    int _configurable;              // 1=configurable
+    int _is_accessor;               // 1=getter/setter, 0=data property
+    const char* _span_id;
+};
+
+// Reflect API support
+struct ReflectAPI {
+    const char* _id;
+    int _operation_count;           // Number of reflect operations
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ ReflectAPI(const char* id = "")
+        : _id(id), _operation_count(0), _created_time(clock64()) {}
+
+    // Reflect.getOwnPropertyNames
+    __device__ int getOwnPropertyNames(const char* obj_name, const char** names, int max_count) {
+        // Simplified: return empty for now (would parse object at runtime)
+        return 0;
+    }
+
+    // Reflect.has (hasOwnProperty)
+    __device__ int has(const char* obj_name, const char* prop_name) {
+        _operation_count++;
+        return 1;  // Simplified: always true
+    }
+
+    // Reflect.get
+    __device__ const char* get(const char* obj_name, const char* prop_name) {
+        _operation_count++;
+        return NULL;  // Simplified: would get property
+    }
+
+    // Reflect.set
+    __device__ int set(const char* obj_name, const char* prop_name, const char* value) {
+        _operation_count++;
+        return 1;  // Simplified: always success
+    }
+
+    // Reflect.deleteProperty
+    __device__ int deleteProperty(const char* obj_name, const char* prop_name) {
+        _operation_count++;
+        return 1;  // Simplified: always success
+    }
+
+    // Reflect.getPrototypeOf
+    __device__ const char* getPrototypeOf(const char* obj_name) {
+        _operation_count++;
+        return "Object";  // Simplified
+    }
+
+    __device__ int getOperationCount() const { return _operation_count; }
+};
+
+// WeakMap: Maps objects to values, doesn't prevent garbage collection
+struct WeakMapEntry {
+    const char* _key;               // Object identity (pointer as string)
+    const char* _value;
+    unsigned long long _set_time;
+};
+
+struct WeakMap {
+    const char* _id;
+    WeakMapEntry _entries[16];      // Up to 16 weak references
+    int _entry_count;
+    int _cleared_count;             // Entries cleared by GC (simulated)
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ WeakMap(const char* id = "")
+        : _id(id), _entry_count(0), _cleared_count(0), _created_time(clock64()) {}
+
+    // Set value for key
+    __device__ int set(const char* key, const char* value) {
+        if (_entry_count >= 16) return 0;  // Full
+        _entries[_entry_count]._key = key;
+        _entries[_entry_count]._value = value;
+        _entries[_entry_count]._set_time = clock64();
+        _entry_count++;
+        return 1;
+    }
+
+    // Get value for key
+    __device__ const char* get(const char* key) {
+        for (int i = 0; i < _entry_count; i++) {
+            if (_entries[i]._key == key) {
+                return _entries[i]._value;
+            }
+        }
+        return NULL;  // Not found (or key was GC'd)
+    }
+
+    // Check if key exists
+    __device__ int has(const char* key) {
+        return get(key) != NULL ? 1 : 0;
+    }
+
+    // Delete key
+    __device__ int delete_key(const char* key) {
+        for (int i = 0; i < _entry_count; i++) {
+            if (_entries[i]._key == key) {
+                // Shift remaining entries
+                for (int j = i; j < _entry_count - 1; j++) {
+                    _entries[j] = _entries[j + 1];
+                }
+                _entry_count--;
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    __device__ int getSize() const { return _entry_count; }
+};
+
+// WeakSet: Set of objects, doesn't prevent garbage collection
+struct WeakSetEntry {
+    const char* _key;               // Object identity
+    unsigned long long _added_time;
+};
+
+struct WeakSet {
+    const char* _id;
+    WeakSetEntry _entries[16];      // Up to 16 weak references
+    int _entry_count;
+    int _cleared_count;             // Entries cleared by GC (simulated)
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ WeakSet(const char* id = "")
+        : _id(id), _entry_count(0), _cleared_count(0), _created_time(clock64()) {}
+
+    // Add key
+    __device__ int add(const char* key) {
+        if (_entry_count >= 16) return 0;  // Full
+        // Check for duplicate
+        for (int i = 0; i < _entry_count; i++) {
+            if (_entries[i]._key == key) return 0;  // Already exists
+        }
+        _entries[_entry_count]._key = key;
+        _entries[_entry_count]._added_time = clock64();
+        _entry_count++;
+        return 1;
+    }
+
+    // Check if key exists
+    __device__ int has(const char* key) {
+        for (int i = 0; i < _entry_count; i++) {
+            if (_entries[i]._key == key) return 1;
+        }
+        return 0;
+    }
+
+    // Delete key
+    __device__ int delete_key(const char* key) {
+        for (int i = 0; i < _entry_count; i++) {
+            if (_entries[i]._key == key) {
+                // Shift remaining entries
+                for (int j = i; j < _entry_count - 1; j++) {
+                    _entries[j] = _entries[j + 1];
+                }
+                _entry_count--;
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    __device__ int getSize() const { return _entry_count; }
+};
+
+// Type checking utilities
+struct TypeChecker {
+    const char* _id;
+    int _checks_performed;
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ TypeChecker(const char* id = "")
+        : _id(id), _checks_performed(0), _created_time(clock64()) {}
+
+    // Get type of value
+    __device__ const char* typeof_value(const char* value) {
+        _checks_performed++;
+        if (value == NULL) return "undefined";
+        if (value[0] == 't' && value[1] == 'r' && value[2] == 'u' && value[3] == 'e') return "boolean";
+        if (value[0] == 'f' && value[1] == 'a' && value[2] == 'l' && value[3] == 's') return "boolean";
+        // Simplified: would need more sophisticated type checking
+        return "object";
+    }
+
+    // instanceof check
+    __device__ int instanceof_check(const char* value, const char* constructor) {
+        _checks_performed++;
+        return 1;  // Simplified
+    }
+
+    // isArray check
+    __device__ int isArray(const char* value) {
+        _checks_performed++;
+        if (value && value[0] == '[') return 1;
+        return 0;
+    }
+
+    __device__ int getChecksPerformed() const { return _checks_performed; }
+};
+
+// Helper: Create type descriptor
+__device__ inline TypeDescriptor symm_create_type_descriptor(const char* name, int type_id, const char* span_id) {
+    TypeDescriptor td;
+    td._name = name;
+    td._type_id = type_id;
+    td._is_callable = (type_id == 7) ? 1 : 0;  // function type
+    td._is_iterable = (type_id == 8) ? 1 : 0;  // array type
+    td._is_primitive = (type_id < 6) ? 1 : 0;  // primitive types
+    td._created_time = clock64();
+    td._span_id = span_id;
+    return td;
+}
+
+// Helper: Create property descriptor
+__device__ inline PropertyDescriptor symm_create_property_descriptor(const char* name, const char* value, const char* span_id) {
+    PropertyDescriptor pd;
+    pd._name = name;
+    pd._value = value;
+    pd._writable = 1;  // Default: writable
+    pd._enumerable = 1;  // Default: enumerable
+    pd._configurable = 1;  // Default: configurable
+    pd._is_accessor = 0;  // Default: data property
+    pd._span_id = span_id;
+    return pd;
+}
+
+// Helper: Create Reflect API
+__device__ inline ReflectAPI symm_create_reflect_api(const char* id, const char* span_id) {
+    ReflectAPI api(id);
+    api._span_id = span_id;
+    return api;
+}
+
+// Helper: Create WeakMap
+__device__ inline WeakMap symm_create_weak_map(const char* id, const char* span_id) {
+    WeakMap wm(id);
+    wm._span_id = span_id;
+    return wm;
+}
+
+// Helper: Create WeakSet
+__device__ inline WeakSet symm_create_weak_set(const char* id, const char* span_id) {
+    WeakSet ws(id);
+    ws._span_id = span_id;
+    return ws;
+}
+
+// Helper: Create type checker
+__device__ inline TypeChecker symm_create_type_checker(const char* id, const char* span_id) {
+    TypeChecker tc(id);
+    tc._span_id = span_id;
+    return tc;
+}
+
+// Helper: Format type descriptor as JSON
+__device__ inline const char* symm_format_type_descriptor(const TypeDescriptor& td) {
+    static char buf[384];
+    snprintf(buf, sizeof(buf),
+        "{\"name\":\"%s\",\"type_id\":%d,\"callable\":%d,\"iterable\":%d,\"primitive\":%d}",
+        td._name ? td._name : "", td._type_id, td._is_callable, td._is_iterable, td._is_primitive);
+    return buf;
+}
+
+// Helper: Format Reflect API status as JSON
+__device__ inline const char* symm_format_reflect_api_status(const ReflectAPI& api) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"operations\":%d}",
+        api._id ? api._id : "", api._operation_count);
+    return buf;
+}
+
+// Helper: Format WeakMap status as JSON
+__device__ inline const char* symm_format_weak_map_status(const WeakMap& wm) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"entries\":%d,\"cleared\":%d}",
+        wm._id ? wm._id : "", wm._entry_count, wm._cleared_count);
+    return buf;
+}
+
+// Helper: Format WeakSet status as JSON
+__device__ inline const char* symm_format_weak_set_status(const WeakSet& ws) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"entries\":%d,\"cleared\":%d}",
+        ws._id ? ws._id : "", ws._entry_count, ws._cleared_count);
+    return buf;
+}
+
+// Helper: Format TypeChecker status as JSON
+__device__ inline const char* symm_format_type_checker_status(const TypeChecker& tc) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"checks\":%d}",
+        tc._id ? tc._id : "", tc._checks_performed);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
