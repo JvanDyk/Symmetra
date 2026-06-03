@@ -14957,6 +14957,134 @@ static void testPhase51ErrorHandling() {
     });
 }
 
+// Phase 5.2: Global Timers (setTimeout, setInterval, setImmediate)
+static void testPhase52GlobalTimers() {
+    std::cout << "\n=== Phase 5.2: Global Timers ===\n";
+
+    TEST("_TimerHandle — timer ID returned by setTimeout", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _TimerHandle");
+        ASSERT_CONTAINS(src, "_timer_id");
+        ASSERT_CONTAINS(src, "_created_at");
+    });
+
+    TEST("_Timer — individual timer state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Timer");
+        ASSERT_CONTAINS(src, "_callback_id");
+        ASSERT_CONTAINS(src, "_delay_ms");
+        ASSERT_CONTAINS(src, "_execute_time");
+    });
+
+    TEST("_Timer types — setTimeout (0), setInterval (1), setImmediate (2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Timer");
+        ASSERT_CONTAINS(src, "_type");
+    });
+
+    TEST("_TimerManager — manages up to 64 concurrent timers", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _TimerManager");
+        ASSERT_CONTAINS(src, "_timers[64]");
+        ASSERT_CONTAINS(src, "_timer_count");
+        ASSERT_CONTAINS(src, "_next_timer_id");
+    });
+
+    TEST("_create_timer_handle — allocate timer handle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_timer_handle");
+    });
+
+    TEST("_create_timer_manager — initialize manager", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_timer_manager");
+    });
+
+    TEST("_timer_manager_add — add timer to manager", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_timer_manager_add");
+    });
+
+    TEST("_timer_manager_clear — cancel timer by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_timer_manager_clear");
+    });
+
+    TEST("_timer_manager_get — lookup timer by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_timer_manager_get");
+    });
+
+    TEST("_timer_manager_process — fire due timers, returns count", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_timer_manager_process");
+    });
+
+    TEST("Timer tracking — remaining_ms updated per cycle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_remaining_ms");
+    });
+
+    TEST("Interval timers — execution_count incremented on fire", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_execution_count");
+    });
+
+    TEST("setImmediate — type 2, no delay", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_delay_ms");
+    });
+
+    TEST("setTimeout — type 0, fires once", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_type");
+    });
+
+    TEST("setInterval — type 1, reschedules on fire", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_type");
+    });
+
+    TEST("Timer cancellation — _active flag cleared", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_timer_manager_clear");
+        ASSERT_CONTAINS(src, "_active");
+    });
+
+    TEST("Earliest timer — _earliest_execute tracks next fire", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_earliest_execute");
+    });
+
+    TEST("_format_timer_status — JSON timer state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_timer_status");
+    });
+
+    TEST("_format_timer_manager_status — JSON manager state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_timer_manager_status");
+    });
+
+    TEST("Global timer manager — _global_timer_manager instance", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_global_timer_manager");
+    });
+
+    TEST("Timer tracing — _span_id links to Phase 3.18", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Timer");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Timer scheduling — _scheduled_time and _execute_time", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_scheduled_time");
+        ASSERT_CONTAINS(src, "_execute_time");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15224,6 +15352,9 @@ int main() {
 
     // Phase 5.1: Advanced Error Handling
     symm::testPhase51ErrorHandling();
+
+    // Phase 5.2: Global Timers
+    symm::testPhase52GlobalTimers();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

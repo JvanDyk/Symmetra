@@ -7689,6 +7689,164 @@ struct _CryptoGlobal {
 __device__ _CryptoGlobal crypto;
 )";
 
+// Fragment 13: Global Timers (setTimeout, setInterval, setImmediate)
+static const char* PRELUDE_FRAG13 = R"(
+// ── Timer Structures (setTimeout, setInterval, setImmediate) ─────────────────────
+// Timer handle returned by setTimeout/setInterval
+struct _TimerHandle {
+    const char* _id;                // "timer-001", "timer-002"...
+    int _timer_id;                  // Numeric ID (1, 2, 3...)
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Individual timer in the timer manager
+struct _Timer {
+    int _id;                        // Unique timer ID
+    const char* _callback_id;       // Identifier for callback function
+    int _type;                      // 0=setTimeout, 1=setInterval, 2=setImmediate
+    long long _delay_ms;            // Delay in milliseconds
+    long long _scheduled_time;      // When it was scheduled
+    long long _execute_time;        // When it should execute
+    long long _remaining_ms;        // Remaining time
+    int _active;                    // 1=active, 0=cleared
+    int _execution_count;           // For intervals: how many times executed
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Timer manager (maintains all active timers)
+struct _TimerManager {
+    const char* _id;                // "timers-main"
+    _Timer _timers[64];             // Up to 64 concurrent timers
+    int _timer_count;
+    int _next_timer_id;             // Next ID to allocate (increments)
+    long long _earliest_execute;    // Time of next timer to fire
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Helper: Create timer handle
+__device__ _TimerHandle _create_timer_handle(int id, const char* span) {
+    _TimerHandle h; h._id = "timer"; h._timer_id = id;
+    h._created_at = (unsigned long long)Date::now();
+    h._span_id = span; return h;
+}
+
+// Helper: Create timer manager
+__device__ _TimerManager _create_timer_manager(const char* span) {
+    _TimerManager m; m._id = "timers-main";
+    m._timer_count = 0; m._next_timer_id = 1;
+    m._earliest_execute = 0; m._created_at = (unsigned long long)Date::now();
+    m._span_id = span; return m;
+}
+
+// Helper: Add timer to manager
+__device__ int _timer_manager_add(_TimerManager* m, const char* cb_id, int type, long long delay, const char* span) {
+    if (m->_timer_count >= 64) return -1;  // Out of slots
+    int id = m->_next_timer_id++;
+    _Timer* t = &m->_timers[m->_timer_count++];
+    t->_id = id;
+    t->_callback_id = cb_id;
+    t->_type = type;
+    t->_delay_ms = delay;
+    t->_scheduled_time = (long long)Date::now();
+    t->_execute_time = t->_scheduled_time + delay;
+    t->_remaining_ms = delay;
+    t->_active = 1;
+    t->_execution_count = 0;
+    t->_created_at = (unsigned long long)Date::now();
+    t->_span_id = span;
+    if (m->_earliest_execute == 0 || t->_execute_time < m->_earliest_execute) {
+        m->_earliest_execute = t->_execute_time;
+    }
+    return id;
+}
+
+// Helper: Clear (cancel) a timer
+__device__ int _timer_manager_clear(_TimerManager* m, int timer_id) {
+    for (int i = 0; i < m->_timer_count; i++) {
+        if (m->_timers[i]._id == timer_id && m->_timers[i]._active) {
+            m->_timers[i]._active = 0;
+            return 1;  // Cleared
+        }
+    }
+    return 0;  // Not found or already cleared
+}
+
+// Helper: Get timer by ID
+__device__ _Timer* _timer_manager_get(_TimerManager* m, int timer_id) {
+    for (int i = 0; i < m->_timer_count; i++) {
+        if (m->_timers[i]._id == timer_id) return &m->_timers[i];
+    }
+    return 0;  // Not found
+}
+
+// Helper: Process timers (called each scheduler cycle)
+// Returns count of timers that fired
+__device__ int _timer_manager_process(_TimerManager* m, long long now) {
+    int fired = 0;
+    for (int i = 0; i < m->_timer_count; i++) {
+        _Timer* t = &m->_timers[i];
+        if (!t->_active) continue;
+
+        // Check if it's time to execute
+        if (now >= t->_execute_time) {
+            t->_execution_count++;
+            fired++;
+
+            if (t->_type == 0 || t->_type == 2) {
+                // setTimeout or setImmediate — execute once and deactivate
+                t->_active = 0;
+            } else if (t->_type == 1) {
+                // setInterval — reschedule
+                t->_execute_time = now + t->_delay_ms;
+                t->_remaining_ms = t->_delay_ms;
+            }
+        } else {
+            // Not ready yet — update remaining
+            t->_remaining_ms = t->_execute_time - now;
+            if (t->_remaining_ms < 0) t->_remaining_ms = 0;
+        }
+    }
+    // Recalculate earliest timer
+    m->_earliest_execute = 0;
+    for (int i = 0; i < m->_timer_count; i++) {
+        if (m->_timers[i]._active && m->_timers[i]._execute_time > 0) {
+            if (m->_earliest_execute == 0 || m->_timers[i]._execute_time < m->_earliest_execute) {
+                m->_earliest_execute = m->_timers[i]._execute_time;
+            }
+        }
+    }
+    return fired;
+}
+
+// Global timer manager instance
+__device__ _TimerManager _global_timer_manager;
+
+// JSON formatting helper
+__device__ const char* _format_timer_status(_Timer* t) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"id\\":%d,\\"type\\":%d,\\"active\\":%d,", t->_id, t->_type, t->_active);
+    len += sprintf(buf+len, "\\"delay_ms\\":%lld,\\"remaining_ms\\":%lld,\\"executions\\":%d}",
+                   t->_delay_ms, t->_remaining_ms, t->_execution_count);
+    buf[len] = 0;
+    return buf;
+}
+
+// JSON formatting helper for manager
+__device__ const char* _format_timer_manager_status(_TimerManager* m) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"id\\":\"%s\\",\\"timers\\":%d,\\"next_id\\":%d,",
+                   m->_id, m->_timer_count, m->_next_timer_id);
+    len += sprintf(buf+len, "\\"earliest_execute\\":%lld}", m->_earliest_execute);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -7706,6 +7864,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG10B) result += PRELUDE_FRAG10B;
     if (PRELUDE_FRAG11) result += PRELUDE_FRAG11;
     if (PRELUDE_FRAG12) result += PRELUDE_FRAG12; // SHA-256 + HMAC
+    if (PRELUDE_FRAG13) result += PRELUDE_FRAG13; // Global timers
     return result;
 }
 
