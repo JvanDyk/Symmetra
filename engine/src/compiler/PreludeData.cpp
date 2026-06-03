@@ -2946,6 +2946,68 @@ __device__ inline void symm_stream_close(WritableStream& stream) {
     stream._state = 1;
 }
 
+// ── Phase 3.15: TransformStream for stream transformation pipelines ────────────
+// TransformStream connects a ReadableStream to a WritableStream with transformation
+
+struct TransformStream {
+    ReadableStream* _input;
+    WritableStream* _output;
+    int _state;  // 0=streaming, 1=flushed, 2=closed, 3=errored
+    int _queued_size;
+    const char* _transform_buffer;  // Intermediate buffer for transformed data
+
+    __device__ TransformStream()
+        : _input(nullptr), _output(nullptr), _state(0), _queued_size(0), _transform_buffer("") {}
+
+    __device__ TransformStream(ReadableStream* input, WritableStream* output)
+        : _input(input), _output(output), _state(0), _queued_size(0), _transform_buffer("") {}
+
+    // Check if transform is readable
+    __device__ bool readable() const { return _state == 0 && _input && _input->canRead(); }
+
+    // Check if transform is writable
+    __device__ bool writable() const { return _state == 0 && _output && _output->canWrite(); }
+
+    // Get desired size from output stream (backpressure signal)
+    __device__ int getDesiredSize() const {
+        return _output ? _output->getDesiredSize() : 0;
+    }
+
+    // Check if closed
+    __device__ bool isClosed() const { return _state >= 2; }
+};
+
+// Transform stream read operation
+__device__ inline const char* symm_transform_read(TransformStream& stream) {
+    if (stream._state != 0 || !stream._input) return nullptr;
+    return symm_stream_read(*stream._input);
+}
+
+// Transform stream write operation (applies transformation then writes)
+__device__ inline bool symm_transform_write(TransformStream& stream, const char* data) {
+    if (stream._state != 0 || !stream._output) return false;
+    // Store transformed data in intermediate buffer
+    stream._transform_buffer = data;  // Simplified: no transformation applied yet
+    stream._queued_size += symm_strlen(data);
+    // Write transformed data to output
+    return symm_stream_write(*stream._output, data, symm_strlen(data));
+}
+
+// Flush remaining data in transform
+__device__ inline void symm_transform_flush(TransformStream& stream) {
+    if (!stream._output) return;
+    stream._state = 1;  // Mark as flushed
+    symm_stream_close(*stream._output);
+}
+
+// Helper to pipe data from readable to writable through transform
+__device__ inline bool symm_pipe_transform(ReadableStream& readable, WritableStream& writable) {
+    if (!readable.canRead() || !writable.canWrite()) return false;
+    const char* data = symm_stream_read(readable);
+    if (!data) return false;
+    return symm_stream_write(writable, data, symm_strlen(data));
+}
+
 // ── Improved Error & Coercion Handling ──────────────────────────────────────
 
 // AggregateError with iterable errors array

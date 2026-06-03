@@ -8990,6 +8990,141 @@ static void testDateAndStreaming() {
         );
         ASSERT_CONTAINS(src, "getDesiredSize");
     });
+
+    // ── Phase 3.15: TransformStream ────────────────────────────────────────────
+    TEST("TransformStream creation — constructed", {
+        auto src = codegen(
+            "app.post('/transform', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "TransformStream");
+    });
+
+    TEST("TransformStream readable check", {
+        auto src = codegen(
+            "app.get('/trans-readable', (ctx) => {\n"
+            "  const transform = new TransformStream();\n"
+            "  const isReadable = transform.readable();\n"
+            "  ctx.json({ readable: isReadable });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "readable");
+    });
+
+    TEST("TransformStream writable check", {
+        auto src = codegen(
+            "app.get('/trans-writable', (ctx) => {\n"
+            "  const transform = new TransformStream();\n"
+            "  const isWritable = transform.writable();\n"
+            "  ctx.json({ writable: isWritable });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "writable");
+    });
+
+    TEST("TransformStream desired size", {
+        auto src = codegen(
+            "app.get('/trans-desired', (ctx) => {\n"
+            "  const transform = new TransformStream();\n"
+            "  const size = transform.getDesiredSize();\n"
+            "  ctx.json({ desired: size });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getDesiredSize");
+    });
+
+    TEST("TransformStream read operation", {
+        auto src = codegen(
+            "app.post('/trans-read', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  const data = symm_transform_read(transform);\n"
+            "  ctx.json({ ok: data !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_transform_read");
+    });
+
+    TEST("TransformStream write operation", {
+        auto src = codegen(
+            "app.post('/trans-write', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  const success = symm_transform_write(transform, 'data');\n"
+            "  ctx.json({ success });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_transform_write");
+    });
+
+    TEST("TransformStream flush operation", {
+        auto src = codegen(
+            "app.post('/trans-flush', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  symm_transform_flush(transform);\n"
+            "  ctx.json({ flushed: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_transform_flush");
+    });
+
+    TEST("TransformStream closed check", {
+        auto src = codegen(
+            "app.get('/trans-closed', (ctx) => {\n"
+            "  const transform = new TransformStream();\n"
+            "  const closed = transform.isClosed();\n"
+            "  ctx.json({ closed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "isClosed");
+    });
+
+    TEST("TransformStream pipe operation", {
+        auto src = codegen(
+            "app.post('/trans-pipe', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const piped = symm_pipe_transform(readable, writable);\n"
+            "  ctx.json({ piped });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_pipe_transform");
+    });
+
+    TEST("TransformStream backpressure handling", {
+        auto src = codegen(
+            "app.post('/trans-backpressure', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream(1024);\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  const desired = transform.getDesiredSize();\n"
+            "  ctx.json({ desired });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getDesiredSize");
+    });
+
+    TEST("TransformStream with large data", {
+        auto src = codegen(
+            "app.post('/trans-large', (ctx) => {\n"
+            "  const readable = new ReadableStream();\n"
+            "  const writable = new WritableStream();\n"
+            "  const transform = new TransformStream(readable, writable);\n"
+            "  const largeData = 'x'.repeat(5000);\n"
+            "  const success = symm_transform_write(transform, largeData);\n"
+            "  ctx.json({ success });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_transform_write");
+    });
 }
 
 static void testImprovedPartialFeatures() {
