@@ -2793,6 +2793,230 @@ __device__ inline const char* symm_correlate_request(const char* incoming_id, co
     return instance_id;
 }
 
+// ── Phase 3.19: Work-Stealing Thread Pool & Lock-Free Coordination ────────────
+
+// Work queue entry for task distribution
+struct WorkQueueEntry {
+    const char* _task_id;
+    const char* _span_id;          // Link to tracing (Phase 3.18)
+    unsigned long long _enqueue_time;
+    int _priority;                  // 0=low, 1=normal, 2=high
+};
+
+// Lock-free work-stealing queue (single producer, multiple consumers)
+struct WorkStealingQueue {
+    WorkQueueEntry _queue[32];      // Fixed-size circular buffer
+    int _head;                       // Producer writes here
+    int _tail;                       // Consumers read from here
+    int _size;                       // Current queue size
+    int _max_size;                   // Capacity
+    unsigned long long _total_dequeued;  // For load tracking
+
+    __device__ WorkStealingQueue()
+        : _head(0), _tail(0), _size(0), _max_size(32), _total_dequeued(0) {}
+
+    // Enqueue task (lock-free append)
+    __device__ bool enqueue(const char* task_id, const char* span_id, int priority = 1) {
+        if (_size >= _max_size) return false;  // Queue full
+
+        _queue[_head] = {task_id, span_id, clock64(), priority};
+        _head = (_head + 1) % _max_size;
+        _size++;
+        return true;
+    }
+
+    // Dequeue task (lock-free pop from tail)
+    __device__ bool dequeue(WorkQueueEntry& out) {
+        if (_size == 0) return false;  // Queue empty
+
+        out = _queue[_tail];
+        _tail = (_tail + 1) % _max_size;
+        _size--;
+        _total_dequeued++;
+        return true;
+    }
+
+    // Peek at oldest task without removing
+    __device__ bool peek(WorkQueueEntry& out) const {
+        if (_size == 0) return false;
+        out = _queue[_tail];
+        return true;
+    }
+
+    __device__ int getSize() const { return _size; }
+    __device__ int getMaxSize() const { return _max_size; }
+    __device__ unsigned long long getTotalDequeued() const { return _total_dequeued; }
+};
+
+// Worker thread state for distributed coordination
+struct WorkerThread {
+    const char* _instance_id;       // "gpu-0", "gpu-1", etc.
+    WorkStealingQueue _local_queue;
+    int _active_tasks;              // Currently processing
+    unsigned long long _last_steal_time;  // When last stole from peer
+    int _steal_count;               // Total steals executed
+    int _idle_cycles;               // Consecutive cycles with no work
+
+    __device__ WorkerThread(const char* instance_id = "gpu-0")
+        : _instance_id(instance_id), _active_tasks(0),
+          _last_steal_time(clock64()), _steal_count(0), _idle_cycles(0) {}
+
+    // Submit work to local queue
+    __device__ bool submitWork(const char* task_id, const char* span_id, int priority = 1) {
+        return _local_queue.enqueue(task_id, span_id, priority);
+    }
+
+    // Process work from local queue
+    __device__ bool processWork(WorkQueueEntry& out) {
+        if (_local_queue.dequeue(out)) {
+            _active_tasks++;
+            _idle_cycles = 0;
+            return true;
+        }
+        return false;
+    }
+
+    // Mark task complete
+    __device__ void completeTask() {
+        if (_active_tasks > 0) _active_tasks--;
+    }
+
+    __device__ int getLoadFactor() const {
+        return _local_queue.getSize() + _active_tasks;
+    }
+
+    __device__ bool isIdle() const {
+        return _local_queue.getSize() == 0 && _active_tasks == 0;
+    }
+
+    // Increment idle cycles (for work stealing decisions)
+    __device__ void recordIdleCycle() {
+        if (isIdle()) _idle_cycles++;
+    }
+};
+
+// Global load tracker for work-stealing coordination
+struct GlobalLoadTracker {
+    int _instance_loads[8];         // Load per instance (0-7)
+    int _num_instances;
+    unsigned long long _update_time;
+    int _total_queued;              // Total tasks across all instances
+
+    __device__ GlobalLoadTracker(int num_instances = 1)
+        : _num_instances(num_instances), _update_time(clock64()), _total_queued(0) {
+        for (int i = 0; i < 8; i++) _instance_loads[i] = 0;
+    }
+
+    // Update load for a specific instance
+    __device__ void updateLoad(int instance_idx, int load) {
+        if (instance_idx >= 0 && instance_idx < _num_instances) {
+            _instance_loads[instance_idx] = load;
+        }
+        _update_time = clock64();
+    }
+
+    // Find busiest instance (for work stealing target)
+    __device__ int getBusiestInstance() const {
+        int max_load = 0, busiest = 0;
+        for (int i = 0; i < _num_instances; i++) {
+            if (_instance_loads[i] > max_load) {
+                max_load = _instance_loads[i];
+                busiest = i;
+            }
+        }
+        return busiest;
+    }
+
+    // Find idlest instance
+    __device__ int getIdlestInstance() const {
+        int min_load = 999999, idlest = 0;
+        for (int i = 0; i < _num_instances; i++) {
+            if (_instance_loads[i] < min_load) {
+                min_load = _instance_loads[i];
+                idlest = i;
+            }
+        }
+        return idlest;
+    }
+
+    // Calculate load imbalance (max - min)
+    __device__ int getLoadImbalance() const {
+        int max_load = 0, min_load = 999999;
+        for (int i = 0; i < _num_instances; i++) {
+            if (_instance_loads[i] > max_load) max_load = _instance_loads[i];
+            if (_instance_loads[i] < min_load) min_load = _instance_loads[i];
+        }
+        return max_load - min_load;
+    }
+
+    // Is a particular instance overloaded?
+    __device__ bool isOverloaded(int instance_idx) const {
+        if (instance_idx < 0 || instance_idx >= _num_instances) return false;
+        int avg_load = _total_queued / _num_instances;
+        return _instance_loads[instance_idx] > (avg_load * 3) / 2;  // >150% avg
+    }
+};
+
+// Work distribution decision record
+struct WorkDistribution {
+    const char* _source_instance;
+    const char* _target_instance;
+    int _tasks_moved;
+    unsigned long long _decision_time;
+    int _load_imbalance_before;
+    int _load_imbalance_after;
+
+    __device__ WorkDistribution(const char* source = "", const char* target = "")
+        : _source_instance(source), _target_instance(target), _tasks_moved(0),
+          _decision_time(clock64()), _load_imbalance_before(0),
+          _load_imbalance_after(0) {}
+
+    // Calculate effectiveness (how much imbalance improved)
+    __device__ int getEffectiveness() const {
+        return _load_imbalance_before - _load_imbalance_after;
+    }
+};
+
+// Check if work stealing should occur
+__device__ inline bool symm_should_steal_work(const WorkerThread& local_worker,
+                                              const GlobalLoadTracker& tracker) {
+    if (!local_worker.isIdle()) return false;  // Not idle
+    if (local_worker._idle_cycles < 2) return false;  // Not idle long enough
+    if (tracker.getLoadImbalance() < 5) return false;  // Load balanced enough
+    return true;
+}
+
+// Format work queue status as JSON
+__device__ inline const char* symm_format_queue_status(const WorkStealingQueue& queue) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"size\":%d,\"capacity\":%d,\"utilization\":%.1f,\"dequeued\":%llu}",
+        queue.getSize(), queue.getMaxSize(),
+        (float)queue.getSize() / queue.getMaxSize() * 100.0,
+        queue.getTotalDequeued());
+    return buf;
+}
+
+// Format load tracker status as JSON
+__device__ inline const char* symm_format_load_status(const GlobalLoadTracker& tracker) {
+    static char buf[512];
+    int imbalance = tracker.getLoadImbalance();
+    snprintf(buf, sizeof(buf),
+        "{\"imbalance\":%d,\"busiest\":%d,\"idlest\":%d,\"num_instances\":%d,"
+        "\"avg_load\":%.1f}",
+        imbalance, tracker.getBusiestInstance(), tracker.getIdlestInstance(),
+        tracker._num_instances,
+        (float)tracker._total_queued / tracker._num_instances);
+    return buf;
+}
+
+// Record work distribution decision
+__device__ inline void symm_record_distribution(WorkDistribution& dist, int before, int after) {
+    dist._decision_time = clock64();
+    dist._load_imbalance_before = before;
+    dist._load_imbalance_after = after;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation

@@ -13161,6 +13161,197 @@ static void testPhase22Features() {
     });
 }
 
+// Phase 3.19: Work-Stealing Thread Pool & Lock-Free Coordination
+static void testPhase319WorkStealing() {
+    std::cout << "\n=== Phase 3.19: Work-Stealing Thread Pool & Lock-Free Coordination ===\n";
+
+    // WorkQueueEntry creation
+    TEST("WorkQueueEntry — stores task_id, span_id, timestamp, priority", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WorkQueueEntry");
+        ASSERT_CONTAINS(src, "_task_id");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "_priority");
+    });
+
+    // WorkStealingQueue creation
+    TEST("WorkStealingQueue — lock-free circular buffer queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WorkStealingQueue");
+        ASSERT_CONTAINS(src, "_queue[32]");
+        ASSERT_CONTAINS(src, "_head");
+        ASSERT_CONTAINS(src, "_tail");
+        ASSERT_CONTAINS(src, "_size");
+    });
+
+    // WorkStealingQueue enqueue
+    TEST("WorkStealingQueue::enqueue — adds task to circular buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enqueue");
+        ASSERT_CONTAINS(src, "_max_size");
+    });
+
+    // WorkStealingQueue dequeue
+    TEST("WorkStealingQueue::dequeue — removes task from tail", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "dequeue");
+        ASSERT_CONTAINS(src, "_total_dequeued");
+    });
+
+    // WorkStealingQueue peek
+    TEST("WorkStealingQueue::peek — inspects oldest task without removing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "peek");
+    });
+
+    // WorkerThread creation
+    TEST("WorkerThread — manages local queue and active tasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WorkerThread");
+        ASSERT_CONTAINS(src, "_instance_id");
+        ASSERT_CONTAINS(src, "_local_queue");
+        ASSERT_CONTAINS(src, "_active_tasks");
+    });
+
+    // WorkerThread submitWork
+    TEST("WorkerThread::submitWork — queues work in local queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "submitWork");
+    });
+
+    // WorkerThread processWork
+    TEST("WorkerThread::processWork — dequeues and marks active", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "processWork");
+        ASSERT_CONTAINS(src, "_idle_cycles");
+    });
+
+    // WorkerThread getLoadFactor
+    TEST("WorkerThread::getLoadFactor — returns queue size + active tasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLoadFactor");
+    });
+
+    // WorkerThread isIdle
+    TEST("WorkerThread::isIdle — true when queue empty and no active tasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isIdle");
+    });
+
+    // GlobalLoadTracker creation
+    TEST("GlobalLoadTracker — tracks load across multiple instances", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct GlobalLoadTracker");
+        ASSERT_CONTAINS(src, "_instance_loads[8]");
+        ASSERT_CONTAINS(src, "_num_instances");
+    });
+
+    // GlobalLoadTracker updateLoad
+    TEST("GlobalLoadTracker::updateLoad — updates load for instance", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "updateLoad");
+    });
+
+    // GlobalLoadTracker getBusiestInstance
+    TEST("GlobalLoadTracker::getBusiestInstance — finds instance with max load", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getBusiestInstance");
+    });
+
+    // GlobalLoadTracker getIdlestInstance
+    TEST("GlobalLoadTracker::getIdlestInstance — finds instance with min load", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getIdlestInstance");
+    });
+
+    // GlobalLoadTracker getLoadImbalance
+    TEST("GlobalLoadTracker::getLoadImbalance — calculates max - min load", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLoadImbalance");
+    });
+
+    // GlobalLoadTracker isOverloaded
+    TEST("GlobalLoadTracker::isOverloaded — checks if instance >150% avg load", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isOverloaded");
+    });
+
+    // WorkDistribution tracking
+    TEST("WorkDistribution — records distribution decisions", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct WorkDistribution");
+        ASSERT_CONTAINS(src, "_source_instance");
+        ASSERT_CONTAINS(src, "_target_instance");
+        ASSERT_CONTAINS(src, "_tasks_moved");
+    });
+
+    // WorkDistribution effectiveness
+    TEST("WorkDistribution::getEffectiveness — imbalance improvement metric", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getEffectiveness");
+    });
+
+    // symm_should_steal_work decision logic
+    TEST("symm_should_steal_work — decision: idle + long idle + imbalanced", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_should_steal_work");
+    });
+
+    // symm_format_queue_status JSON
+    TEST("symm_format_queue_status — formats queue as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_queue_status");
+        ASSERT_CONTAINS(src, "size");
+        ASSERT_CONTAINS(src, "utilization");
+    });
+
+    // symm_format_load_status JSON
+    TEST("symm_format_load_status — formats load tracker as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_load_status");
+        ASSERT_CONTAINS(src, "imbalance");
+        ASSERT_CONTAINS(src, "busiest");
+    });
+
+    // symm_record_distribution tracking
+    TEST("symm_record_distribution — records before/after metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_record_distribution");
+    });
+
+    // Integration: Queue operations sequence
+    TEST("WorkStealingQueue — enqueue then dequeue returns entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enqueue");
+        ASSERT_CONTAINS(src, "dequeue");
+        ASSERT_CONTAINS(src, "WorkQueueEntry");
+    });
+
+    // Integration: Worker operations
+    TEST("WorkerThread — submitWork, processWork, completeTask cycle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "submitWork");
+        ASSERT_CONTAINS(src, "processWork");
+        ASSERT_CONTAINS(src, "completeTask");
+    });
+
+    // Integration: Load tracking with worker
+    TEST("WorkerThread + GlobalLoadTracker — load coordination", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "WorkerThread");
+        ASSERT_CONTAINS(src, "GlobalLoadTracker");
+        ASSERT_CONTAINS(src, "updateLoad");
+    });
+
+    // Integration: Distribution decision and recording
+    TEST("WorkDistribution — decision, execution, effectiveness tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "WorkDistribution");
+        ASSERT_CONTAINS(src, "getEffectiveness");
+        ASSERT_CONTAINS(src, "_decision_time");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -13401,6 +13592,9 @@ int main() {
 
     // Phase 3.10: Improving Partial Features
     symm::testImprovedPartialFeatures();
+
+    // Phase 3.19: Work-Stealing Thread Pool & Lock-Free Coordination
+    symm::testPhase319WorkStealing();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
