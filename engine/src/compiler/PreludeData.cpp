@@ -2572,6 +2572,165 @@ __device__ inline bool symm_is_rate_limited(RateLimiter& limiter) {
     return !limiter.allowRequest();
 }
 
+// ── Phase 3.16: Advanced Rate Limiting ─────────────────────────────────────
+// Sliding window limiter: tracks requests within a time window
+
+struct SlidingWindowLimiter {
+    int _request_count;        // Requests in current window
+    unsigned long long _window_start;  // Start of current time window
+    int _window_size_ms;       // Window size in milliseconds
+    int _max_requests;         // Max requests per window
+
+    __device__ SlidingWindowLimiter(int max_requests = 100, int window_ms = 1000)
+        : _request_count(0), _window_start(clock64()), _window_size_ms(window_ms),
+          _max_requests(max_requests) {}
+
+    // Check if request is allowed within sliding window
+    __device__ bool allowRequest() {
+        unsigned long long now = clock64();
+        unsigned long long elapsed = now - _window_start;
+
+        // Convert to milliseconds (roughly: 1700 cycles per ms at 1.7 GHz)
+        int elapsed_ms = (int)(elapsed / 1700);
+
+        // If window expired, reset
+        if (elapsed_ms >= _window_size_ms) {
+            _request_count = 0;
+            _window_start = now;
+        }
+
+        // Check if at limit
+        if (_request_count >= _max_requests) {
+            return false;
+        }
+
+        _request_count++;
+        return true;
+    }
+
+    __device__ int requestsInWindow() const { return _request_count; }
+    __device__ int maxRequests() const { return _max_requests; }
+};
+
+// Per-user rate limiter: separate limits for each user
+struct PerUserRateLimiter {
+    struct UserLimit {
+        const char* user_id;
+        int tokens;
+        unsigned long long last_refill;
+    };
+
+    UserLimit _users[10];      // Support up to 10 concurrent users
+    int _user_count;
+    int _max_tokens_per_user;
+    int _refill_rate;
+
+    __device__ PerUserRateLimiter(int max_tokens = 50, int refill_rate = 5)
+        : _user_count(0), _max_tokens_per_user(max_tokens), _refill_rate(refill_rate) {
+        for (int i = 0; i < 10; i++) {
+            _users[i].user_id = nullptr;
+            _users[i].tokens = max_tokens;
+            _users[i].last_refill = clock64();
+        }
+    }
+
+    __device__ bool allowRequest(const char* user_id) {
+        if (!user_id) return false;
+
+        // Find or create user entry
+        int user_idx = -1;
+        for (int i = 0; i < _user_count; i++) {
+            if (_users[i].user_id && symm_str_eq(_users[i].user_id, user_id)) {
+                user_idx = i;
+                break;
+            }
+        }
+
+        // Create new user if not found
+        if (user_idx == -1) {
+            if (_user_count >= 10) return false;  // User limit reached
+            user_idx = _user_count++;
+            _users[user_idx].user_id = user_id;
+            _users[user_idx].tokens = _max_tokens_per_user;
+            _users[user_idx].last_refill = clock64();
+        }
+
+        // Check tokens
+        if (_users[user_idx].tokens > 0) {
+            _users[user_idx].tokens--;
+            return true;
+        }
+
+        return false;
+    }
+
+    __device__ int getUserTokens(const char* user_id) const {
+        for (int i = 0; i < _user_count; i++) {
+            if (_users[i].user_id && symm_str_eq(_users[i].user_id, user_id)) {
+                return _users[i].tokens;
+            }
+        }
+        return 0;
+    }
+};
+
+// Distributed rate limiter: coordination across instances
+struct DistributedRateLimiter {
+    int _local_tokens;         // Local token bucket
+    int _max_tokens;
+    int _refill_rate;
+    unsigned long long _last_refill;
+    const char* _instance_id;  // This instance identifier
+    int _shared_quota;         // Quota shared with other instances
+
+    __device__ DistributedRateLimiter(const char* instance_id, int quota = 1000, int refill = 100)
+        : _local_tokens(quota), _max_tokens(quota), _refill_rate(refill),
+          _last_refill(clock64()), _instance_id(instance_id), _shared_quota(quota) {}
+
+    __device__ bool allowRequest() {
+        // First try local tokens
+        if (_local_tokens > 0) {
+            _local_tokens--;
+            return true;
+        }
+
+        // When local exhausted, request from shared quota
+        if (_shared_quota > 0) {
+            _shared_quota--;
+            return true;
+        }
+
+        return false;
+    }
+
+    __device__ int getLocalTokens() const { return _local_tokens; }
+    __device__ int getSharedQuota() const { return _shared_quota; }
+    __device__ const char* getInstanceId() const { return _instance_id; }
+};
+
+// Helper: Check sliding window limit
+__device__ inline bool symm_check_sliding_window(SlidingWindowLimiter& limiter) {
+    return !limiter.allowRequest();
+}
+
+// Helper: Check per-user limit
+__device__ inline bool symm_check_per_user_limit(PerUserRateLimiter& limiter, const char* user_id) {
+    return !limiter.allowRequest(user_id);
+}
+
+// Helper: Check distributed limit
+__device__ inline bool symm_check_distributed_limit(DistributedRateLimiter& limiter) {
+    return !limiter.allowRequest();
+}
+
+// Helper: Get rate limit status for response
+__device__ inline const char* symm_rate_limit_status(const PerUserRateLimiter& limiter, const char* user_id) {
+    static char buf[128];
+    int tokens = limiter.getUserTokens(user_id);
+    snprintf(buf, sizeof(buf), "{\"user\":\"%s\",\"tokens_remaining\":%d}", user_id ? user_id : "", tokens);
+    return buf;
+}
+
 // SQL injection detection (basic)
 __device__ inline bool symm_has_sql_injection(const char* input) {
     if (!input) return false;

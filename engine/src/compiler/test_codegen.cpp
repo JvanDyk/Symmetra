@@ -8666,6 +8666,176 @@ static void testSecurityAndValidation() {
         ASSERT_CONTAINS(src, "RateLimiter");
     });
 
+    // ── Phase 3.16: Advanced Rate Limiting ─────────────────────────────────────
+    TEST("SlidingWindowLimiter creation — constructed", {
+        auto src = codegen(
+            "app.get('/sliding', (ctx) => {\n"
+            "  const limiter = new SlidingWindowLimiter(100, 1000);\n"
+            "  ctx.json({ created: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "SlidingWindowLimiter");
+    });
+
+    TEST("SlidingWindowLimiter allowRequest — allows within limit", {
+        auto src = codegen(
+            "app.get('/sliding-allow', (ctx) => {\n"
+            "  const limiter = new SlidingWindowLimiter(10, 1000);\n"
+            "  const allowed = limiter.allowRequest();\n"
+            "  ctx.json({ allowed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
+    TEST("SlidingWindowLimiter requestsInWindow — track count", {
+        auto src = codegen(
+            "app.get('/sliding-count', (ctx) => {\n"
+            "  const limiter = new SlidingWindowLimiter(100, 1000);\n"
+            "  limiter.allowRequest();\n"
+            "  const count = limiter.requestsInWindow();\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "requestsInWindow");
+    });
+
+    TEST("SlidingWindowLimiter window expiry — reset counter", {
+        auto src = codegen(
+            "app.post('/sliding-expire', (ctx) => {\n"
+            "  const limiter = new SlidingWindowLimiter(5, 100);\n"
+            "  for (let i = 0; i < 10; i++) {\n"
+            "    limiter.allowRequest();\n"
+            "  }\n"
+            "  const count = limiter.requestsInWindow();\n"
+            "  ctx.json({ count });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "for");
+    });
+
+    TEST("PerUserRateLimiter creation — per-user limits", {
+        auto src = codegen(
+            "app.get('/peruser', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(50, 5);\n"
+            "  ctx.json({ created: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "PerUserRateLimiter");
+    });
+
+    TEST("PerUserRateLimiter allowRequest — separate per user", {
+        auto src = codegen(
+            "app.post('/peruser-allow', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(10, 1);\n"
+            "  const user1 = limiter.allowRequest('user1');\n"
+            "  const user2 = limiter.allowRequest('user2');\n"
+            "  ctx.json({ user1, user2 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
+    TEST("PerUserRateLimiter getUserTokens — check balance", {
+        auto src = codegen(
+            "app.get('/peruser-balance', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(100, 10);\n"
+            "  limiter.allowRequest('alice');\n"
+            "  const tokens = limiter.getUserTokens('alice');\n"
+            "  ctx.json({ tokens });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getUserTokens");
+    });
+
+    TEST("PerUserRateLimiter independent limits — separate counters", {
+        auto src = codegen(
+            "app.post('/peruser-independent', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(3, 1);\n"
+            "  limiter.allowRequest('alice');\n"
+            "  limiter.allowRequest('alice');\n"
+            "  limiter.allowRequest('bob');\n"
+            "  const alice = limiter.getUserTokens('alice');\n"
+            "  const bob = limiter.getUserTokens('bob');\n"
+            "  ctx.json({ alice, bob });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
+    TEST("DistributedRateLimiter creation — with instance ID", {
+        auto src = codegen(
+            "app.get('/distributed', (ctx) => {\n"
+            "  const limiter = new DistributedRateLimiter('instance-1', 1000, 100);\n"
+            "  ctx.json({ instance: 'instance-1' });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "DistributedRateLimiter");
+    });
+
+    TEST("DistributedRateLimiter allowRequest — respects local quota", {
+        auto src = codegen(
+            "app.post('/dist-allow', (ctx) => {\n"
+            "  const limiter = new DistributedRateLimiter('instance-1', 100, 10);\n"
+            "  const allowed = limiter.allowRequest();\n"
+            "  ctx.json({ allowed });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
+    TEST("DistributedRateLimiter tokens tracking — local and shared", {
+        auto src = codegen(
+            "app.get('/dist-tokens', (ctx) => {\n"
+            "  const limiter = new DistributedRateLimiter('instance-1', 100, 10);\n"
+            "  limiter.allowRequest();\n"
+            "  const local = limiter.getLocalTokens();\n"
+            "  const shared = limiter.getSharedQuota();\n"
+            "  ctx.json({ local, shared });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "getLocalTokens");
+    });
+
+    TEST("Rate limit status formatting — JSON response", {
+        auto src = codegen(
+            "app.get('/ratelimit-status', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(50, 5);\n"
+            "  limiter.allowRequest('user123');\n"
+            "  const status = symm_rate_limit_status(limiter, 'user123');\n"
+            "  ctx.json({ status });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_rate_limit_status");
+    });
+
+    TEST("Sliding window with exhaustion — deny after limit", {
+        auto src = codegen(
+            "app.post('/slide-exhaust', (ctx) => {\n"
+            "  const limiter = new SlidingWindowLimiter(2, 5000);\n"
+            "  const r1 = limiter.allowRequest();\n"
+            "  const r2 = limiter.allowRequest();\n"
+            "  const r3 = limiter.allowRequest();\n"
+            "  ctx.json({ r1, r2, r3 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
+    TEST("Per-user limits with multiple users — independent exhaustion", {
+        auto src = codegen(
+            "app.post('/peruser-multi', (ctx) => {\n"
+            "  const limiter = new PerUserRateLimiter(2, 1);\n"
+            "  limiter.allowRequest('user1');\n"
+            "  limiter.allowRequest('user1');\n"
+            "  const r3 = limiter.allowRequest('user1');\n"
+            "  const r4 = limiter.allowRequest('user2');\n"
+            "  ctx.json({ r3, r4 });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "allowRequest");
+    });
+
     TEST("SQL injection detection", {
         auto src = codegen(
             "app.post('/search', (ctx) => {\n"
