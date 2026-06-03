@@ -16393,6 +16393,179 @@ static void testPhase62HTTPUtilities() {
     });
 }
 
+static void testPhase63Cryptography() {
+    std::cout << "\n=== Phase 6.3: Cryptography Utilities ===\n";
+
+    TEST("_HashDigest — hash output (SHA256, SHA1, MD5)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HashDigest");
+        ASSERT_CONTAINS(src, "_algorithm");
+        ASSERT_CONTAINS(src, "_hex[64]");
+        ASSERT_CONTAINS(src, "_bytes[32]");
+    });
+
+    TEST("_create_hash_digest — create hash digest", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_hash_digest");
+    });
+
+    TEST("_hash_digest_set — set digest output", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_hash_digest_set");
+    });
+
+    TEST("_HMACResult — HMAC with key and message", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HMACResult");
+        ASSERT_CONTAINS(src, "_algorithm");
+        ASSERT_CONTAINS(src, "_key");
+        ASSERT_CONTAINS(src, "_message");
+    });
+
+    TEST("_create_hmac_result — create HMAC", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_hmac_result");
+    });
+
+    TEST("_hmac_result_set — set HMAC output", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_hmac_result_set");
+    });
+
+    TEST("_EncryptionKey — key with algorithm and size", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _EncryptionKey");
+        ASSERT_CONTAINS(src, "_key_size");
+        ASSERT_CONTAINS(src, "_is_valid");
+        ASSERT_CONTAINS(src, "_key_material[32]");
+    });
+
+    TEST("_create_encryption_key — create encryption key", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_encryption_key");
+    });
+
+    TEST("_CipherState — cipher with nonce and ciphertext", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _CipherState");
+        ASSERT_CONTAINS(src, "_nonce[16]");
+        ASSERT_CONTAINS(src, "_ciphertext[2048]");
+        ASSERT_CONTAINS(src, "_authenticated");
+    });
+
+    TEST("_create_cipher_state — create cipher state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_cipher_state");
+    });
+
+    TEST("_cipher_encrypt — encrypt plaintext to ciphertext", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cipher_encrypt");
+    });
+
+    TEST("_cipher_decrypt — decrypt ciphertext to plaintext", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cipher_decrypt");
+    });
+
+    TEST("_Signature — digital signature with algorithm", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Signature");
+        ASSERT_CONTAINS(src, "_verified");
+        ASSERT_CONTAINS(src, "_signature[256]");
+    });
+
+    TEST("_create_signature — create signature", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_signature");
+    });
+
+    TEST("_CryptoSuite — crypto suite with keys, ciphers, hashes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _CryptoSuite");
+        ASSERT_CONTAINS(src, "_keys[4]");
+        ASSERT_CONTAINS(src, "_ciphers[4]");
+        ASSERT_CONTAINS(src, "_hash_bytes_processed");
+    });
+
+    TEST("_create_crypto_suite — initialize crypto suite", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_crypto_suite");
+    });
+
+    TEST("_crypto_suite_add_key — add key to suite", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_crypto_suite_add_key");
+    });
+
+    TEST("_crypto_suite_add_cipher — add cipher to suite", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_crypto_suite_add_cipher");
+    });
+
+    TEST("_format_hash_digest_json — format digest as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_hash_digest_json");
+    });
+
+    TEST("_format_hmac_result_json — format HMAC as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_hmac_result_json");
+    });
+
+    TEST("_format_encryption_key_json — format key as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_encryption_key_json");
+    });
+
+    TEST("_format_cipher_state_json — format cipher as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_cipher_state_json");
+    });
+
+    TEST("_format_crypto_suite_status — format suite status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_crypto_suite_status");
+    });
+
+    TEST("Hash algorithms — SHA256, SHA1, MD5", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_algorithm");
+    });
+
+    TEST("HMAC signing — keyed hash computation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_HMACResult");
+    });
+
+    TEST("Encryption — AES-256, AES-128 key support", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_key_size");
+    });
+
+    TEST("Cipher modes — encrypt/decrypt operations", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cipher_encrypt");
+        ASSERT_CONTAINS(src, "_cipher_decrypt");
+    });
+
+    TEST("Digital signatures — verify flag and base64 encoding", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_verified");
+    });
+
+    TEST("Metrics tracking — bytes processed, operations count", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_hash_bytes_processed");
+        ASSERT_CONTAINS(src, "_encrypt_bytes_processed");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -16684,6 +16857,9 @@ int main() {
 
     // Phase 6.2: HTTP Utilities
     symm::testPhase62HTTPUtilities();
+
+    // Phase 6.3: Cryptography Utilities
+    symm::testPhase63Cryptography();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

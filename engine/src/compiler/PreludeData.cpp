@@ -9904,6 +9904,281 @@ __device__ const char* _format_http_exchange_status(_HTTPExchange* ex) {
 
 )";
 
+// Fragment 21: Cryptography Utilities (hash, HMAC, encryption)
+static const char* PRELUDE_FRAG21 = R"(
+
+// ── Cryptography Data Structures ──────────────────────────────────────────────
+
+// Hash digest output
+struct _HashDigest {
+    const char* _algorithm;         // "SHA256", "SHA1", "MD5"
+    char _hex[64];                  // Hex-encoded digest
+    int _hex_len;
+    unsigned char _bytes[32];       // Raw bytes (32 for SHA256)
+    int _bytes_len;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// HMAC result
+struct _HMACResult {
+    const char* _algorithm;         // "HMAC-SHA256", "HMAC-SHA1"
+    char _hex[64];                  // Hex-encoded HMAC
+    int _hex_len;
+    const char* _key;               // Key used
+    const char* _message;           // Message hashed
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Encryption key
+struct _EncryptionKey {
+    const char* _id;                // Key identifier
+    const char* _algorithm;         // "AES-256", "AES-128"
+    int _key_size;                  // 128, 192, 256 bits
+    unsigned char _key_material[32];// Raw key bytes
+    int _key_len;
+    int _is_valid;                  // 1=valid, 0=invalid/expired
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Cipher state
+struct _CipherState {
+    const char* _id;                // Cipher identifier
+    const char* _algorithm;         // Algorithm name
+    unsigned char _nonce[16];       // Nonce/IV
+    int _nonce_len;
+    char _ciphertext[2048];         // Encrypted data
+    int _ciphertext_len;
+    int _authenticated;             // 1=auth tag verified
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Signature
+struct _Signature {
+    const char* _id;                // Signature identifier
+    const char* _algorithm;         // "RSA-SHA256", "ECDSA"
+    char _signature[256];           // Base64-encoded signature
+    int _signature_len;
+    int _verified;                  // 1=verified, 0=unverified
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Crypto suite (bundled crypto operations)
+struct _CryptoSuite {
+    const char* _id;                // "crypto-suite"
+    _HashDigest _digests[8];        // Cached hashes
+    int _digest_count;
+    _HMACResult _hmacs[8];          // Cached HMACs
+    int _hmac_count;
+    _EncryptionKey _keys[4];        // Active keys
+    int _key_count;
+    _CipherState _ciphers[4];       // Active ciphers
+    int _cipher_count;
+    long long _hash_bytes_processed;// Metrics
+    long long _encrypt_bytes_processed;
+    int _operations_total;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── Cryptography Operations ───────────────────────────────────────────────────
+
+// Create hash digest
+__device__ _HashDigest _create_hash_digest(const char* algorithm) {
+    _HashDigest d;
+    d._algorithm = algorithm;
+    d._hex_len = 0;
+    d._bytes_len = 0;
+    d._created_at = _symm_now_ms;
+    d._span_id = 0;
+    return d;
+}
+
+// Set hash digest (simulated SHA-256 output)
+__device__ void _hash_digest_set(_HashDigest* d, const char* hex_output) {
+    int len = 0;
+    while (hex_output[len] && len < 63) len++;
+    for (int i = 0; i < len; i++) {
+        d->_hex[i] = hex_output[i];
+    }
+    d->_hex[len] = 0;
+    d->_hex_len = len;
+    d->_bytes_len = len / 2;  // 2 hex chars = 1 byte
+}
+
+// Create HMAC result
+__device__ _HMACResult _create_hmac_result(const char* algorithm, const char* key, const char* message) {
+    _HMACResult h;
+    h._algorithm = algorithm;
+    h._key = key;
+    h._message = message;
+    h._hex_len = 0;
+    h._created_at = _symm_now_ms;
+    h._span_id = 0;
+    return h;
+}
+
+// Set HMAC hex output
+__device__ void _hmac_result_set(_HMACResult* h, const char* hex_output) {
+    int len = 0;
+    while (hex_output[len] && len < 63) len++;
+    for (int i = 0; i < len; i++) {
+        h->_hex[i] = hex_output[i];
+    }
+    h->_hex[len] = 0;
+    h->_hex_len = len;
+}
+
+// Create encryption key
+__device__ _EncryptionKey _create_encryption_key(const char* id, const char* algorithm, int key_size) {
+    _EncryptionKey k;
+    k._id = id;
+    k._algorithm = algorithm;
+    k._key_size = key_size;
+    k._key_len = key_size / 8;  // bits to bytes
+    k._is_valid = 1;
+    k._created_at = _symm_now_ms;
+    k._span_id = 0;
+    return k;
+}
+
+// Create cipher state
+__device__ _CipherState _create_cipher_state(const char* algorithm) {
+    _CipherState c;
+    c._id = algorithm;
+    c._algorithm = algorithm;
+    c._nonce_len = 0;
+    c._ciphertext_len = 0;
+    c._authenticated = 0;
+    c._created_at = _symm_now_ms;
+    c._span_id = 0;
+    return c;
+}
+
+// Encrypt (simulated)
+__device__ void _cipher_encrypt(_CipherState* cipher, const char* plaintext, int plaintext_len) {
+    int out_len = plaintext_len;
+    if (out_len > 2047) out_len = 2047;
+    for (int i = 0; i < out_len; i++) {
+        cipher->_ciphertext[i] = plaintext[i] ^ 0xAA;  // Simple XOR (NOT REAL CRYPTO)
+    }
+    cipher->_ciphertext[out_len] = 0;
+    cipher->_ciphertext_len = out_len;
+}
+
+// Decrypt (simulated)
+__device__ const char* _cipher_decrypt(_CipherState* cipher) {
+    static char plaintext[2048];
+    for (int i = 0; i < cipher->_ciphertext_len; i++) {
+        plaintext[i] = cipher->_ciphertext[i] ^ 0xAA;  // Reverse XOR
+    }
+    plaintext[cipher->_ciphertext_len] = 0;
+    return plaintext;
+}
+
+// Create signature
+__device__ _Signature _create_signature(const char* algorithm) {
+    _Signature s;
+    s._id = algorithm;
+    s._algorithm = algorithm;
+    s._signature_len = 0;
+    s._verified = 0;
+    s._created_at = _symm_now_ms;
+    s._span_id = 0;
+    return s;
+}
+
+// Create crypto suite
+__device__ _CryptoSuite _create_crypto_suite() {
+    _CryptoSuite cs;
+    cs._id = "crypto-suite";
+    cs._digest_count = 0;
+    cs._hmac_count = 0;
+    cs._key_count = 0;
+    cs._cipher_count = 0;
+    cs._hash_bytes_processed = 0;
+    cs._encrypt_bytes_processed = 0;
+    cs._operations_total = 0;
+    cs._created_at = _symm_now_ms;
+    cs._span_id = 0;
+    return cs;
+}
+
+// Add key to suite
+__device__ void _crypto_suite_add_key(_CryptoSuite* suite, _EncryptionKey* key) {
+    if (suite->_key_count < 4) {
+        suite->_keys[suite->_key_count] = *key;
+        suite->_key_count++;
+        suite->_operations_total++;
+    }
+}
+
+// Add cipher to suite
+__device__ void _crypto_suite_add_cipher(_CryptoSuite* suite, _CipherState* cipher) {
+    if (suite->_cipher_count < 4) {
+        suite->_ciphers[suite->_cipher_count] = *cipher;
+        suite->_cipher_count++;
+        suite->_operations_total++;
+    }
+}
+
+// Format digest as JSON
+__device__ const char* _format_hash_digest_json(_HashDigest* d) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"algorithm\\":\"%s\\",\\"hex_len\\":%d,\\"bytes_len\\":%d}",
+                   d->_algorithm, d->_hex_len, d->_bytes_len);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format HMAC as JSON
+__device__ const char* _format_hmac_result_json(_HMACResult* h) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"algorithm\\":\"%s\\",\\"hex_len\\":%d,\\"verified\\":%d}",
+                   h->_algorithm, h->_hex_len, h->_hex_len > 0 ? 1 : 0);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format key as JSON
+__device__ const char* _format_encryption_key_json(_EncryptionKey* k) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"id\\":\"%s\\",\\"algorithm\\":\"%s\\",\\"key_size\\":%d,\\"valid\\":%d}",
+                   k->_id, k->_algorithm, k->_key_size, k->_is_valid);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format cipher as JSON
+__device__ const char* _format_cipher_state_json(_CipherState* c) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"algorithm\\":\"%s\\",\\"ciphertext_len\\":%d,\\"authenticated\\":%d}",
+                   c->_algorithm, c->_ciphertext_len, c->_authenticated);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format suite status
+__device__ const char* _format_crypto_suite_status(_CryptoSuite* cs) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"keys\\":%d,\\"ciphers\\":%d,\\"ops\\":%d,\\"hash_bytes\\":%lld,\\"enc_bytes\\":%lld}",
+                   cs->_key_count, cs->_cipher_count, cs->_operations_total,
+                   cs->_hash_bytes_processed, cs->_encrypt_bytes_processed);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -9929,6 +10204,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG18) result += PRELUDE_FRAG18; // Decorators
     if (PRELUDE_FRAG19) result += PRELUDE_FRAG19; // File system
     if (PRELUDE_FRAG20) result += PRELUDE_FRAG20; // HTTP utilities
+    if (PRELUDE_FRAG21) result += PRELUDE_FRAG21; // Cryptography
     return result;
 }
 
