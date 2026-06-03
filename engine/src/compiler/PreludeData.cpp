@@ -4132,6 +4132,232 @@ __device__ inline const char* symm_format_promise_any_status(const PromiseAny& p
     return buf;
 }
 
+// ── Phase 4.2: AsyncGenerator Support ──────────────────────────────────────────
+
+// AsyncIterator protocol: result of .next() call
+struct AsyncIteratorResult {
+    const char* _value;             // Yielded value
+    int _done;                      // 1=done, 0=more data
+    unsigned long long _timestamp;
+    const char* _span_id;           // Link to Phase 3.18 tracing
+};
+
+// AsyncGenerator: yields values asynchronously
+struct AsyncGenerator {
+    const char* _id;                // "gen-001"
+    int _state;                     // 0=suspended, 1=executing, 2=done
+    AsyncIteratorResult _current;
+    int _yield_count;
+    unsigned long long _created_time;
+    const char* _span_id;           // Link to tracing
+
+    __device__ AsyncGenerator(const char* id = "")
+        : _id(id), _state(0), _yield_count(0), _created_time(clock64()) {}
+
+    // Transition to executing
+    __device__ void start() {
+        _state = 1;  // executing
+    }
+
+    // Yield a value (suspend)
+    __device__ void yield_value(const char* value) {
+        _current._value = value;
+        _current._done = 0;
+        _current._timestamp = clock64();
+        _yield_count++;
+        _state = 0;  // suspended
+    }
+
+    // Finish generator
+    __device__ void finish() {
+        _current._value = NULL;
+        _current._done = 1;
+        _current._timestamp = clock64();
+        _state = 2;  // done
+    }
+
+    __device__ bool isDone() const { return _state == 2; }
+    __device__ int getYieldCount() const { return _yield_count; }
+};
+
+// AsyncIterable: object that has async iterator protocol
+struct AsyncIterable {
+    const char* _id;
+    AsyncGenerator _generator;
+    int _index;                     // Current iteration index
+    int _length;                    // Number of items
+    const char* _items[32];         // Items to iterate over
+    int _started;                   // 1=iteration started, 0=not started
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ AsyncIterable(const char* id = "")
+        : _id(id), _index(0), _length(0), _started(0),
+          _created_time(clock64()) {}
+
+    // Add item to iterate over
+    __device__ bool addItem(const char* item) {
+        if (_length >= 32) return false;
+        _items[_length] = item;
+        _length++;
+        return true;
+    }
+
+    // Get async iterator (returns AsyncGenerator)
+    __device__ AsyncGenerator* getAsyncIterator() {
+        _started = 1;
+        _generator.start();
+        return &_generator;
+    }
+
+    // Next iteration
+    __device__ bool next(AsyncIteratorResult& out) {
+        if (_index >= _length) {
+            _generator.finish();
+            out._done = 1;
+            out._value = NULL;
+            return false;
+        }
+        _generator.yield_value(_items[_index]);
+        out = _generator._current;
+        _index++;
+        return true;
+    }
+
+    __device__ bool isDone() const { return _index >= _length; }
+    __device__ int getProgress() const { return _index; }
+};
+
+// For-await loop context
+struct ForAwaitContext {
+    const char* _id;                // Loop ID
+    AsyncIterable _iterable;
+    AsyncGenerator _generator;
+    int _iteration;                 // Current iteration number
+    AsyncIteratorResult _current;
+    int _completed;                 // 1=loop completed, 0=in progress
+    unsigned long long _loop_start;
+    unsigned long long _loop_end;
+    const char* _span_id;           // Link to tracing
+
+    __device__ ForAwaitContext(const char* id = "")
+        : _id(id), _iteration(0), _completed(0), _loop_start(clock64()) {}
+
+    // Start iteration
+    __device__ bool init(AsyncIterable& iterable) {
+        _iterable = iterable;
+        _generator = *iterable.getAsyncIterator();
+        return true;
+    }
+
+    // Get next value
+    __device__ bool next(AsyncIteratorResult& out) {
+        if (_iterable.next(out)) {
+            _current = out;
+            _iteration++;
+            return true;
+        }
+        _completed = 1;
+        _loop_end = clock64();
+        return false;
+    }
+
+    __device__ int getIterationCount() const { return _iteration; }
+    __device__ bool isCompleted() const { return _completed == 1; }
+    __device__ unsigned long long getLoopDuration() const {
+        if (_loop_end == 0) return 0;
+        return _loop_end - _loop_start;
+    }
+};
+
+// AsyncGeneratorFunction: factory for creating async generators
+struct AsyncGeneratorFunction {
+    const char* _name;              // Function name
+    int _call_count;
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ AsyncGeneratorFunction(const char* name = "")
+        : _name(name), _call_count(0), _created_time(clock64()) {}
+
+    // Call function to create generator
+    __device__ AsyncGenerator create() {
+        AsyncGenerator gen(_name);
+        gen._span_id = _span_id;
+        _call_count++;
+        return gen;
+    }
+
+    __device__ int getCallCount() const { return _call_count; }
+};
+
+// Helper: Create async generator
+__device__ inline AsyncGenerator symm_create_async_generator(const char* id, const char* span_id) {
+    AsyncGenerator gen(id);
+    gen._span_id = span_id;
+    return gen;
+}
+
+// Helper: Create async iterable
+__device__ inline AsyncIterable symm_create_async_iterable(const char* id, const char* span_id) {
+    AsyncIterable iter(id);
+    iter._span_id = span_id;
+    return iter;
+}
+
+// Helper: Create for-await context
+__device__ inline ForAwaitContext symm_create_for_await(const char* id, const char* span_id) {
+    ForAwaitContext ctx(id);
+    ctx._span_id = span_id;
+    return ctx;
+}
+
+// Helper: Yield value from generator
+__device__ inline void symm_yield_async(AsyncGenerator& gen, const char* value) {
+    gen.yield_value(value);
+}
+
+// Helper: Check if iteration done
+__device__ inline bool symm_async_iterator_done(const AsyncIteratorResult& result) {
+    return result._done == 1;
+}
+
+// Helper: Format generator status as JSON
+__device__ inline const char* symm_format_async_generator_status(const AsyncGenerator& gen) {
+    static char buf[256];
+    const char* state_str = "suspended";
+    if (gen._state == 1) state_str = "executing";
+    else if (gen._state == 2) state_str = "done";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"yield_count\":%d,\"age_us\":%llu}",
+        gen._id ? gen._id : "", state_str, gen._yield_count,
+        (clock64() - gen._created_time) / 1000);
+    return buf;
+}
+
+// Helper: Format async iterable status as JSON
+__device__ inline const char* symm_format_async_iterable_status(const AsyncIterable& iter) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"length\":%d,\"progress\":%d,\"utilization\":%.1f}",
+        iter._id ? iter._id : "", iter._length, iter._index,
+        iter._length > 0 ? (float)iter._index / iter._length * 100.0 : 0.0);
+    return buf;
+}
+
+// Helper: Format for-await context as JSON
+__device__ inline const char* symm_format_for_await_status(const ForAwaitContext& ctx) {
+    static char buf[384];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"iteration\":%d,\"completed\":%d,\"duration_us\":%llu,"
+        "\"current_value\":\"%s\"}",
+        ctx._id ? ctx._id : "", ctx._iteration, ctx._completed,
+        ctx.getLoopDuration() / 1000,
+        ctx._current._value ? ctx._current._value : "");
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation

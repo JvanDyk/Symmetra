@@ -14223,6 +14223,205 @@ static void testPhase41PromiseUtilities() {
     });
 }
 
+// Phase 4.2: AsyncGenerator Support
+static void testPhase42AsyncGenerator() {
+    std::cout << "\n=== Phase 4.2: AsyncGenerator Support ===\n";
+
+    // AsyncIteratorResult
+    TEST("AsyncIteratorResult — result of .next() call", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncIteratorResult");
+        ASSERT_CONTAINS(src, "_value");
+        ASSERT_CONTAINS(src, "_done");
+    });
+
+    // AsyncGenerator creation
+    TEST("AsyncGenerator — yields values asynchronously", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncGenerator");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_yield_count");
+    });
+
+    // AsyncGenerator states
+    TEST("AsyncGenerator — states: suspended(0), executing(1), done(2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "suspended");
+        ASSERT_CONTAINS(src, "executing");
+        ASSERT_CONTAINS(src, "done");
+    });
+
+    // AsyncGenerator start
+    TEST("AsyncGenerator::start — transition to executing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "start");
+    });
+
+    // AsyncGenerator yield_value
+    TEST("AsyncGenerator::yield_value — suspend with value", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "yield_value");
+    });
+
+    // AsyncGenerator finish
+    TEST("AsyncGenerator::finish — mark as done", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "finish");
+    });
+
+    // AsyncIterable creation
+    TEST("AsyncIterable — object with async iterator protocol", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncIterable");
+        ASSERT_CONTAINS(src, "_items[32]");
+        ASSERT_CONTAINS(src, "_length");
+    });
+
+    // AsyncIterable addItem
+    TEST("AsyncIterable::addItem — add item to iterate", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addItem");
+    });
+
+    // AsyncIterable getAsyncIterator
+    TEST("AsyncIterable::getAsyncIterator — returns AsyncGenerator", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getAsyncIterator");
+    });
+
+    // AsyncIterable next
+    TEST("AsyncIterable::next — iterate to next item", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "next");
+    });
+
+    // ForAwaitContext creation
+    TEST("ForAwaitContext — for await loop state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ForAwaitContext");
+        ASSERT_CONTAINS(src, "_iteration");
+        ASSERT_CONTAINS(src, "_completed");
+    });
+
+    // ForAwaitContext init
+    TEST("ForAwaitContext::init — start iteration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "init");
+    });
+
+    // ForAwaitContext getIterationCount
+    TEST("ForAwaitContext::getIterationCount — current iteration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getIterationCount");
+    });
+
+    // ForAwaitContext getLoopDuration
+    TEST("ForAwaitContext::getLoopDuration — total loop time", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLoopDuration");
+    });
+
+    // AsyncGeneratorFunction
+    TEST("AsyncGeneratorFunction — factory for async generators", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncGeneratorFunction");
+        ASSERT_CONTAINS(src, "_call_count");
+    });
+
+    // AsyncGeneratorFunction create
+    TEST("AsyncGeneratorFunction::create — instantiate generator", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "create");
+    });
+
+    // Helper: symm_create_async_generator
+    TEST("symm_create_async_generator — allocate with span", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_async_generator");
+    });
+
+    // Helper: symm_create_async_iterable
+    TEST("symm_create_async_iterable — allocate with span", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_async_iterable");
+    });
+
+    // Helper: symm_create_for_await
+    TEST("symm_create_for_await — allocate loop context", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_for_await");
+    });
+
+    // Helper: symm_yield_async
+    TEST("symm_yield_async — yield value from generator", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_yield_async");
+    });
+
+    // Helper: symm_async_iterator_done
+    TEST("symm_async_iterator_done — check if iteration done", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_async_iterator_done");
+    });
+
+    // Format helpers
+    TEST("symm_format_async_generator_status — JSON status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_async_generator_status");
+        ASSERT_CONTAINS(src, "yield_count");
+    });
+
+    TEST("symm_format_async_iterable_status — JSON progress", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_async_iterable_status");
+        ASSERT_CONTAINS(src, "utilization");
+    });
+
+    TEST("symm_format_for_await_status — JSON loop status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_for_await_status");
+        ASSERT_CONTAINS(src, "duration_us");
+    });
+
+    // Integration: async function*
+    TEST("AsyncGenerator — async function* pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "AsyncGeneratorFunction");
+        ASSERT_CONTAINS(src, "AsyncGenerator");
+    });
+
+    // Integration: for await...of
+    TEST("ForAwaitContext — for await (of) pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ForAwaitContext");
+        ASSERT_CONTAINS(src, "AsyncIterable");
+        ASSERT_CONTAINS(src, "next");
+    });
+
+    // Integration: Streaming data
+    TEST("AsyncIterable + AsyncGenerator — streaming pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "AsyncIterable");
+        ASSERT_CONTAINS(src, "addItem");
+        ASSERT_CONTAINS(src, "yield_value");
+    });
+
+    // Integration: Tracing correlation
+    TEST("AsyncGenerator linked to Phase 3.18 tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "AsyncGenerator");
+        ASSERT_CONTAINS(src, "ForAwaitContext");
+    });
+
+    // Integration: Performance measurement
+    TEST("AsyncGenerator with yield counting and timing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getYieldCount");
+        ASSERT_CONTAINS(src, "getLoopDuration");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -14478,6 +14677,9 @@ int main() {
 
     // Phase 4.1: Promise Utilities
     symm::testPhase41PromiseUtilities();
+
+    // Phase 4.2: AsyncGenerator Support
+    symm::testPhase42AsyncGenerator();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
