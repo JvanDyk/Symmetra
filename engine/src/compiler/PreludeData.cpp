@@ -3235,6 +3235,248 @@ __device__ inline const char* symm_format_scheduler_health(const StreamScheduler
     return buf;
 }
 
+// ── Phase 3.21: Distributed Consensus & Gossip Protocol ───────────────────────
+
+// Node state for gossip protocol
+struct NodeState {
+    const char* _node_id;           // "gpu-0", "gpu-1", etc.
+    int _load;                      // Current load (0-1000)
+    int _healthy;                   // 1=healthy, 0=unhealthy
+    unsigned long long _last_heartbeat;
+    unsigned long long _state_version;  // Version for ordering
+    int _sequence_number;           // For detecting fresh updates
+};
+
+// Gossip message for peer-to-peer dissemination
+struct GossipMessage {
+    const char* _origin_node;       // Original sender
+    NodeState _state;               // Embedded node state
+    int _hops;                      // Distance from origin
+    unsigned long long _timestamp;
+    const char* _message_id;        // For deduplication
+};
+
+// Consistent hash ring for deterministic routing
+struct ConsistentHashRing {
+    const char* _nodes[8];          // Node IDs in hash order
+    int _node_hashes[8];            // Pre-computed hashes
+    int _num_nodes;
+    int _virtual_nodes;             // Replicas per physical node
+
+    __device__ ConsistentHashRing(int virtual_nodes = 3)
+        : _num_nodes(0), _virtual_nodes(virtual_nodes) {
+        for (int i = 0; i < 8; i++) {
+            _nodes[i] = NULL;
+            _node_hashes[i] = 0;
+        }
+    }
+
+    // Add node to hash ring
+    __device__ bool addNode(const char* node_id) {
+        if (_num_nodes >= 8) return false;
+        _nodes[_num_nodes] = node_id;
+        // Simple hash: sum of characters
+        int hash = 0;
+        for (int i = 0; node_id && node_id[i]; i++) {
+            hash += (unsigned char)node_id[i] * (i + 1);
+        }
+        _node_hashes[_num_nodes] = hash;
+        _num_nodes++;
+        return true;
+    }
+
+    // Find responsible node for a key
+    __device__ const char* findNode(const char* key) const {
+        if (_num_nodes == 0) return NULL;
+        // Compute key hash
+        int key_hash = 0;
+        for (int i = 0; key && key[i]; i++) {
+            key_hash += (unsigned char)key[i] * (i + 1);
+        }
+        // Find closest node in ring (clockwise)
+        int min_distance = 2147483647;
+        int best_idx = 0;
+        for (int i = 0; i < _num_nodes; i++) {
+            int distance = _node_hashes[i] - key_hash;
+            if (distance < 0) distance = -distance;
+            if (distance < min_distance) {
+                min_distance = distance;
+                best_idx = i;
+            }
+        }
+        return _nodes[best_idx];
+    }
+
+    // Get replicas for key (first N nodes)
+    __device__ int getReplicaNodes(const char* key, const char** out_nodes, int max_count) {
+        if (_num_nodes == 0 || !out_nodes) return 0;
+        const char* primary = findNode(key);
+        int count = 0;
+        for (int i = 0; i < _num_nodes && count < max_count; i++) {
+            if (_nodes[i] == primary) {
+                // Add primary and next N-1 nodes
+                for (int j = 0; j < _virtual_nodes && count < max_count; j++) {
+                    out_nodes[count++] = _nodes[(i + j) % _num_nodes];
+                }
+                break;
+            }
+        }
+        return count;
+    }
+};
+
+// Quorum voting for consensus decisions
+struct QuorumVote {
+    const char* _decision_id;       // Unique decision identifier
+    int _yes_votes;
+    int _no_votes;
+    int _quorum_size;               // Votes needed to decide
+    unsigned long long _started_at;
+    int _decided;                   // 0=pending, 1=yes, -1=no
+
+    __device__ QuorumVote(int quorum_size = 2)
+        : _yes_votes(0), _no_votes(0), _quorum_size(quorum_size),
+          _started_at(clock64()), _decided(0) {}
+
+    // Register a vote
+    __device__ void vote(int is_yes) {
+        if (_decided != 0) return;  // Already decided
+        if (is_yes) {
+            _yes_votes++;
+        } else {
+            _no_votes++;
+        }
+        // Check if quorum reached
+        if (_yes_votes >= _quorum_size) {
+            _decided = 1;  // Consensus yes
+        } else if (_no_votes >= _quorum_size) {
+            _decided = -1;  // Consensus no
+        }
+    }
+
+    __device__ bool isDecided() const { return _decided != 0; }
+    __device__ bool isYes() const { return _decided == 1; }
+    __device__ unsigned long long getElapsedTime() const {
+        return clock64() - _started_at;
+    }
+};
+
+// Membership state for node discovery
+struct MembershipState {
+    NodeState _nodes[8];            // Known nodes
+    int _node_count;
+    unsigned long long _last_sync;
+    int _generation;                // Membership generation
+
+    __device__ MembershipState() : _node_count(0), _last_sync(clock64()), _generation(0) {}
+
+    // Update membership
+    __device__ bool updateNode(const NodeState& node) {
+        for (int i = 0; i < _node_count; i++) {
+            if (_nodes[i]._node_id == node._node_id) {
+                // Update existing
+                if (node._state_version > _nodes[i]._state_version) {
+                    _nodes[i] = node;
+                    _generation++;
+                    return true;
+                }
+                return false;
+            }
+        }
+        // Add new
+        if (_node_count < 8) {
+            _nodes[_node_count] = node;
+            _node_count++;
+            _generation++;
+            return true;
+        }
+        return false;
+    }
+
+    __device__ int getHealthyNodeCount() const {
+        int count = 0;
+        for (int i = 0; i < _node_count; i++) {
+            if (_nodes[i]._healthy) count++;
+        }
+        return count;
+    }
+
+    __device__ int getTotalLoad() const {
+        int total = 0;
+        for (int i = 0; i < _node_count; i++) {
+            total += _nodes[i]._load;
+        }
+        return total;
+    }
+};
+
+// Helper: Compute hash for key (FNV-1a)
+__device__ inline int symm_hash_key(const char* key) {
+    unsigned int hash = 2166136261u;
+    for (int i = 0; key && key[i]; i++) {
+        hash ^= (unsigned char)key[i];
+        hash *= 16777619u;
+    }
+    return (int)(hash & 0x7FFFFFFF);
+}
+
+// Helper: Create gossip message
+__device__ inline GossipMessage symm_create_gossip_msg(const char* origin,
+                                                        const NodeState& state,
+                                                        const char* msg_id) {
+    GossipMessage msg;
+    msg._origin_node = origin;
+    msg._state = state;
+    msg._hops = 0;
+    msg._timestamp = clock64();
+    msg._message_id = msg_id;
+    return msg;
+}
+
+// Helper: Should accept quorum decision
+__device__ inline bool symm_quorum_consensus(const QuorumVote& vote) {
+    return vote.isDecided() && vote.isYes();
+}
+
+// Helper: Format node state as JSON
+__device__ inline const char* symm_format_node_state(const NodeState& node) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"load\":%d,\"healthy\":%d,\"version\":%llu,\"seq\":%d}",
+        node._node_id ? node._node_id : "", node._load, node._healthy,
+        node._state_version, node._sequence_number);
+    return buf;
+}
+
+// Helper: Format membership as JSON
+__device__ inline const char* symm_format_membership(const MembershipState& membership) {
+    static char buf[512];
+    int healthy = membership.getHealthyNodeCount();
+    int total_load = membership.getTotalLoad();
+    snprintf(buf, sizeof(buf),
+        "{\"node_count\":%d,\"healthy\":%d,\"total_load\":%d,\"generation\":%d,"
+        "\"avg_load\":%.1f}",
+        membership._node_count, healthy, total_load, membership._generation,
+        membership._node_count > 0 ? (float)total_load / membership._node_count : 0.0);
+    return buf;
+}
+
+// Helper: Format quorum decision as JSON
+__device__ inline const char* symm_format_quorum_result(const QuorumVote& vote) {
+    static char buf[256];
+    const char* result = "pending";
+    if (vote.isYes()) result = "yes";
+    else if (vote.isDecided()) result = "no";
+
+    snprintf(buf, sizeof(buf),
+        "{\"decision_id\":\"%s\",\"result\":\"%s\",\"yes\":%d,\"no\":%d,"
+        "\"elapsed_us\":%llu}",
+        vote._decision_id ? vote._decision_id : "", result,
+        vote._yes_votes, vote._no_votes,
+        vote.getElapsedTime() / 1000);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation

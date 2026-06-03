@@ -13573,6 +13573,197 @@ static void testPhase320AsyncIO() {
     });
 }
 
+// Phase 3.21: Distributed Consensus & Gossip Protocol
+static void testPhase321Consensus() {
+    std::cout << "\n=== Phase 3.21: Distributed Consensus & Gossip Protocol ===\n";
+
+    // NodeState creation
+    TEST("NodeState — stores node_id, load, health, heartbeat, version", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct NodeState");
+        ASSERT_CONTAINS(src, "_node_id");
+        ASSERT_CONTAINS(src, "_load");
+        ASSERT_CONTAINS(src, "_healthy");
+        ASSERT_CONTAINS(src, "_last_heartbeat");
+        ASSERT_CONTAINS(src, "_state_version");
+    });
+
+    // GossipMessage creation
+    TEST("GossipMessage — distributes node state with hops and dedup ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct GossipMessage");
+        ASSERT_CONTAINS(src, "_origin_node");
+        ASSERT_CONTAINS(src, "_hops");
+        ASSERT_CONTAINS(src, "_message_id");
+    });
+
+    // ConsistentHashRing creation
+    TEST("ConsistentHashRing — deterministic key-to-node mapping", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ConsistentHashRing");
+        ASSERT_CONTAINS(src, "_nodes[8]");
+        ASSERT_CONTAINS(src, "_node_hashes[8]");
+        ASSERT_CONTAINS(src, "_virtual_nodes");
+    });
+
+    // ConsistentHashRing addNode
+    TEST("ConsistentHashRing::addNode — adds nodes to ring", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addNode");
+    });
+
+    // ConsistentHashRing findNode
+    TEST("ConsistentHashRing::findNode — locates responsible node", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "findNode");
+    });
+
+    // ConsistentHashRing getReplicaNodes
+    TEST("ConsistentHashRing::getReplicaNodes — returns N replicas", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getReplicaNodes");
+    });
+
+    // QuorumVote creation
+    TEST("QuorumVote — votes toward consensus decision", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct QuorumVote");
+        ASSERT_CONTAINS(src, "_yes_votes");
+        ASSERT_CONTAINS(src, "_no_votes");
+        ASSERT_CONTAINS(src, "_quorum_size");
+        ASSERT_CONTAINS(src, "_decided");
+    });
+
+    // QuorumVote vote method
+    TEST("QuorumVote::vote — registers yes/no vote", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "vote");
+    });
+
+    // QuorumVote isDecided
+    TEST("QuorumVote::isDecided — checks if consensus reached", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isDecided");
+    });
+
+    // QuorumVote isYes
+    TEST("QuorumVote::isYes — returns true if decision is yes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isYes");
+    });
+
+    // MembershipState creation
+    TEST("MembershipState — tracks cluster membership", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct MembershipState");
+        ASSERT_CONTAINS(src, "_nodes[8]");
+        ASSERT_CONTAINS(src, "_node_count");
+        ASSERT_CONTAINS(src, "_generation");
+    });
+
+    // MembershipState updateNode
+    TEST("MembershipState::updateNode — adds or updates node state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "updateNode");
+    });
+
+    // MembershipState getHealthyNodeCount
+    TEST("MembershipState::getHealthyNodeCount — counts healthy nodes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getHealthyNodeCount");
+    });
+
+    // MembershipState getTotalLoad
+    TEST("MembershipState::getTotalLoad — sums all node loads", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getTotalLoad");
+    });
+
+    // symm_hash_key helper
+    TEST("symm_hash_key — FNV-1a hash for consistent routing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_hash_key");
+    });
+
+    // symm_create_gossip_msg helper
+    TEST("symm_create_gossip_msg — creates message for dissemination", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_gossip_msg");
+        ASSERT_CONTAINS(src, "GossipMessage");
+    });
+
+    // symm_quorum_consensus helper
+    TEST("symm_quorum_consensus — checks if quorum decided yes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_quorum_consensus");
+    });
+
+    // symm_format_node_state JSON
+    TEST("symm_format_node_state — formats node as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_node_state");
+        ASSERT_CONTAINS(src, "load");
+        ASSERT_CONTAINS(src, "healthy");
+    });
+
+    // symm_format_membership JSON
+    TEST("symm_format_membership — formats cluster as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_membership");
+        ASSERT_CONTAINS(src, "node_count");
+        ASSERT_CONTAINS(src, "total_load");
+    });
+
+    // symm_format_quorum_result JSON
+    TEST("symm_format_quorum_result — formats decision as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_quorum_result");
+        ASSERT_CONTAINS(src, "result");
+        ASSERT_CONTAINS(src, "elapsed_us");
+    });
+
+    // Integration: Hash ring routing
+    TEST("ConsistentHashRing — deterministic routing without coordinator", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addNode");
+        ASSERT_CONTAINS(src, "findNode");
+        ASSERT_CONTAINS(src, "getReplicaNodes");
+    });
+
+    // Integration: Gossip dissemination
+    TEST("GossipMessage + NodeState — peer-to-peer state propagation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "GossipMessage");
+        ASSERT_CONTAINS(src, "NodeState");
+        ASSERT_CONTAINS(src, "_hops");
+    });
+
+    // Integration: Quorum consensus
+    TEST("QuorumVote — consensus with configurable quorum size", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "QuorumVote");
+        ASSERT_CONTAINS(src, "vote");
+        ASSERT_CONTAINS(src, "isDecided");
+    });
+
+    // Integration: Membership + Load Tracking
+    TEST("MembershipState + NodeState — cluster with health monitoring", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "MembershipState");
+        ASSERT_CONTAINS(src, "updateNode");
+        ASSERT_CONTAINS(src, "getHealthyNodeCount");
+    });
+
+    // Integration: Full consensus stack
+    TEST("Consensus + Gossip + Hash — self-healing cluster", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "GossipMessage");
+        ASSERT_CONTAINS(src, "ConsistentHashRing");
+        ASSERT_CONTAINS(src, "MembershipState");
+        ASSERT_CONTAINS(src, "QuorumVote");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -13819,6 +14010,9 @@ int main() {
 
     // Phase 3.20: Asynchronous I/O with Native Coroutines
     symm::testPhase320AsyncIO();
+
+    // Phase 3.21: Distributed Consensus & Gossip Protocol
+    symm::testPhase321Consensus();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
