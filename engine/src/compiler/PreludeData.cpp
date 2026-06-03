@@ -10416,6 +10416,271 @@ __device__ const char* _format_pipe_config_json(_PipeConfig* pipe) {
 
 )";
 
+// Fragment 23: WebSocket Support (real-time bidirectional)
+static const char* PRELUDE_FRAG23 = R"(
+
+// ── WebSocket Data Structures ─────────────────────────────────────────────────
+
+// WebSocket frame opcode
+enum _WebSocketOpcode {
+    OPCODE_CONTINUATION = 0,        // Continuation frame
+    OPCODE_TEXT         = 1,        // Text frame
+    OPCODE_BINARY       = 2,        // Binary frame
+    OPCODE_CLOSE        = 8,        // Close frame
+    OPCODE_PING         = 9,        // Ping frame
+    OPCODE_PONG         = 10        // Pong frame
+};
+
+// WebSocket frame
+struct _WebSocketFrame {
+    const char* _id;                // Frame identifier
+    int _opcode;                    // Frame type (0-10)
+    int _fin;                       // 1=final frame, 0=more frames
+    int _masked;                    // 1=masked payload
+    unsigned char _mask_key[4];     // Masking key
+    char _payload[2048];            // Payload data
+    int _payload_len;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// WebSocket message
+struct _WebSocketMessage {
+    const char* _id;                // Message identifier
+    int _opcode;                    // OPCODE_TEXT, OPCODE_BINARY, etc.
+    char _payload[4096];            // Message payload
+    int _payload_len;
+    int _complete;                  // 1=complete, 0=partial
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// WebSocket connection
+struct _WebSocketConnection {
+    const char* _id;                // Connection identifier
+    const char* _client_id;         // Client identifier
+    int _state;                     // 0=handshake, 1=open, 2=closing, 3=closed
+    const char* _sub_protocol;      // Negotiated subprotocol
+    unsigned long long _bytes_sent;
+    unsigned long long _bytes_received;
+    int _ping_sent;                 // 1=ping pending
+    long long _last_ping_ms;
+    _WebSocketMessage _recv_queue[16];  // Up to 16 buffered messages
+    int _recv_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// WebSocket server
+struct _WebSocketServer {
+    const char* _id;                // "websocket-server"
+    _WebSocketConnection _connections[32];  // Up to 32 connections
+    int _connection_count;
+    int _max_connections;
+    int _frame_timeout_ms;
+    long long _total_bytes_sent;
+    long long _total_bytes_received;
+    int _messages_processed;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// WebSocket handshake
+struct _WebSocketHandshake {
+    const char* _client_key;        // Sec-WebSocket-Key
+    const char* _server_key;        // Server response key
+    const char* _protocol;          // Requested subprotocol
+    int _version;                   // WebSocket version (13)
+    int _accepted;                  // 1=accepted, 0=rejected
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── WebSocket Operations ───────────────────────────────────────────────────────
+
+// Create WebSocket frame
+__device__ _WebSocketFrame _create_websocket_frame(int opcode) {
+    _WebSocketFrame f;
+    f._id = 0;
+    f._opcode = opcode;
+    f._fin = 1;
+    f._masked = 0;
+    f._payload_len = 0;
+    f._created_at = _symm_now_ms;
+    f._span_id = 0;
+    return f;
+}
+
+// Set frame payload
+__device__ void _websocket_frame_set_payload(_WebSocketFrame* frame, const char* data, int len) {
+    if (len > 2047) len = 2047;
+    for (int i = 0; i < len; i++) {
+        frame->_payload[i] = data[i];
+    }
+    frame->_payload[len] = 0;
+    frame->_payload_len = len;
+}
+
+// Create WebSocket message
+__device__ _WebSocketMessage _create_websocket_message(int opcode) {
+    _WebSocketMessage m;
+    m._id = 0;
+    m._opcode = opcode;
+    m._payload_len = 0;
+    m._complete = 0;
+    m._created_at = _symm_now_ms;
+    m._span_id = 0;
+    return m;
+}
+
+// Set message payload
+__device__ void _websocket_message_set_payload(_WebSocketMessage* msg, const char* data, int len) {
+    if (len > 4095) len = 4095;
+    for (int i = 0; i < len; i++) {
+        msg->_payload[i] = data[i];
+    }
+    msg->_payload[len] = 0;
+    msg->_payload_len = len;
+    msg->_complete = 1;
+}
+
+// Create WebSocket connection
+__device__ _WebSocketConnection _create_websocket_connection(const char* client_id) {
+    _WebSocketConnection c;
+    c._id = client_id;
+    c._client_id = client_id;
+    c._state = 0;  // handshake
+    c._sub_protocol = 0;
+    c._bytes_sent = 0;
+    c._bytes_received = 0;
+    c._ping_sent = 0;
+    c._last_ping_ms = 0;
+    c._recv_count = 0;
+    c._created_at = _symm_now_ms;
+    c._span_id = 0;
+    return c;
+}
+
+// Open connection (handshake complete)
+__device__ void _websocket_connection_open(_WebSocketConnection* conn) {
+    conn->_state = 1;  // open
+}
+
+// Close connection
+__device__ void _websocket_connection_close(_WebSocketConnection* conn) {
+    conn->_state = 3;  // closed
+}
+
+// Queue message for sending
+__device__ void _websocket_connection_send(_WebSocketConnection* conn, const char* data, int len) {
+    conn->_bytes_sent += len;
+}
+
+// Receive message
+__device__ void _websocket_connection_receive(_WebSocketConnection* conn, _WebSocketMessage* msg) {
+    if (conn->_recv_count < 16) {
+        conn->_recv_queue[conn->_recv_count] = *msg;
+        conn->_recv_count++;
+    }
+    conn->_bytes_received += msg->_payload_len;
+}
+
+// Create WebSocket server
+__device__ _WebSocketServer _create_websocket_server() {
+    _WebSocketServer srv;
+    srv._id = "websocket-server";
+    srv._connection_count = 0;
+    srv._max_connections = 32;
+    srv._frame_timeout_ms = 30000;
+    srv._total_bytes_sent = 0;
+    srv._total_bytes_received = 0;
+    srv._messages_processed = 0;
+    srv._created_at = _symm_now_ms;
+    srv._span_id = 0;
+    return srv;
+}
+
+// Register connection
+__device__ int _websocket_server_register(_WebSocketServer* srv, _WebSocketConnection* conn) {
+    if (srv->_connection_count < 32) {
+        srv->_connections[srv->_connection_count] = *conn;
+        srv->_connection_count++;
+        return srv->_connection_count - 1;
+    }
+    return -1;
+}
+
+// Broadcast message to all connections
+__device__ void _websocket_server_broadcast(_WebSocketServer* srv, const char* data, int len) {
+    for (int i = 0; i < srv->_connection_count; i++) {
+        if (srv->_connections[i]._state == 1) {  // open
+            srv->_connections[i]._bytes_sent += len;
+        }
+    }
+    srv->_total_bytes_sent += len * srv->_connection_count;
+}
+
+// Create handshake
+__device__ _WebSocketHandshake _create_websocket_handshake(const char* client_key) {
+    _WebSocketHandshake h;
+    h._client_key = client_key;
+    h._server_key = 0;
+    h._protocol = 0;
+    h._version = 13;
+    h._accepted = 0;
+    h._created_at = _symm_now_ms;
+    h._span_id = 0;
+    return h;
+}
+
+// Accept handshake
+__device__ void _websocket_handshake_accept(_WebSocketHandshake* hs) {
+    hs._accepted = 1;
+}
+
+// Format frame as JSON
+__device__ const char* _format_websocket_frame_json(_WebSocketFrame* f) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"opcode\\":%d,\\"fin\\":%d,\\"payload_len\\":%d,\\"masked\\":%d}",
+                   f->_opcode, f->_fin, f->_payload_len, f->_masked);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format message as JSON
+__device__ const char* _format_websocket_message_json(_WebSocketMessage* m) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"opcode\\":%d,\\"payload_len\\":%d,\\"complete\\":%d}",
+                   m->_opcode, m->_payload_len, m->_complete);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format connection as JSON
+__device__ const char* _format_websocket_connection_json(_WebSocketConnection* c) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"client\\":\"%s\\",\\"state\\":%d,\\"sent\\":%llu,\\"recv\\":%llu}",
+                   c->_client_id, c->_state, c->_bytes_sent, c->_bytes_received);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format server status
+__device__ const char* _format_websocket_server_status(_WebSocketServer* srv) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"connections\\":%d,\\"max\\":%d,\\"sent\\":%lld,\\"recv\\":%lld,\\"msgs\\":%d}",
+                   srv->_connection_count, srv->_max_connections,
+                   srv->_total_bytes_sent, srv->_total_bytes_received, srv->_messages_processed);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -10443,6 +10708,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG20) result += PRELUDE_FRAG20; // HTTP utilities
     if (PRELUDE_FRAG21) result += PRELUDE_FRAG21; // Cryptography
     if (PRELUDE_FRAG22) result += PRELUDE_FRAG22; // Streams and buffers
+    if (PRELUDE_FRAG23) result += PRELUDE_FRAG23; // WebSocket support
     return result;
 }
 

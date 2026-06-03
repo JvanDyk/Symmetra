@@ -16733,6 +16733,184 @@ static void testPhase64Streams() {
     });
 }
 
+static void testPhase70WebSocket() {
+    std::cout << "\n=== Phase 7.0: WebSocket Support ===\n";
+
+    TEST("_WebSocketOpcode enum — frame types (TEXT, BINARY, PING, PONG, CLOSE)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enum _WebSocketOpcode");
+        ASSERT_CONTAINS(src, "OPCODE_TEXT");
+        ASSERT_CONTAINS(src, "OPCODE_PING");
+        ASSERT_CONTAINS(src, "OPCODE_CLOSE");
+    });
+
+    TEST("_WebSocketFrame — frame with opcode, payload, mask", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WebSocketFrame");
+        ASSERT_CONTAINS(src, "_opcode");
+        ASSERT_CONTAINS(src, "_payload[2048]");
+        ASSERT_CONTAINS(src, "_mask_key[4]");
+    });
+
+    TEST("_create_websocket_frame — create frame with opcode", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_websocket_frame");
+    });
+
+    TEST("_websocket_frame_set_payload — set frame payload data", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_frame_set_payload");
+    });
+
+    TEST("_WebSocketMessage — message with type and payload (4KB)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WebSocketMessage");
+        ASSERT_CONTAINS(src, "_payload[4096]");
+        ASSERT_CONTAINS(src, "_complete");
+    });
+
+    TEST("_create_websocket_message — create message", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_websocket_message");
+    });
+
+    TEST("_websocket_message_set_payload — set message payload", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_message_set_payload");
+    });
+
+    TEST("_WebSocketConnection — connection with state and buffers", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WebSocketConnection");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_recv_queue[16]");
+        ASSERT_CONTAINS(src, "_bytes_sent");
+    });
+
+    TEST("_create_websocket_connection — create connection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_websocket_connection");
+    });
+
+    TEST("_websocket_connection_open — open connection (handshake complete)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_connection_open");
+    });
+
+    TEST("_websocket_connection_close — close connection gracefully", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_connection_close");
+    });
+
+    TEST("_websocket_connection_send — queue data for sending", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_connection_send");
+    });
+
+    TEST("_websocket_connection_receive — receive incoming message", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_connection_receive");
+    });
+
+    TEST("_WebSocketServer — manages up to 32 connections", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WebSocketServer");
+        ASSERT_CONTAINS(src, "_connections[32]");
+        ASSERT_CONTAINS(src, "_max_connections");
+        ASSERT_CONTAINS(src, "_frame_timeout_ms");
+    });
+
+    TEST("_create_websocket_server — initialize WebSocket server", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_websocket_server");
+    });
+
+    TEST("_websocket_server_register — register new connection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_server_register");
+    });
+
+    TEST("_websocket_server_broadcast — send to all connections", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_server_broadcast");
+    });
+
+    TEST("_WebSocketHandshake — handshake with key negotiation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WebSocketHandshake");
+        ASSERT_CONTAINS(src, "_client_key");
+        ASSERT_CONTAINS(src, "_server_key");
+        ASSERT_CONTAINS(src, "_version");
+    });
+
+    TEST("_create_websocket_handshake — create handshake", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_websocket_handshake");
+    });
+
+    TEST("_websocket_handshake_accept — accept handshake", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_websocket_handshake_accept");
+    });
+
+    TEST("_format_websocket_frame_json — format frame as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_websocket_frame_json");
+    });
+
+    TEST("_format_websocket_message_json — format message as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_websocket_message_json");
+    });
+
+    TEST("_format_websocket_connection_json — format connection as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_websocket_connection_json");
+    });
+
+    TEST("_format_websocket_server_status — format server status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_websocket_server_status");
+    });
+
+    TEST("Connection states — handshake, open, closing, closed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_state");
+    });
+
+    TEST("Frame types — continuation, text, binary, close, ping, pong", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_opcode");
+    });
+
+    TEST("Masking support — mask_key for client-to-server frames", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_mask_key[4]");
+    });
+
+    TEST("Message buffering — up to 16 queued messages per connection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_recv_queue[16]");
+    });
+
+    TEST("Broadcasting — send to all open connections", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_broadcast");
+    });
+
+    TEST("Metrics — bytes sent/received, messages processed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_total_bytes_sent");
+        ASSERT_CONTAINS(src, "_total_bytes_received");
+        ASSERT_CONTAINS(src, "_messages_processed");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -17030,6 +17208,9 @@ int main() {
 
     // Phase 6.4: Streams and Buffers
     symm::testPhase64Streams();
+
+    // Phase 7.0: WebSocket Support
+    symm::testPhase70WebSocket();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
