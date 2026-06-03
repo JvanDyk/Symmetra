@@ -14881,6 +14881,82 @@ static void testPhase50RTTISystem() {
     });
 }
 
+// Phase 5.1: Advanced Error Handling
+static void testPhase51ErrorHandling() {
+    std::cout << "\n=== Phase 5.1: Advanced Error Handling ===\n";
+
+    TEST("StackFrame — stack trace information", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct StackFrame");
+        ASSERT_CONTAINS(src, "_function_name");
+        ASSERT_CONTAINS(src, "_file_path");
+        ASSERT_CONTAINS(src, "_line_number");
+    });
+
+    TEST("ErrorWithCause — error with cause chain", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ErrorWithCause");
+        ASSERT_CONTAINS(src, "_stack[8]");
+        ASSERT_CONTAINS(src, "_cause");
+    });
+
+    TEST("ErrorWithCause::addFrame — add to stack trace", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addFrame");
+    });
+
+    TEST("ErrorWithCause::setCause — set error cause", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "setCause");
+    });
+
+    TEST("ErrorContext — error tracking context", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct ErrorContext");
+        ASSERT_CONTAINS(src, "_errors[4]");
+    });
+
+    TEST("ErrorContext::recordError — track error", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "recordError");
+    });
+
+    TEST("symm_create_error — allocate error", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_error");
+    });
+
+    TEST("symm_format_error_stack — JSON error with stack", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_error_stack");
+        ASSERT_CONTAINS(src, "stack_depth");
+    });
+
+    TEST("symm_format_error_context — JSON error context", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_error_context");
+    });
+
+    TEST("Error chains with cause — Error.cause pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "ErrorWithCause");
+        ASSERT_CONTAINS(src, "_cause");
+    });
+
+    TEST("Stack traces with source location — file:line info", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "StackFrame");
+        ASSERT_CONTAINS(src, "_file_path");
+        ASSERT_CONTAINS(src, "_line_number");
+    });
+
+    TEST("Error context with tracing — linked to Phase 3.18", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "ErrorWithCause");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15145,6 +15221,9 @@ int main() {
 
     // Phase 5.0: RTTI System
     symm::testPhase50RTTISystem();
+
+    // Phase 5.1: Advanced Error Handling
+    symm::testPhase51ErrorHandling();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

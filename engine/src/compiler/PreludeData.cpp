@@ -4975,6 +4975,105 @@ __device__ inline const char* symm_format_type_checker_status(const TypeChecker&
     return buf;
 }
 
+// ── Phase 5.1: Advanced Error Handling ─────────────────────────────────────────
+
+// Stack frame information
+struct StackFrame {
+    const char* _function_name;
+    const char* _file_path;
+    int _line_number;
+    int _column_number;
+    unsigned long long _timestamp;
+};
+
+// Error with cause chain (Error.cause)
+struct ErrorWithCause {
+    const char* _id;
+    const char* _message;
+    const char* _error_type;        // "Error", "TypeError", "RangeError", etc.
+    StackFrame _stack[8];           // Call stack (up to 8 frames)
+    int _stack_depth;
+    const char* _cause;             // Cause error (for error chaining)
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ ErrorWithCause(const char* id = "")
+        : _id(id), _message(NULL), _error_type("Error"), _stack_depth(0),
+          _cause(NULL), _created_time(clock64()) {}
+
+    // Add stack frame
+    __device__ int addFrame(const char* func, const char* file, int line, int col) {
+        if (_stack_depth >= 8) return 0;
+        _stack[_stack_depth]._function_name = func;
+        _stack[_stack_depth]._file_path = file;
+        _stack[_stack_depth]._line_number = line;
+        _stack[_stack_depth]._column_number = col;
+        _stack[_stack_depth]._timestamp = clock64();
+        _stack_depth++;
+        return 1;
+    }
+
+    // Set cause
+    __device__ void setCause(const char* cause) {
+        _cause = cause;
+    }
+
+    __device__ int getStackDepth() const { return _stack_depth; }
+};
+
+// Error context for debugging
+struct ErrorContext {
+    const char* _id;
+    int _error_count;
+    ErrorWithCause _errors[4];      // Track up to 4 errors
+    unsigned long long _created_time;
+    const char* _span_id;
+
+    __device__ ErrorContext(const char* id = "")
+        : _id(id), _error_count(0), _created_time(clock64()) {}
+
+    // Record error
+    __device__ int recordError(const ErrorWithCause& error) {
+        if (_error_count >= 4) return 0;
+        _errors[_error_count] = error;
+        _error_count++;
+        return 1;
+    }
+
+    __device__ int getErrorCount() const { return _error_count; }
+};
+
+// Helper: Create error with cause
+__device__ inline ErrorWithCause symm_create_error(const char* id, const char* msg,
+                                                    const char* type, const char* span_id) {
+    ErrorWithCause err(id);
+    err._message = msg;
+    err._error_type = type;
+    err._span_id = span_id;
+    return err;
+}
+
+// Helper: Format error stack trace as JSON
+__device__ inline const char* symm_format_error_stack(const ErrorWithCause& err) {
+    static char buf[512];
+    snprintf(buf, sizeof(buf),
+        "{\"type\":\"%s\",\"message\":\"%s\",\"stack_depth\":%d,\"cause\":\"%s\"}",
+        err._error_type ? err._error_type : "Error",
+        err._message ? err._message : "",
+        err._stack_depth,
+        err._cause ? err._cause : "null");
+    return buf;
+}
+
+// Helper: Format error context as JSON
+__device__ inline const char* symm_format_error_context(const ErrorContext& ctx) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"error_count\":%d,\"active_errors\":%d}",
+        ctx._id ? ctx._id : "", ctx._error_count, ctx._error_count);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
