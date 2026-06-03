@@ -14048,6 +14048,181 @@ static void testPhase40EventLoop() {
     });
 }
 
+// Phase 4.1: Promise Utilities
+static void testPhase41PromiseUtilities() {
+    std::cout << "\n=== Phase 4.1: Promise Utilities ===\n";
+
+    // Promise.all creation
+    TEST("PromiseAll — waits for all promises to settle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct PromiseAll");
+        ASSERT_CONTAINS(src, "_promises[16]");
+        ASSERT_CONTAINS(src, "_fulfilled_count");
+        ASSERT_CONTAINS(src, "_rejected_count");
+    });
+
+    // Promise.all states
+    TEST("PromiseAll — states: pending(0), all fulfilled(1), any rejected(2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "fulfilled");
+        ASSERT_CONTAINS(src, "rejected");
+    });
+
+    // Promise.all addPromise
+    TEST("PromiseAll::addPromise — adds promise to collection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "addPromise");
+    });
+
+    // Promise.all checkStatus
+    TEST("PromiseAll::checkStatus — checks if all settled", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "checkStatus");
+    });
+
+    // Promise.race creation
+    TEST("PromiseRace — waits for first promise to settle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct PromiseRace");
+        ASSERT_CONTAINS(src, "_winner_value");
+        ASSERT_CONTAINS(src, "_winner_index");
+    });
+
+    // Promise.race states
+    TEST("PromiseRace — pending(0) or settled(1)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isPending");
+        ASSERT_CONTAINS(src, "isSettled");
+    });
+
+    // Promise.race checkStatus
+    TEST("PromiseRace::checkStatus — returns on first settlement", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "winner_state");
+    });
+
+    // Promise.allSettled creation
+    TEST("PromiseAllSettled — waits for all (doesn't care state)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct PromiseAllSettled");
+        ASSERT_CONTAINS(src, "_settled_count");
+    });
+
+    // Promise.allSettled distinction
+    TEST("PromiseAllSettled — tracks fulfilled and rejected separately", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_fulfilled_count");
+        ASSERT_CONTAINS(src, "_rejected_count");
+    });
+
+    // Promise.any creation
+    TEST("PromiseAny — waits for first fulfilled", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct PromiseAny");
+        ASSERT_CONTAINS(src, "_winner_value");
+    });
+
+    // Promise.any rejection
+    TEST("PromiseAny — rejects if all rejected", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_error");
+    });
+
+    // Helper: symm_promise_all
+    TEST("symm_promise_all — create with span ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_promise_all");
+    });
+
+    // Helper: symm_promise_race
+    TEST("symm_promise_race — create with span ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_promise_race");
+    });
+
+    // Helper: symm_promise_all_settled
+    TEST("symm_promise_all_settled — create with span ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_promise_all_settled");
+    });
+
+    // Helper: symm_promise_any
+    TEST("symm_promise_any — create with span ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_promise_any");
+    });
+
+    // Format helpers
+    TEST("symm_format_promise_all_status — JSON with counts", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_promise_all_status");
+        ASSERT_CONTAINS(src, "fulfilled");
+        ASSERT_CONTAINS(src, "rejected");
+    });
+
+    TEST("symm_format_promise_race_status — JSON with winner", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_promise_race_status");
+        ASSERT_CONTAINS(src, "winner_index");
+    });
+
+    TEST("symm_format_promise_all_settled_status — JSON with counts", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_promise_all_settled_status");
+        ASSERT_CONTAINS(src, "settled");
+    });
+
+    TEST("symm_format_promise_any_status — JSON with counts", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_promise_any_status");
+    });
+
+    // Integration: Promise.all usage
+    TEST("Promise.all — concurrent operations pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "PromiseAll");
+        ASSERT_CONTAINS(src, "addPromise");
+        ASSERT_CONTAINS(src, "checkStatus");
+    });
+
+    // Integration: Promise.race usage
+    TEST("Promise.race — first-to-complete pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "PromiseRace");
+        ASSERT_CONTAINS(src, "isSettled");
+    });
+
+    // Integration: Promise.allSettled usage
+    TEST("Promise.allSettled — all complete regardless of state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "PromiseAllSettled");
+        ASSERT_CONTAINS(src, "settled");
+    });
+
+    // Integration: Promise.any usage
+    TEST("Promise.any — first-fulfilled pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "PromiseAny");
+        ASSERT_CONTAINS(src, "fulfilled");
+    });
+
+    // Integration: Tracing correlation
+    TEST("Promise utilities linked to Phase 3.18 tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "PromiseAll");
+        ASSERT_CONTAINS(src, "PromiseRace");
+    });
+
+    // Integration: Latency measurement
+    TEST("Promise utilities with latency tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLatency");
+        ASSERT_CONTAINS(src, "PromiseAll");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -14300,6 +14475,9 @@ int main() {
 
     // Phase 4.0: Event Loop Architecture (Hybrid C# Model)
     symm::testPhase40EventLoop();
+
+    // Phase 4.1: Promise Utilities
+    symm::testPhase41PromiseUtilities();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

@@ -3817,6 +3817,321 @@ __device__ inline const char* symm_format_sync_context(const SynchronizationCont
     return buf;
 }
 
+// ── Phase 4.1: Promise Utilities ───────────────────────────────────────────────
+
+// Promise.all result (waits for all promises to settle)
+struct PromiseAll {
+    const char* _id;                // "promise-all-001"
+    Promise* _promises[16];         // Up to 16 promises
+    int _promise_count;
+    int _fulfilled_count;
+    int _rejected_count;
+    const char* _error;             // First error if any rejected
+    int _state;                     // 0=pending, 1=all fulfilled, 2=any rejected
+    unsigned long long _created_time;
+    unsigned long long _settled_time;
+    const char* _span_id;
+
+    __device__ PromiseAll(const char* id = "")
+        : _id(id), _promise_count(0), _fulfilled_count(0), _rejected_count(0),
+          _error(NULL), _state(0), _created_time(clock64()), _settled_time(0) {}
+
+    // Add promise to collection
+    __device__ bool addPromise(Promise* p) {
+        if (_promise_count >= 16) return false;
+        _promises[_promise_count] = p;
+        _promise_count++;
+        return true;
+    }
+
+    // Check if all settled (fulfilled or rejected)
+    __device__ void checkStatus() {
+        _fulfilled_count = 0;
+        _rejected_count = 0;
+        for (int i = 0; i < _promise_count; i++) {
+            if (_promises[i]->isFulfilled()) {
+                _fulfilled_count++;
+            } else if (_promises[i]->isRejected()) {
+                _rejected_count++;
+                if (_error == NULL) {
+                    _error = _promises[i]->_value;
+                }
+            }
+        }
+
+        int settled = _fulfilled_count + _rejected_count;
+        if (settled == _promise_count) {
+            if (_rejected_count > 0) {
+                _state = 2;  // Any rejected
+            } else {
+                _state = 1;  // All fulfilled
+            }
+            _settled_time = clock64();
+        }
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isFulfilled() const { return _state == 1; }
+    __device__ bool isRejected() const { return _state == 2; }
+    __device__ unsigned long long getLatency() const {
+        if (_settled_time == 0) return 0;
+        return _settled_time - _created_time;
+    }
+};
+
+// Promise.race result (waits for first promise to settle)
+struct PromiseRace {
+    const char* _id;
+    Promise* _promises[16];
+    int _promise_count;
+    const char* _winner_value;      // First to settle
+    int _winner_index;              // Which promise won
+    int _state;                     // 0=pending, 1=settled
+    int _winner_state;              // 1=fulfilled, 2=rejected
+    unsigned long long _created_time;
+    unsigned long long _settled_time;
+    const char* _span_id;
+
+    __device__ PromiseRace(const char* id = "")
+        : _id(id), _promise_count(0), _winner_value(NULL), _winner_index(-1),
+          _state(0), _winner_state(0), _created_time(clock64()),
+          _settled_time(0) {}
+
+    // Add promise
+    __device__ bool addPromise(Promise* p) {
+        if (_promise_count >= 16) return false;
+        _promises[_promise_count] = p;
+        _promise_count++;
+        return true;
+    }
+
+    // Check if any promise settled
+    __device__ void checkStatus() {
+        if (_state != 0) return;  // Already settled
+        for (int i = 0; i < _promise_count; i++) {
+            if (_promises[i]->isFulfilled() || _promises[i]->isRejected()) {
+                _state = 1;  // Settled
+                _winner_index = i;
+                _winner_value = _promises[i]->_value;
+                _winner_state = _promises[i]->isFulfilled() ? 1 : 2;
+                _settled_time = clock64();
+                return;
+            }
+        }
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isSettled() const { return _state == 1; }
+    __device__ unsigned long long getLatency() const {
+        if (_settled_time == 0) return 0;
+        return _settled_time - _created_time;
+    }
+};
+
+// Promise.allSettled result (waits for all to complete, doesn't care about state)
+struct PromiseAllSettled {
+    const char* _id;
+    Promise* _promises[16];
+    int _promise_count;
+    int _settled_count;
+    int _fulfilled_count;
+    int _rejected_count;
+    int _state;                     // 0=pending, 1=all settled
+    unsigned long long _created_time;
+    unsigned long long _settled_time;
+    const char* _span_id;
+
+    __device__ PromiseAllSettled(const char* id = "")
+        : _id(id), _promise_count(0), _settled_count(0), _fulfilled_count(0),
+          _rejected_count(0), _state(0), _created_time(clock64()),
+          _settled_time(0) {}
+
+    // Add promise
+    __device__ bool addPromise(Promise* p) {
+        if (_promise_count >= 16) return false;
+        _promises[_promise_count] = p;
+        _promise_count++;
+        return true;
+    }
+
+    // Check if all settled
+    __device__ void checkStatus() {
+        _settled_count = 0;
+        _fulfilled_count = 0;
+        _rejected_count = 0;
+        for (int i = 0; i < _promise_count; i++) {
+            if (!_promises[i]->isPending()) {
+                _settled_count++;
+                if (_promises[i]->isFulfilled()) {
+                    _fulfilled_count++;
+                } else {
+                    _rejected_count++;
+                }
+            }
+        }
+        if (_settled_count == _promise_count) {
+            _state = 1;  // All settled
+            _settled_time = clock64();
+        }
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isSettled() const { return _state == 1; }
+    __device__ unsigned long long getLatency() const {
+        if (_settled_time == 0) return 0;
+        return _settled_time - _created_time;
+    }
+};
+
+// Promise.any result (waits for first fulfilled, rejects if all rejected)
+struct PromiseAny {
+    const char* _id;
+    Promise* _promises[16];
+    int _promise_count;
+    int _fulfilled_count;
+    int _rejected_count;
+    const char* _winner_value;      // First fulfilled
+    const char* _error;             // If all rejected
+    int _state;                     // 0=pending, 1=fulfilled, 2=rejected
+    unsigned long long _created_time;
+    unsigned long long _settled_time;
+    const char* _span_id;
+
+    __device__ PromiseAny(const char* id = "")
+        : _id(id), _promise_count(0), _fulfilled_count(0), _rejected_count(0),
+          _winner_value(NULL), _error(NULL), _state(0),
+          _created_time(clock64()), _settled_time(0) {}
+
+    // Add promise
+    __device__ bool addPromise(Promise* p) {
+        if (_promise_count >= 16) return false;
+        _promises[_promise_count] = p;
+        _promise_count++;
+        return true;
+    }
+
+    // Check if any fulfilled or all rejected
+    __device__ void checkStatus() {
+        _fulfilled_count = 0;
+        _rejected_count = 0;
+        for (int i = 0; i < _promise_count; i++) {
+            if (_promises[i]->isFulfilled()) {
+                _fulfilled_count++;
+                if (_winner_value == NULL) {
+                    _winner_value = _promises[i]->_value;
+                    _state = 1;  // Fulfilled
+                    _settled_time = clock64();
+                    return;
+                }
+            } else if (_promises[i]->isRejected()) {
+                _rejected_count++;
+                if (_error == NULL) {
+                    _error = _promises[i]->_value;
+                }
+            }
+        }
+        // If all rejected
+        if (_rejected_count == _promise_count && _fulfilled_count == 0) {
+            _state = 2;  // Rejected
+            _settled_time = clock64();
+        }
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isFulfilled() const { return _state == 1; }
+    __device__ bool isRejected() const { return _state == 2; }
+    __device__ unsigned long long getLatency() const {
+        if (_settled_time == 0) return 0;
+        return _settled_time - _created_time;
+    }
+};
+
+// Helper: Create Promise.all
+__device__ inline PromiseAll symm_promise_all(const char* id, const char* span_id) {
+    PromiseAll pa(id);
+    pa._span_id = span_id;
+    return pa;
+}
+
+// Helper: Create Promise.race
+__device__ inline PromiseRace symm_promise_race(const char* id, const char* span_id) {
+    PromiseRace pr(id);
+    pr._span_id = span_id;
+    return pr;
+}
+
+// Helper: Create Promise.allSettled
+__device__ inline PromiseAllSettled symm_promise_all_settled(const char* id, const char* span_id) {
+    PromiseAllSettled pas(id);
+    pas._span_id = span_id;
+    return pas;
+}
+
+// Helper: Create Promise.any
+__device__ inline PromiseAny symm_promise_any(const char* id, const char* span_id) {
+    PromiseAny pa(id);
+    pa._span_id = span_id;
+    return pa;
+}
+
+// Helper: Format Promise.all status
+__device__ inline const char* symm_format_promise_all_status(const PromiseAll& pa) {
+    static char buf[384];
+    const char* state_str = "pending";
+    if (pa.isFulfilled()) state_str = "fulfilled";
+    else if (pa.isRejected()) state_str = "rejected";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"promises\":%d,\"fulfilled\":%d,"
+        "\"rejected\":%d,\"latency_us\":%llu}",
+        pa._id ? pa._id : "", state_str, pa._promise_count,
+        pa._fulfilled_count, pa._rejected_count, pa.getLatency() / 1000);
+    return buf;
+}
+
+// Helper: Format Promise.race status
+__device__ inline const char* symm_format_promise_race_status(const PromiseRace& pr) {
+    static char buf[384];
+    const char* state_str = "pending";
+    if (pr.isSettled()) state_str = pr._winner_state == 1 ? "fulfilled" : "rejected";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"winner_index\":%d,\"promises\":%d,"
+        "\"latency_us\":%llu}",
+        pr._id ? pr._id : "", state_str, pr._winner_index, pr._promise_count,
+        pr.getLatency() / 1000);
+    return buf;
+}
+
+// Helper: Format Promise.allSettled status
+__device__ inline const char* symm_format_promise_all_settled_status(const PromiseAllSettled& pas) {
+    static char buf[384];
+    const char* state_str = pas.isPending() ? "pending" : "settled";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"promises\":%d,\"settled\":%d,"
+        "\"fulfilled\":%d,\"rejected\":%d,\"latency_us\":%llu}",
+        pas._id ? pas._id : "", state_str, pas._promise_count,
+        pas._settled_count, pas._fulfilled_count, pas._rejected_count,
+        pas.getLatency() / 1000);
+    return buf;
+}
+
+// Helper: Format Promise.any status
+__device__ inline const char* symm_format_promise_any_status(const PromiseAny& pa) {
+    static char buf[384];
+    const char* state_str = "pending";
+    if (pa.isFulfilled()) state_str = "fulfilled";
+    else if (pa.isRejected()) state_str = "rejected";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"promises\":%d,\"fulfilled\":%d,"
+        "\"rejected\":%d,\"latency_us\":%llu}",
+        pa._id ? pa._id : "", state_str, pa._promise_count,
+        pa._fulfilled_count, pa._rejected_count, pa.getLatency() / 1000);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
