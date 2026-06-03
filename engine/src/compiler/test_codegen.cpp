@@ -6066,6 +6066,193 @@ static void testRegexPatterns() {
         );
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
+
+    // ── Phase 3.14: Regex Enhancement ──────────────────────────────────────
+    TEST("regex with quantifiers — all patterns", {
+        auto src = codegen(
+            "app.get('/quant', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const patterns = [\n"
+            "    /a+/.test(s),\n"
+            "    /b*/.test(s),\n"
+            "    /c?/.test(s),\n"
+            "    /d{2,4}/.test(s)\n"
+            "  ];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex character classes — patterns", {
+        auto src = codegen(
+            "app.get('/class', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const digit = /\\d+/.test(s);\n"
+            "  const word = /\\w+/.test(s);\n"
+            "  const space = /\\s+/.test(s);\n"
+            "  const custom = /[a-z0-9_]/.test(s);\n"
+            "  ctx.json({ digit, word, space, custom });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex anchors and boundaries — test", {
+        auto src = codegen(
+            "app.get('/anchor', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const start = /^hello/.test(s);\n"
+            "  const end = /world$/.test(s);\n"
+            "  ctx.json({ start, end });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex alternation — patterns", {
+        auto src = codegen(
+            "app.get('/alt', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const color = /(red|green|blue)/.test(s);\n"
+            "  ctx.json({ color });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex case-insensitive flag — /i", {
+        auto src = codegen(
+            "app.get('/case', (ctx) => {\n"
+            "  const s = 'Hello World';\n"
+            "  const lower = /hello/.test(s);\n"
+            "  const caseInsensitive = /hello/i.test(s);\n"
+            "  ctx.json({ lower, caseInsensitive });\n"
+            "});"
+        );
+        // Note: /i flag works for ASCII, limited Unicode support
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex global flag — /g", {
+        auto src = codegen(
+            "app.get('/global', (ctx) => {\n"
+            "  const s = 'aaa';\n"
+            "  const single = s.match(/a/);\n"
+            "  const all = s.match(/a/g);\n"
+            "  ctx.json({ ok: single !== null && all !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex multiline flag — /m", {
+        auto src = codegen(
+            "app.get('/multi', (ctx) => {\n"
+            "  const s = 'line1\\nline2';\n"
+            "  const single = /^line/.test(s);\n"
+            "  const multi = /^line/m.test(s);\n"
+            "  ctx.json({ single, multi });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex dotAll flag — /s", {
+        auto src = codegen(
+            "app.get('/dotall', (ctx) => {\n"
+            "  const s = 'a\\nb';\n"
+            "  const normal = /a.b/.test(s);\n"
+            "  const dotall = /a.b/s.test(s);\n"
+            "  ctx.json({ normal, dotall });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex lookahead — positive", {
+        auto src = codegen(
+            "app.get('/lookahead', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const hasUpper = /(?=[A-Z])/.test(s);\n"
+            "  const pwd = /(?=.*[0-9])/.test(s);\n"
+            "  ctx.json({ hasUpper, pwd });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex negative lookahead — /(?!...)", {
+        auto src = codegen(
+            "app.get('/nolook', (ctx) => {\n"
+            "  const s = ctx.query.s ?? '';\n"
+            "  const noNumbers = /(?!.*\\d)/.test(s);\n"
+            "  ctx.json({ noNumbers });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex exec with capture — result", {
+        auto src = codegen(
+            "app.get('/exec', (ctx) => {\n"
+            "  const s = 'abc123def';\n"
+            "  const m = /\\d+/.exec(s);\n"
+            "  ctx.json({ match: m !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex escape sequences — special chars", {
+        auto src = codegen(
+            "app.get('/escape', (ctx) => {\n"
+            "  const patterns = [\n"
+            "    /\\./.test('.'),\n"
+            "    /\\*/.test('*'),\n"
+            "    /\\[/.test('['),\n"
+            "    /\\(/.test('(')\n"
+            "  ];\n"
+            "  ctx.json({ ok: true });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex word boundary — /\\b", {
+        auto src = codegen(
+            "app.get('/boundary', (ctx) => {\n"
+            "  const s = 'hello world';\n"
+            "  const word = /\\bhello\\b/.test(s);\n"
+            "  ctx.json({ word });\n"
+            "});"
+        );
+        // Note: word boundaries may have limited support on GPU
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex combination flags — /gi", {
+        auto src = codegen(
+            "app.get('/combo', (ctx) => {\n"
+            "  const s = 'Hello HELLO hello';\n"
+            "  const matches = s.match(/hello/gi);\n"
+            "  ctx.json({ ok: matches !== null });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("regex non-capturing groups — (?:...)", {
+        auto src = codegen(
+            "app.get('/nocap', (ctx) => {\n"
+            "  const s = 'abcabc';\n"
+            "  const m = /(abc)+/.test(s);\n"
+            "  const n = /(?:abc)+/.test(s);\n"
+            "  ctx.json({ m, n });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
 }
 
 // ── 10e: Functional patterns ─────────────────────────────────────────────────
