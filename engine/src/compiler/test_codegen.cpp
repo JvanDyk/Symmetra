@@ -16911,6 +16911,172 @@ static void testPhase70WebSocket() {
     });
 }
 
+static void testPhase71Database() {
+    std::cout << "\n=== Phase 7.1: Database & Persistence ===\n";
+
+    TEST("_DBRow — table row with columns and values", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBRow");
+        ASSERT_CONTAINS(src, "_columns[16]");
+        ASSERT_CONTAINS(src, "_values[16]");
+    });
+
+    TEST("_DBResultSet — result with up to 64 rows", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBResultSet");
+        ASSERT_CONTAINS(src, "_rows[64]");
+        ASSERT_CONTAINS(src, "_affected_rows");
+    });
+
+    TEST("_create_db_result_set — create empty result", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_result_set");
+    });
+
+    TEST("_db_result_set_add_row — add row to result", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_result_set_add_row");
+    });
+
+    TEST("_db_result_set_next — iterate result rows", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_result_set_next");
+    });
+
+    TEST("_DBStatement — prepared statement with parameters", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBStatement");
+        ASSERT_CONTAINS(src, "_params[8]");
+        ASSERT_CONTAINS(src, "_prepared");
+    });
+
+    TEST("_create_db_statement — create statement", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_statement");
+    });
+
+    TEST("_db_statement_bind — bind parameter value", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_statement_bind");
+    });
+
+    TEST("_DBConnection — connection to database", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBConnection");
+        ASSERT_CONTAINS(src, "_db_path");
+        ASSERT_CONTAINS(src, "_connected");
+        ASSERT_CONTAINS(src, "_query_count");
+    });
+
+    TEST("_create_db_connection — open database connection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_connection");
+    });
+
+    TEST("_db_connection_query — execute query", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_connection_query");
+    });
+
+    TEST("_DBTransaction — transaction context", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBTransaction");
+        ASSERT_CONTAINS(src, "_active");
+        ASSERT_CONTAINS(src, "_committed");
+    });
+
+    TEST("_create_db_transaction — begin transaction", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_transaction");
+    });
+
+    TEST("_db_transaction_commit — commit changes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_transaction_commit");
+    });
+
+    TEST("_db_transaction_rollback — rollback changes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_transaction_rollback");
+    });
+
+    TEST("_DBPool — connection pool (8 connections)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBPool");
+        ASSERT_CONTAINS(src, "_connections[8]");
+        ASSERT_CONTAINS(src, "_available_count");
+    });
+
+    TEST("_create_db_pool — create connection pool", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_pool");
+    });
+
+    TEST("_db_pool_add — add connection to pool", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_pool_add");
+    });
+
+    TEST("_db_pool_get — get available connection", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_pool_get");
+    });
+
+    TEST("_db_pool_release — return connection to pool", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_pool_release");
+    });
+
+    TEST("_DBSchema — table schema with columns", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DBSchema");
+        ASSERT_CONTAINS(src, "_table_name");
+        ASSERT_CONTAINS(src, "_columns[16]");
+        ASSERT_CONTAINS(src, "_types[16]");
+    });
+
+    TEST("_create_db_schema — define table schema", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_db_schema");
+    });
+
+    TEST("_db_schema_add_column — add column to schema", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_db_schema_add_column");
+    });
+
+    TEST("_format_db_result_set_json — format results as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_db_result_set_json");
+    });
+
+    TEST("_format_db_connection_status — format connection as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_db_connection_status");
+    });
+
+    TEST("_format_db_pool_status — format pool as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_db_pool_status");
+    });
+
+    TEST("Query metrics — tracking queries and rows", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_query_count");
+        ASSERT_CONTAINS(src, "_total_rows");
+    });
+
+    TEST("Result iteration — current_row position tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_current_row");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -17211,6 +17377,9 @@ int main() {
 
     // Phase 7.0: WebSocket Support
     symm::testPhase70WebSocket();
+
+    // Phase 7.1: Database & Persistence
+    symm::testPhase71Database();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

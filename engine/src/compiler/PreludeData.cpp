@@ -10681,6 +10681,268 @@ __device__ const char* _format_websocket_server_status(_WebSocketServer* srv) {
 
 )";
 
+// Fragment 24: Database & Persistence (SQLite Integration)
+static const char* PRELUDE_FRAG24 = R"(
+
+// ── Database Data Structures ──────────────────────────────────────────────────
+
+// Database result row
+struct _DBRow {
+    const char* _columns[16];       // Up to 16 column names
+    const char* _values[16];        // Values for each column
+    int _column_count;
+    unsigned long long _created_at;
+};
+
+// Database result set
+struct _DBResultSet {
+    const char* _query;             // Original query
+    _DBRow _rows[64];               // Up to 64 rows
+    int _row_count;
+    int _affected_rows;             // For INSERT/UPDATE/DELETE
+    int _current_row;               // Current position
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Database prepared statement
+struct _DBStatement {
+    const char* _id;                // Statement identifier
+    const char* _sql;               // SQL text
+    const char* _params[8];         // Parameter values
+    int _param_count;
+    int _prepared;                  // 1=prepared, 0=not
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Database transaction
+struct _DBTransaction {
+    const char* _id;                // Transaction identifier
+    int _active;                    // 1=active, 0=inactive
+    int _committed;                 // 1=committed, 0=rolled back
+    int _statement_count;           // Statements in transaction
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Database connection
+struct _DBConnection {
+    const char* _id;                // Connection identifier
+    const char* _db_path;           // Database file path
+    int _connected;                 // 1=connected, 0=closed
+    int _readonly;                  // 1=read-only, 0=read-write
+    long long _query_count;         // Total queries
+    long long _total_rows_returned;
+    _DBTransaction _transaction;    // Current transaction
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Database pool
+struct _DBPool {
+    const char* _id;                // "database-pool"
+    _DBConnection _connections[8];  // Up to 8 connections
+    int _connection_count;
+    int _available_count;           // Available connections
+    long long _total_queries;       // Pool-wide metrics
+    long long _total_rows;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Database schema
+struct _DBSchema {
+    const char* _table_name;
+    const char* _columns[16];       // Column names
+    const char* _types[16];         // Column types (INT, TEXT, etc.)
+    int _column_count;
+    int _primary_key_col;           // Index of primary key
+    unsigned long long _created_at;
+};
+
+// ── Database Operations ────────────────────────────────────────────────────────
+
+// Create result set
+__device__ _DBResultSet _create_db_result_set(const char* query) {
+    _DBResultSet rs;
+    rs._query = query;
+    rs._row_count = 0;
+    rs._affected_rows = 0;
+    rs._current_row = 0;
+    rs._created_at = _symm_now_ms;
+    rs._span_id = 0;
+    return rs;
+}
+
+// Add row to result set
+__device__ void _db_result_set_add_row(_DBResultSet* rs, _DBRow* row) {
+    if (rs->_row_count < 64) {
+        rs->_rows[rs->_row_count] = *row;
+        rs->_row_count++;
+    }
+}
+
+// Get next row
+__device__ _DBRow* _db_result_set_next(_DBResultSet* rs) {
+    if (rs->_current_row < rs->_row_count) {
+        return &rs->_rows[rs->_current_row++];
+    }
+    return 0;
+}
+
+// Create prepared statement
+__device__ _DBStatement _create_db_statement(const char* sql) {
+    _DBStatement stmt;
+    stmt._id = sql;
+    stmt._sql = sql;
+    stmt._param_count = 0;
+    stmt._prepared = 0;
+    stmt._created_at = _symm_now_ms;
+    stmt._span_id = 0;
+    return stmt;
+}
+
+// Bind parameter
+__device__ void _db_statement_bind(_DBStatement* stmt, const char* value) {
+    if (stmt->_param_count < 8) {
+        stmt->_params[stmt->_param_count] = value;
+        stmt->_param_count++;
+    }
+}
+
+// Create connection
+__device__ _DBConnection _create_db_connection(const char* db_path) {
+    _DBConnection conn;
+    conn._id = db_path;
+    conn._db_path = db_path;
+    conn._connected = 1;
+    conn._readonly = 0;
+    conn._query_count = 0;
+    conn._total_rows_returned = 0;
+    conn._created_at = _symm_now_ms;
+    conn._span_id = 0;
+    return conn;
+}
+
+// Execute query
+__device__ _DBResultSet _db_connection_query(_DBConnection* conn, const char* sql) {
+    _DBResultSet rs = _create_db_result_set(sql);
+    conn->_query_count++;
+    return rs;
+}
+
+// Create transaction
+__device__ _DBTransaction _create_db_transaction() {
+    _DBTransaction tx;
+    tx._id = "tx";
+    tx._active = 1;
+    tx._committed = 0;
+    tx._statement_count = 0;
+    tx._created_at = _symm_now_ms;
+    tx._span_id = 0;
+    return tx;
+}
+
+// Commit transaction
+__device__ void _db_transaction_commit(_DBTransaction* tx) {
+    tx._active = 0;
+    tx._committed = 1;
+}
+
+// Rollback transaction
+__device__ void _db_transaction_rollback(_DBTransaction* tx) {
+    tx._active = 0;
+    tx._committed = 0;
+}
+
+// Create database pool
+__device__ _DBPool _create_db_pool() {
+    _DBPool pool;
+    pool._id = "database-pool";
+    pool._connection_count = 0;
+    pool._available_count = 0;
+    pool._total_queries = 0;
+    pool._total_rows = 0;
+    pool._created_at = _symm_now_ms;
+    pool._span_id = 0;
+    return pool;
+}
+
+// Add connection to pool
+__device__ void _db_pool_add(_DBPool* pool, _DBConnection* conn) {
+    if (pool->_connection_count < 8) {
+        pool->_connections[pool->_connection_count] = *conn;
+        pool->_connection_count++;
+        pool->_available_count++;
+    }
+}
+
+// Get connection from pool
+__device__ _DBConnection* _db_pool_get(_DBPool* pool) {
+    if (pool->_available_count > 0) {
+        pool->_available_count--;
+        return &pool->_connections[pool->_connection_count - pool->_available_count - 1];
+    }
+    return 0;
+}
+
+// Return connection to pool
+__device__ void _db_pool_release(_DBPool* pool) {
+    pool->_available_count++;
+}
+
+// Create schema
+__device__ _DBSchema _create_db_schema(const char* table_name) {
+    _DBSchema schema;
+    schema._table_name = table_name;
+    schema._column_count = 0;
+    schema._primary_key_col = 0;
+    schema._created_at = _symm_now_ms;
+    return schema;
+}
+
+// Add column to schema
+__device__ void _db_schema_add_column(_DBSchema* schema, const char* name, const char* type) {
+    if (schema->_column_count < 16) {
+        schema->_columns[schema->_column_count] = name;
+        schema->_types[schema->_column_count] = type;
+        schema->_column_count++;
+    }
+}
+
+// Format result set as JSON
+__device__ const char* _format_db_result_set_json(_DBResultSet* rs) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"query\\":\"%s\\",\\"rows\\":%d,\\"affected\\":%d}",
+                   rs->_query, rs->_row_count, rs->_affected_rows);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format connection status
+__device__ const char* _format_db_connection_status(_DBConnection* conn) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"db\\":\"%s\\",\\"connected\\":%d,\\"queries\\":%lld,\\"rows\\":%lld}",
+                   conn->_db_path, conn->_connected, conn->_query_count, conn->_total_rows_returned);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format pool status
+__device__ const char* _format_db_pool_status(_DBPool* pool) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"connections\\":%d,\\"available\\":%d,\\"queries\\":%lld,\\"rows\\":%lld}",
+                   pool->_connection_count, pool->_available_count, pool->_total_queries, pool->_total_rows);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -10709,6 +10971,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG21) result += PRELUDE_FRAG21; // Cryptography
     if (PRELUDE_FRAG22) result += PRELUDE_FRAG22; // Streams and buffers
     if (PRELUDE_FRAG23) result += PRELUDE_FRAG23; // WebSocket support
+    if (PRELUDE_FRAG24) result += PRELUDE_FRAG24; // Database persistence
     return result;
 }
 
