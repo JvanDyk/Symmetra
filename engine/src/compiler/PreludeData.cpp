@@ -9387,6 +9387,264 @@ __device__ const char* _format_decorator_metadata_status(_DecoratorMetadata* dm)
 }
 )";
 
+// Fragment 19: File System Simulation (readFile, writeFile, fs.promises)
+static const char* PRELUDE_FRAG19 = R"(
+
+// ── File System Data Structures ───────────────────────────────────────────────
+
+// File stat information
+struct _FileStat {
+    const char* _path;                  // File path
+    long long _size;                    // File size in bytes
+    unsigned long long _created_at;     // Creation timestamp
+    unsigned long long _modified_at;    // Last modified timestamp
+    unsigned long long _accessed_at;    // Last accessed timestamp
+    int _is_directory;                  // 1=directory, 0=file
+    int _is_readable;                   // 1=readable
+    int _is_writable;                   // 1=writable
+    const char* _span_id;               // Tracing correlation
+};
+
+// File handle (open file descriptor)
+struct _FileHandle {
+    const char* _id;                    // Handle identifier
+    const char* _path;                  // File path
+    int _mode;                          // 0=read, 1=write, 2=append
+    int _position;                      // Current read/write position
+    int _is_open;                       // 1=open, 0=closed
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Directory entry
+struct _DirectoryEntry {
+    const char* _name;                  // Entry name
+    int _is_directory;                  // 1=dir, 0=file
+    long long _size;                    // Size if file
+    unsigned long long _modified_at;
+};
+
+// In-memory file (content storage)
+struct _MemoryFile {
+    const char* _path;
+    char _content[2048];                // Up to 2KB content
+    int _content_len;
+    unsigned long long _created_at;
+    unsigned long long _modified_at;
+    int _exists;                        // 1=exists, 0=deleted
+};
+
+// File system (manages up to 16 files)
+struct _FileSystem {
+    const char* _id;                    // "filesystem"
+    _MemoryFile _files[16];             // Up to 16 files
+    int _file_count;
+    _DirectoryEntry _entries[32];       // Directory listing cache
+    int _entry_count;
+    long long _total_size;              // Total bytes stored
+    int _read_count;                    // Read operations
+    int _write_count;                   // Write operations
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// File system manager (multiple file systems)
+struct _FileSystemManager {
+    const char* _id;                    // "fs-manager"
+    _FileSystem _systems[4];            // Up to 4 file systems
+    int _system_count;
+    _FileHandle _handles[8];            // Up to 8 open handles
+    int _handle_count;
+    long long _total_read_bytes;        // Metrics
+    long long _total_write_bytes;
+    int _operations_total;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── File System Operations ────────────────────────────────────────────────────
+
+// Create file stat
+__device__ _FileStat _create_file_stat(const char* path, long long size, int is_dir) {
+    _FileStat s;
+    s._path = path;
+    s._size = size;
+    s._is_directory = is_dir;
+    s._is_readable = 1;
+    s._is_writable = 1;
+    s._created_at = _symm_now_ms;
+    s._modified_at = _symm_now_ms;
+    s._accessed_at = _symm_now_ms;
+    s._span_id = 0;
+    return s;
+}
+
+// Create file handle
+__device__ _FileHandle _create_file_handle(const char* path, int mode) {
+    _FileHandle h;
+    h._id = path;
+    h._path = path;
+    h._mode = mode;
+    h._position = 0;
+    h._is_open = 1;
+    h._created_at = _symm_now_ms;
+    h._span_id = 0;
+    return h;
+}
+
+// Create directory entry
+__device__ _DirectoryEntry _create_directory_entry(const char* name, int is_dir, long long size) {
+    _DirectoryEntry e;
+    e._name = name;
+    e._is_directory = is_dir;
+    e._size = size;
+    e._modified_at = _symm_now_ms;
+    return e;
+}
+
+// Create file system
+__device__ _FileSystem _create_file_system(const char* id) {
+    _FileSystem fs;
+    fs._id = id;
+    fs._file_count = 0;
+    fs._entry_count = 0;
+    fs._total_size = 0;
+    fs._read_count = 0;
+    fs._write_count = 0;
+    fs._created_at = _symm_now_ms;
+    fs._span_id = 0;
+    return fs;
+}
+
+// Write file
+__device__ void _file_system_write_file(_FileSystem* fs, const char* path, const char* content) {
+    if (fs->_file_count >= 16) return;
+
+    int len = 0;
+    while (content[len] && len < 2047) len++;
+
+    _MemoryFile* mf = &fs->_files[fs->_file_count];
+    mf->_path = path;
+    mf->_exists = 1;
+    mf->_created_at = _symm_now_ms;
+    mf->_modified_at = _symm_now_ms;
+    mf->_content_len = len;
+    for (int i = 0; i < len; i++) {
+        mf->_content[i] = content[i];
+    }
+    mf->_content[len] = 0;
+
+    fs->_total_size += len;
+    fs->_write_count++;
+    fs->_file_count++;
+}
+
+// Read file
+__device__ const char* _file_system_read_file(_FileSystem* fs, const char* path) {
+    for (int i = 0; i < fs->_file_count; i++) {
+        if (fs->_files[i]._exists && symm_str_eq(fs->_files[i]._path, path)) {
+            fs->_read_count++;
+            fs->_files[i]._accessed_at = _symm_now_ms;
+            return fs->_files[i]._content;
+        }
+    }
+    return 0;
+}
+
+// Get file stat
+__device__ _FileStat _file_system_stat(_FileSystem* fs, const char* path) {
+    for (int i = 0; i < fs->_file_count; i++) {
+        if (fs->_files[i]._exists && symm_str_eq(fs->_files[i]._path, path)) {
+            return _create_file_stat(path, fs->_files[i]._content_len, 0);
+        }
+    }
+    // File not found - return empty stat
+    return _create_file_stat(path, 0, 0);
+}
+
+// Delete file
+__device__ void _file_system_delete_file(_FileSystem* fs, const char* path) {
+    for (int i = 0; i < fs->_file_count; i++) {
+        if (fs->_files[i]._exists && symm_str_eq(fs->_files[i]._path, path)) {
+            fs->_total_size -= fs->_files[i]._content_len;
+            fs->_files[i]._exists = 0;
+            fs->_write_count++;
+            return;
+        }
+    }
+}
+
+// Create file system manager
+__device__ _FileSystemManager _create_file_system_manager() {
+    _FileSystemManager fsm;
+    fsm._id = "fs-manager";
+    fsm._system_count = 0;
+    fsm._handle_count = 0;
+    fsm._total_read_bytes = 0;
+    fsm._total_write_bytes = 0;
+    fsm._operations_total = 0;
+    fsm._created_at = _symm_now_ms;
+    fsm._span_id = 0;
+    return fsm;
+}
+
+// Register file system
+__device__ void _fs_manager_register_system(_FileSystemManager* fsm, _FileSystem* fs) {
+    if (fsm->_system_count < 4) {
+        fsm->_systems[fsm->_system_count] = *fs;
+        fsm->_system_count++;
+    }
+}
+
+// Open file
+__device__ int _fs_manager_open_file(_FileSystemManager* fsm, const char* path, int mode) {
+    if (fsm->_handle_count >= 8) return -1;
+
+    _FileHandle h = _create_file_handle(path, mode);
+    fsm->_handles[fsm->_handle_count] = h;
+    fsm->_operations_total++;
+    return fsm->_handle_count++;
+}
+
+// Close file handle
+__device__ void _fs_manager_close_file(_FileSystemManager* fsm, int handle_id) {
+    if (handle_id < 0 || handle_id >= fsm->_handle_count) return;
+    fsm->_handles[handle_id]._is_open = 0;
+}
+
+// Format file stat as JSON
+__device__ const char* _format_file_stat_json(_FileStat* stat) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"path\\":\"%s\\",\\"size\\":%lld,\\"isDir\\":%d,\\"mtime\\":%llu}",
+                   stat->_path, stat->_size, stat->_is_directory, stat->_modified_at);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format file system status
+__device__ const char* _format_file_system_status(_FileSystem* fs) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"files\\":%d,\\"total_size\\":%lld,\\"reads\\":%d,\\"writes\\":%d}",
+                   fs->_file_count, fs->_total_size, fs->_read_count, fs->_write_count);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format manager status
+__device__ const char* _format_fs_manager_status(_FileSystemManager* fsm) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"systems\\":%d,\\"handles\\":%d,\\"ops\\":%d,\\"read_bytes\\":%lld,\\"write_bytes\\":%lld}",
+                   fsm->_system_count, fsm->_handle_count, fsm->_operations_total,
+                   fsm->_total_read_bytes, fsm->_total_write_bytes);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -9410,6 +9668,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG16) result += PRELUDE_FRAG16; // Worker threads
     if (PRELUDE_FRAG17) result += PRELUDE_FRAG17; // Advanced monitoring
     if (PRELUDE_FRAG18) result += PRELUDE_FRAG18; // Decorators
+    if (PRELUDE_FRAG19) result += PRELUDE_FRAG19; // File system
     return result;
 }
 

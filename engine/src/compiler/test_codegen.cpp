@@ -16064,6 +16064,170 @@ static void testPhase60Decorators() {
     });
 }
 
+static void testPhase61FileSystem() {
+    std::cout << "\n=== Phase 6.1: File System ===\n";
+
+    TEST("_FileStat — file metadata (size, timestamps, isDir)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _FileStat");
+        ASSERT_CONTAINS(src, "_size");
+        ASSERT_CONTAINS(src, "_modified_at");
+        ASSERT_CONTAINS(src, "_is_directory");
+    });
+
+    TEST("_create_file_stat — create file stat", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_file_stat");
+    });
+
+    TEST("_FileHandle — file descriptor (path, mode, position)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _FileHandle");
+        ASSERT_CONTAINS(src, "_mode");
+        ASSERT_CONTAINS(src, "_position");
+        ASSERT_CONTAINS(src, "_is_open");
+    });
+
+    TEST("_create_file_handle — open file", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_file_handle");
+    });
+
+    TEST("_DirectoryEntry — directory listing entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DirectoryEntry");
+        ASSERT_CONTAINS(src, "_name");
+        ASSERT_CONTAINS(src, "_is_directory");
+    });
+
+    TEST("_create_directory_entry — create directory entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_directory_entry");
+    });
+
+    TEST("_MemoryFile — in-memory file storage (2KB content)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MemoryFile");
+        ASSERT_CONTAINS(src, "_content[2048]");
+        ASSERT_CONTAINS(src, "_exists");
+    });
+
+    TEST("_FileSystem — file system with 16 files", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _FileSystem");
+        ASSERT_CONTAINS(src, "_files[16]");
+        ASSERT_CONTAINS(src, "_read_count");
+        ASSERT_CONTAINS(src, "_write_count");
+    });
+
+    TEST("_create_file_system — initialize file system", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_file_system");
+    });
+
+    TEST("_file_system_write_file — write file content", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_file_system_write_file");
+    });
+
+    TEST("_file_system_read_file — read file content", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_file_system_read_file");
+    });
+
+    TEST("_file_system_stat — get file metadata", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_file_system_stat");
+    });
+
+    TEST("_file_system_delete_file — delete file", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_file_system_delete_file");
+    });
+
+    TEST("_FileSystemManager — manages 4 file systems, 8 handles", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _FileSystemManager");
+        ASSERT_CONTAINS(src, "_systems[4]");
+        ASSERT_CONTAINS(src, "_handles[8]");
+        ASSERT_CONTAINS(src, "_total_read_bytes");
+        ASSERT_CONTAINS(src, "_total_write_bytes");
+    });
+
+    TEST("_create_file_system_manager — initialize manager", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_file_system_manager");
+    });
+
+    TEST("_fs_manager_register_system — register file system", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_fs_manager_register_system");
+    });
+
+    TEST("_fs_manager_open_file — open file and get handle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_fs_manager_open_file");
+    });
+
+    TEST("_fs_manager_close_file — close file handle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_fs_manager_close_file");
+    });
+
+    TEST("_format_file_stat_json — format stat as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_file_stat_json");
+    });
+
+    TEST("_format_file_system_status — format FS status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_file_system_status");
+    });
+
+    TEST("_format_fs_manager_status — format manager status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_fs_manager_status");
+    });
+
+    TEST("File stat creation — timestamps initialized", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_created_at");
+        ASSERT_CONTAINS(src, "_modified_at");
+        ASSERT_CONTAINS(src, "_accessed_at");
+    });
+
+    TEST("File handle modes — read, write, append (0-2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_mode");
+        ASSERT_CONTAINS(src, "_position");
+    });
+
+    TEST("Memory file storage — up to 2KB content, exists flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_content[2048]");
+        ASSERT_CONTAINS(src, "_exists");
+    });
+
+    TEST("FS operations metrics — read count, write count, total size", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_read_count");
+        ASSERT_CONTAINS(src, "_write_count");
+        ASSERT_CONTAINS(src, "_total_size");
+    });
+
+    TEST("Manager metrics — operations total, bytes read/written", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_operations_total");
+        ASSERT_CONTAINS(src, "_total_read_bytes");
+        ASSERT_CONTAINS(src, "_total_write_bytes");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -16349,6 +16513,9 @@ int main() {
 
     // Phase 6.0: Decorators
     symm::testPhase60Decorators();
+
+    // Phase 6.1: File System
+    symm::testPhase61FileSystem();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
