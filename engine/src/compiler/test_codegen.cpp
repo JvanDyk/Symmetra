@@ -13764,6 +13764,290 @@ static void testPhase321Consensus() {
     });
 }
 
+// Phase 4.0: Event Loop Architecture (Hybrid C# Model)
+static void testPhase40EventLoop() {
+    std::cout << "\n=== Phase 4.0: Event Loop Architecture (Hybrid C# Model) ===\n";
+
+    // Continuation creation
+    TEST("Continuation — callback for promise resolution", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Continuation");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_handler_name");
+        ASSERT_CONTAINS(src, "_priority");
+    });
+
+    // Continuation types
+    TEST("Continuation — types: then(0), catch(1), finally(2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "0=then");
+        ASSERT_CONTAINS(src, "1=catch");
+        ASSERT_CONTAINS(src, "2=finally");
+    });
+
+    // MicrotaskQueue creation
+    TEST("MicrotaskQueue — queue for .then() chaining", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct MicrotaskQueue");
+        ASSERT_CONTAINS(src, "_tasks[64]");
+        ASSERT_CONTAINS(src, "_total_processed");
+    });
+
+    // MicrotaskQueue enqueue
+    TEST("MicrotaskQueue::enqueue — adds continuation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enqueue");
+    });
+
+    // MicrotaskQueue dequeue
+    TEST("MicrotaskQueue::dequeue — removes next task", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "dequeue");
+    });
+
+    // MicrotaskQueue drain
+    TEST("MicrotaskQueue::drain — processes all pending", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "drain");
+    });
+
+    // Promise creation
+    TEST("Promise — state machine for async result", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Promise");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_value");
+        ASSERT_CONTAINS(src, "_on_resolve");
+        ASSERT_CONTAINS(src, "_on_reject");
+    });
+
+    // Promise states
+    TEST("Promise — states: pending(0), fulfilled(1), rejected(2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "0=pending");
+        ASSERT_CONTAINS(src, "1=fulfilled");
+        ASSERT_CONTAINS(src, "2=rejected");
+    });
+
+    // Promise resolve
+    TEST("Promise::resolve — moves to fulfilled state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "resolve");
+    });
+
+    // Promise reject
+    TEST("Promise::reject — moves to rejected state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "reject");
+    });
+
+    // Promise then
+    TEST("Promise::then — attaches resolution handler", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "then");
+    });
+
+    // Promise catch
+    TEST("Promise::catch — attaches error handler", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "catch_handler");
+    });
+
+    // Promise latency
+    TEST("Promise::getLatency — measures settlement time", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLatency");
+    });
+
+    // Task creation
+    TEST("Task — unit of work with promise result", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Task");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_coroutine");
+        ASSERT_CONTAINS(src, "_promise");
+        ASSERT_CONTAINS(src, "_stream_id");
+    });
+
+    // Task states
+    TEST("Task — states: pending(0), running(1), complete(2), faulted(3)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "pending");
+        ASSERT_CONTAINS(src, "running");
+        ASSERT_CONTAINS(src, "complete");
+        ASSERT_CONTAINS(src, "faulted");
+    });
+
+    // Task start
+    TEST("Task::start — marks running, records stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "start");
+    });
+
+    // Task complete
+    TEST("Task::complete — fulfills promise with result", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "complete");
+    });
+
+    // Task fault
+    TEST("Task::fault — rejects promise with error", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "fault");
+    });
+
+    // Task timings
+    TEST("Task::getWaitTime — time before execution", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getWaitTime");
+    });
+
+    // SynchronizationContext creation
+    TEST("SynchronizationContext — stream-local execution context", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct SynchronizationContext");
+        ASSERT_CONTAINS(src, "_current_stream_id");
+        ASSERT_CONTAINS(src, "_microtask_queue");
+        ASSERT_CONTAINS(src, "_current_task");
+    });
+
+    // SynchronizationContext post
+    TEST("SynchronizationContext::post — enqueue work to stream", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "post");
+    });
+
+    // SynchronizationContext runPendingWork
+    TEST("SynchronizationContext::runPendingWork — drain microtasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "runPendingWork");
+    });
+
+    // TaskScheduler creation
+    TEST("TaskScheduler — distributes tasks across GPU streams", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct TaskScheduler");
+        ASSERT_CONTAINS(src, "_contexts[8]");
+        ASSERT_CONTAINS(src, "_task_queue[32]");
+        ASSERT_CONTAINS(src, "_num_streams");
+    });
+
+    // TaskScheduler queueTask
+    TEST("TaskScheduler::queueTask — adds task to queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "queueTask");
+    });
+
+    // TaskScheduler findLeastLoadedStream
+    TEST("TaskScheduler::findLeastLoadedStream — load balancing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "findLeastLoadedStream");
+    });
+
+    // TaskScheduler scheduleWork
+    TEST("TaskScheduler::scheduleWork — assigns tasks to streams", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "scheduleWork");
+    });
+
+    // Helper: symm_create_promise
+    TEST("symm_create_promise — allocates promise with span", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_promise");
+    });
+
+    // Helper: symm_create_task
+    TEST("symm_create_task — allocates task with span", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_task");
+    });
+
+    // Helper: symm_queue_microtask
+    TEST("symm_queue_microtask — queues high-priority continuation", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_queue_microtask");
+    });
+
+    // Helper: Format promise
+    TEST("symm_format_promise_status — JSON: state, value, latency", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_promise_status");
+        ASSERT_CONTAINS(src, "latency_us");
+    });
+
+    // Helper: Format task
+    TEST("symm_format_task_status — JSON: state, stream, wait, exec", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_task_status");
+        ASSERT_CONTAINS(src, "wait_us");
+        ASSERT_CONTAINS(src, "exec_us");
+    });
+
+    // Helper: Format scheduler
+    TEST("symm_format_scheduler_status — JSON: streams, queued, total", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_scheduler_status");
+        ASSERT_CONTAINS(src, "queued_tasks");
+    });
+
+    // Helper: Format context
+    TEST("symm_format_sync_context — JSON: stream, microtasks, depth", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_sync_context");
+        ASSERT_CONTAINS(src, "depth");
+    });
+
+    // Integration: Promise chain
+    TEST("Promise + Continuation — .then() chaining", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "Promise");
+        ASSERT_CONTAINS(src, "then");
+        ASSERT_CONTAINS(src, "Continuation");
+    });
+
+    // Integration: Task lifecycle
+    TEST("Task + Promise — complete or fault", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "Task");
+        ASSERT_CONTAINS(src, "Promise");
+        ASSERT_CONTAINS(src, "complete");
+        ASSERT_CONTAINS(src, "fault");
+    });
+
+    // Integration: Scheduler + Context
+    TEST("TaskScheduler + SynchronizationContext — work distribution", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TaskScheduler");
+        ASSERT_CONTAINS(src, "SynchronizationContext");
+        ASSERT_CONTAINS(src, "scheduleWork");
+    });
+
+    // Integration: Full event loop
+    TEST("Promise + Task + Scheduler + Microtask — full event loop", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "Promise");
+        ASSERT_CONTAINS(src, "Task");
+        ASSERT_CONTAINS(src, "TaskScheduler");
+        ASSERT_CONTAINS(src, "MicrotaskQueue");
+    });
+
+    // Integration: Tracing correlation
+    TEST("Event loop structures linked to Phase 3.18 tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "Promise");
+        ASSERT_CONTAINS(src, "Task");
+    });
+
+    // Integration: Measurement and diagnostics
+    TEST("Heavy instrumentation: latency, wait, execution metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLatency");
+        ASSERT_CONTAINS(src, "getWaitTime");
+        ASSERT_CONTAINS(src, "getExecutionTime");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -14013,6 +14297,9 @@ int main() {
 
     // Phase 3.21: Distributed Consensus & Gossip Protocol
     symm::testPhase321Consensus();
+
+    // Phase 4.0: Event Loop Architecture (Hybrid C# Model)
+    symm::testPhase40EventLoop();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

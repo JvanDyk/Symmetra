@@ -3477,6 +3477,346 @@ __device__ inline const char* symm_format_quorum_result(const QuorumVote& vote) 
     return buf;
 }
 
+// ── Phase 4.0: Event Loop Architecture (Hybrid C# Model) ───────────────────────
+
+// Continuation/Callback for promise resolution
+struct Continuation {
+    const char* _id;                // Unique continuation ID
+    int _type;                      // 0=then, 1=catch, 2=finally
+    const char* _handler_name;      // For debugging ("onSuccess", "onError", etc.)
+    unsigned long long _scheduled_time;
+    int _priority;                  // 0=normal, 1=microtask (high priority)
+    const char* _span_id;           // Link to Phase 3.18 tracing
+};
+
+// Microtask queue (for .then() chaining and Promise resolution)
+struct MicrotaskQueue {
+    Continuation _tasks[64];        // Queue of continuations
+    int _front;
+    int _rear;
+    int _count;
+    unsigned long long _total_processed;
+    int _depth;                     // Current nesting depth (for microtask detection)
+
+    __device__ MicrotaskQueue() : _front(0), _rear(0), _count(0),
+                                   _total_processed(0), _depth(0) {}
+
+    // Enqueue continuation (microtask = higher priority)
+    __device__ bool enqueue(const Continuation& task) {
+        if (_count >= 64) return false;  // Queue full
+        _rear = (_rear + 1) % 64;
+        _tasks[_rear] = task;
+        _count++;
+        return true;
+    }
+
+    // Dequeue next task
+    __device__ bool dequeue(Continuation& out) {
+        if (_count == 0) return false;
+        out = _tasks[_front];
+        _front = (_front + 1) % 64;
+        _count--;
+        _total_processed++;
+        return true;
+    }
+
+    // Drain queue (run all pending tasks)
+    __device__ int drain() {
+        int processed = 0;
+        Continuation task;
+        while (dequeue(task)) {
+            // In real implementation: invoke handler
+            // For prelude: just track execution
+            processed++;
+        }
+        return processed;
+    }
+
+    __device__ int getCount() const { return _count; }
+    __device__ int getDepth() const { return _depth; }
+};
+
+// Promise state machine
+struct Promise {
+    const char* _id;                // "promise-001"
+    int _state;                     // 0=pending, 1=fulfilled, 2=rejected
+    const char* _value;             // Fulfilled value or error
+    Continuation _on_resolve;       // Handler for .then()
+    Continuation _on_reject;        // Handler for .catch()
+    unsigned long long _created_time;
+    unsigned long long _settled_time;
+    const char* _span_id;           // Link to tracing
+
+    __device__ Promise(const char* id = "")
+        : _id(id), _state(0), _value(NULL), _created_time(clock64()),
+          _settled_time(0) {}
+
+    // Resolve promise (move to fulfilled state)
+    __device__ void resolve(const char* value) {
+        if (_state != 0) return;  // Already settled
+        _state = 1;
+        _value = value;
+        _settled_time = clock64();
+    }
+
+    // Reject promise (move to rejected state)
+    __device__ void reject(const char* error) {
+        if (_state != 0) return;  // Already settled
+        _state = 2;
+        _value = error;
+        _settled_time = clock64();
+    }
+
+    // Attach then handler
+    __device__ void then(const char* handler_name, const char* span_id) {
+        _on_resolve._handler_name = handler_name;
+        _on_resolve._span_id = span_id;
+        _on_resolve._type = 0;  // then
+    }
+
+    // Attach catch handler
+    __device__ void catch_handler(const char* handler_name, const char* span_id) {
+        _on_reject._handler_name = handler_name;
+        _on_reject._span_id = span_id;
+        _on_reject._type = 1;  // catch
+    }
+
+    __device__ bool isPending() const { return _state == 0; }
+    __device__ bool isFulfilled() const { return _state == 1; }
+    __device__ bool isRejected() const { return _state == 2; }
+    __device__ unsigned long long getLatency() const {
+        if (_settled_time == 0) return 0;
+        return _settled_time - _created_time;
+    }
+};
+
+// Task for TaskScheduler (like C# Task)
+struct Task {
+    const char* _id;                // "task-001"
+    int _state;                     // 0=pending, 1=running, 2=complete, 3=faulted
+    Coroutine _coroutine;           // Underlying coroutine (Phase 3.20)
+    Promise _promise;               // Promise for result
+    int _stream_id;                 // Which GPU stream executing
+    unsigned long long _queued_time;
+    unsigned long long _start_time;
+    unsigned long long _complete_time;
+    const char* _span_id;           // Link to tracing
+
+    __device__ Task(const char* id = "")
+        : _id(id), _state(0), _queued_time(clock64()), _start_time(0),
+          _complete_time(0) {}
+
+    // Start task execution
+    __device__ void start(int stream_id) {
+        _state = 1;  // running
+        _stream_id = stream_id;
+        _start_time = clock64();
+    }
+
+    // Complete task successfully
+    __device__ void complete(const char* result) {
+        _state = 2;  // complete
+        _complete_time = clock64();
+        _promise.resolve(result);
+    }
+
+    // Fail task with error
+    __device__ void fault(const char* error) {
+        _state = 3;  // faulted
+        _complete_time = clock64();
+        _promise.reject(error);
+    }
+
+    __device__ unsigned long long getWaitTime() const {
+        return _start_time > 0 ? _start_time - _queued_time : 0;
+    }
+
+    __device__ unsigned long long getExecutionTime() const {
+        if (_start_time == 0 || _complete_time == 0) return 0;
+        return _complete_time - _start_time;
+    }
+};
+
+// SynchronizationContext (stream-local execution context, like C#)
+struct SynchronizationContext {
+    int _current_stream_id;         // Active GPU stream
+    MicrotaskQueue _microtask_queue;
+    Task* _current_task;            // Currently executing task
+    const char* _context_id;        // For debugging
+    unsigned long long _created_time;
+    int _task_count;                // Tasks executed in this context
+
+    __device__ SynchronizationContext(int stream_id = 0, const char* id = "")
+        : _current_stream_id(stream_id), _current_task(NULL), _context_id(id),
+          _created_time(clock64()), _task_count(0) {}
+
+    // Post work to this context's stream
+    __device__ bool post(const Continuation& cont) {
+        return _microtask_queue.enqueue(cont);
+    }
+
+    // Run all pending work (drain microtask queue)
+    __device__ int runPendingWork() {
+        return _microtask_queue.drain();
+    }
+
+    __device__ int getCurrentStreamId() const { return _current_stream_id; }
+    __device__ int getMicrotaskCount() const { return _microtask_queue.getCount(); }
+};
+
+// TaskScheduler (distributes tasks across GPU streams, like C# ThreadPool)
+struct TaskScheduler {
+    SynchronizationContext _contexts[8];  // One context per stream
+    int _num_streams;
+    Task* _task_queue[32];          // Pending tasks
+    int _queue_head;
+    int _queue_tail;
+    int _queue_count;
+    unsigned long long _total_tasks;
+    int _load_balance_threshold;    // Threshold for work stealing (Phase 3.19 integration)
+
+    __device__ TaskScheduler(int num_streams = 2)
+        : _num_streams(num_streams), _queue_head(0), _queue_tail(0), _queue_count(0),
+          _total_tasks(0), _load_balance_threshold(5) {
+        for (int i = 0; i < 8; i++) {
+            _contexts[i]._current_stream_id = i;
+        }
+    }
+
+    // Queue a task for scheduling
+    __device__ bool queueTask(Task* task) {
+        if (_queue_count >= 32) return false;  // Queue full
+        _task_queue[_queue_tail] = task;
+        _queue_tail = (_queue_tail + 1) % 32;
+        _queue_count++;
+        return true;
+    }
+
+    // Dequeue next task
+    __device__ bool dequeueTask(Task*& out) {
+        if (_queue_count == 0) return false;
+        out = _task_queue[_queue_head];
+        _queue_head = (_queue_head + 1) % 32;
+        _queue_count--;
+        return true;
+    }
+
+    // Find least-loaded stream
+    __device__ int findLeastLoadedStream() {
+        int min_load = 999999;
+        int best_idx = 0;
+        for (int i = 0; i < _num_streams; i++) {
+            int load = _contexts[i].getMicrotaskCount();
+            if (load < min_load) {
+                min_load = load;
+                best_idx = i;
+            }
+        }
+        return best_idx;
+    }
+
+    // Schedule tasks to streams (round-robin with load balancing)
+    __device__ int scheduleWork() {
+        int scheduled = 0;
+        Task* task;
+        while (dequeueTask(task)) {
+            int stream_idx = findLeastLoadedStream();
+            task->start(stream_idx);
+            _total_tasks++;
+            scheduled++;
+        }
+        return scheduled;
+    }
+
+    __device__ SynchronizationContext* getContext(int stream_id) {
+        if (stream_id >= 0 && stream_id < _num_streams) {
+            return &_contexts[stream_id];
+        }
+        return NULL;
+    }
+
+    __device__ unsigned long long getTotalTasks() const { return _total_tasks; }
+};
+
+// Helper: Create promise
+__device__ inline Promise symm_create_promise(const char* id, const char* span_id) {
+    Promise p(id);
+    p._span_id = span_id;
+    return p;
+}
+
+// Helper: Create task
+__device__ inline Task symm_create_task(const char* id, const char* span_id) {
+    Task t(id);
+    t._span_id = span_id;
+    return t;
+}
+
+// Helper: Queue microtask (high-priority continuation)
+__device__ inline bool symm_queue_microtask(SynchronizationContext& ctx,
+                                            const char* handler_name,
+                                            const char* span_id) {
+    Continuation cont;
+    cont._id = handler_name;
+    cont._type = 0;  // then
+    cont._handler_name = handler_name;
+    cont._priority = 1;  // microtask priority
+    cont._span_id = span_id;
+    cont._scheduled_time = clock64();
+    return ctx.post(cont);
+}
+
+// Helper: Format promise status as JSON
+__device__ inline const char* symm_format_promise_status(const Promise& p) {
+    static char buf[384];
+    const char* state_str = "pending";
+    if (p.isFulfilled()) state_str = "fulfilled";
+    else if (p.isRejected()) state_str = "rejected";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"value\":\"%s\",\"latency_us\":%llu}",
+        p._id ? p._id : "", state_str, p._value ? p._value : "",
+        p.getLatency() / 1000);
+    return buf;
+}
+
+// Helper: Format task status as JSON
+__device__ inline const char* symm_format_task_status(const Task& t) {
+    static char buf[512];
+    const char* state_str = "pending";
+    if (t._state == 1) state_str = "running";
+    else if (t._state == 2) state_str = "complete";
+    else if (t._state == 3) state_str = "faulted";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"stream\":%d,\"wait_us\":%llu,"
+        "\"exec_us\":%llu}",
+        t._id ? t._id : "", state_str, t._stream_id,
+        t.getWaitTime() / 1000, t.getExecutionTime() / 1000);
+    return buf;
+}
+
+// Helper: Format scheduler health as JSON
+__device__ inline const char* symm_format_scheduler_status(const TaskScheduler& scheduler) {
+    static char buf[384];
+    snprintf(buf, sizeof(buf),
+        "{\"num_streams\":%d,\"queued_tasks\":%d,\"total_tasks\":%llu,"
+        "\"load_balance_threshold\":%d}",
+        scheduler._num_streams, scheduler._queue_count,
+        scheduler._total_tasks, scheduler._load_balance_threshold);
+    return buf;
+}
+
+// Helper: Format synchronization context as JSON
+__device__ inline const char* symm_format_sync_context(const SynchronizationContext& ctx) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"stream\":%d,\"microtasks\":%d,\"depth\":%d,\"tasks_executed\":%d}",
+        ctx._current_stream_id, ctx.getMicrotaskCount(), ctx.getDepth(),
+        ctx._task_count);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
