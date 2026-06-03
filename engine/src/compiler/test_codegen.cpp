@@ -15443,6 +15443,215 @@ static void testPhase54AdvancedScheduling() {
     });
 }
 
+// Phase 5.5: Worker Thread Simulation and Message Passing
+static void testPhase55WorkerThreads() {
+    std::cout << "\n=== Phase 5.5: Worker Threads ===\n";
+
+    TEST("_MessageType enum — message types (DATA to TRANSFER)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enum _MessageType");
+        ASSERT_CONTAINS(src, "MSG_DATA");
+        ASSERT_CONTAINS(src, "MSG_ERROR");
+    });
+
+    TEST("_WorkerMessage — individual message in queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WorkerMessage");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_transferred");
+        ASSERT_CONTAINS(src, "_source");
+    });
+
+    TEST("_MessageQueue — worker message queue (32 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MessageQueue");
+        ASSERT_CONTAINS(src, "_messages[32]");
+        ASSERT_CONTAINS(src, "_processed_count");
+    });
+
+    TEST("_create_message_queue — initialize message queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_message_queue");
+    });
+
+    TEST("_message_queue_post — post message to queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_message_queue_post");
+    });
+
+    TEST("_message_queue_next — get next message", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_message_queue_next");
+    });
+
+    TEST("_message_queue_consume — remove and process message", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_message_queue_consume");
+    });
+
+    TEST("_WorkerContext — isolated global state for worker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WorkerContext");
+        ASSERT_CONTAINS(src, "_worker_id");
+        ASSERT_CONTAINS(src, "_is_main_thread");
+        ASSERT_CONTAINS(src, "_incoming");
+        ASSERT_CONTAINS(src, "_outgoing");
+    });
+
+    TEST("_WorkerContext._global_this — isolated globalThis per worker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_WorkerContext");
+        ASSERT_CONTAINS(src, "_global_this");
+    });
+
+    TEST("_create_worker_context — create isolated worker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_worker_context");
+    });
+
+    TEST("_WorkerPool — pool of worker threads (8 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WorkerPool");
+        ASSERT_CONTAINS(src, "_workers[8]");
+        ASSERT_CONTAINS(src, "_active_workers");
+        ASSERT_CONTAINS(src, "_load_balance_strategy");
+    });
+
+    TEST("_create_worker_pool — initialize worker pool", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_worker_pool");
+    });
+
+    TEST("_worker_pool_get — get worker by ID", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_worker_pool_get");
+    });
+
+    TEST("_worker_pool_next — get next worker (round-robin)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_worker_pool_next");
+    });
+
+    TEST("_worker_pool_least_busy — get least-busy worker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_worker_pool_least_busy");
+    });
+
+    TEST("_MessageChannel — bidirectional communication channel", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MessageChannel");
+        ASSERT_CONTAINS(src, "_port1");
+        ASSERT_CONTAINS(src, "_port2");
+        ASSERT_CONTAINS(src, "_connected");
+    });
+
+    TEST("_create_message_channel — create bidirectional channel", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_message_channel");
+    });
+
+    TEST("_message_channel_post — post to channel (port1 ↔ port2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_message_channel_post");
+    });
+
+    TEST("_SharedArrayBuffer — shared memory across workers", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _SharedArrayBuffer");
+        ASSERT_CONTAINS(src, "_data[512]");
+        ASSERT_CONTAINS(src, "_reader_count");
+        ASSERT_CONTAINS(src, "_writer_count");
+    });
+
+    TEST("_create_shared_array_buffer — create shared buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_shared_array_buffer");
+    });
+
+    TEST("_WorkerPoolManager — manages worker lifecycle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WorkerPoolManager");
+        ASSERT_CONTAINS(src, "_pool");
+        ASSERT_CONTAINS(src, "_channels[4]");
+        ASSERT_CONTAINS(src, "_total_messages_sent");
+    });
+
+    TEST("_create_worker_pool_manager — initialize manager", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_worker_pool_manager");
+    });
+
+    TEST("_worker_manager_post_to_worker — send message to worker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_worker_manager_post_to_worker");
+    });
+
+    TEST("_worker_manager_process_messages — receive worker messages", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_worker_manager_process_messages");
+    });
+
+    TEST("Worker isolation — _is_main_thread flag (0=worker, 1=main)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_is_main_thread");
+    });
+
+    TEST("Load balancing strategies — round-robin (0) and least-busy (1)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_load_balance_strategy");
+    });
+
+    TEST("Message ownership transfer — _transferred flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_transferred");
+    });
+
+    TEST("Worker termination tracking — _terminated flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_terminated");
+    });
+
+    TEST("_format_worker_context_status — JSON worker state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_worker_context_status");
+    });
+
+    TEST("_format_worker_pool_status — JSON pool state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_worker_pool_status");
+    });
+
+    TEST("_format_message_queue_status — JSON queue state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_message_queue_status");
+    });
+
+    TEST("_format_worker_manager_status — JSON manager state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_worker_manager_status");
+    });
+
+    TEST("Message channel — bidirectional queues (port1 ↔ port2)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MessageChannel");
+        ASSERT_CONTAINS(src, "_port1");
+        ASSERT_CONTAINS(src, "_port2");
+    });
+
+    TEST("Worker tracing — all structures have _span_id", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _WorkerContext");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Message metrics — track sent/received/crashed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_total_messages_sent");
+        ASSERT_CONTAINS(src, "_total_messages_received");
+        ASSERT_CONTAINS(src, "_workers_crashed");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15719,6 +15928,9 @@ int main() {
 
     // Phase 5.4: Advanced Scheduling
     symm::testPhase54AdvancedScheduling();
+
+    // Phase 5.5: Worker Threads
+    symm::testPhase55WorkerThreads();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

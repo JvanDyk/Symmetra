@@ -8408,6 +8408,334 @@ __device__ const char* _format_backpressure_status(_BackpressurePolicy* p) {
 }
 )";
 
+// Fragment 16: Worker Thread Simulation and Message Passing
+static const char* PRELUDE_FRAG16 = R"(
+// ── Worker Message Types ──────────────────────────────────────────────────────
+enum _MessageType {
+    MSG_DATA            = 0,        // User data message
+    MSG_ERROR           = 1,        // Error from worker
+    MSG_READY           = 2,        // Worker ready signal
+    MSG_TERMINATE       = 3,        // Terminate worker
+    MSG_TRANSFER        = 4         // Transfer object
+};
+
+// Message in worker message queue
+struct _WorkerMessage {
+    const char* _id;                // Message identifier
+    int _type;                      // Message type (0-4)
+    const char* _data;              // Message payload
+    int _data_len;
+    long long _created_at;
+    int _transferred;               // 1=ownership transferred
+    const char* _source;            // Source (parent or worker ID)
+    const char* _span_id;
+};
+
+// Message queue for worker communication
+struct _MessageQueue {
+    const char* _id;                // "msg-queue-{worker_id}"
+    _WorkerMessage _messages[32];   // Up to 32 pending messages
+    int _message_count;
+    int _processed_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create message queue
+__device__ _MessageQueue _create_message_queue(const char* worker_id, const char* span_id) {
+    _MessageQueue q;
+    q._id = worker_id;
+    q._message_count = 0;
+    q._processed_count = 0;
+    q._created_at = (unsigned long long)Date::now();
+    q._span_id = span_id;
+    return q;
+}
+
+// Post message to queue
+__device__ int _message_queue_post(_MessageQueue* q, int type, const char* data, int data_len,
+                                    const char* source, int transfer, const char* span_id) {
+    if (q->_message_count >= 32) return -1;  // Queue full
+
+    _WorkerMessage* msg = &q->_messages[q->_message_count++];
+    msg->_type = type;
+    msg->_data = data;
+    msg->_data_len = data_len;
+    msg->_transferred = transfer;
+    msg->_source = source;
+    msg->_created_at = (long long)Date::now();
+    msg->_span_id = span_id;
+    return q->_message_count - 1;  // Index
+}
+
+// Get next message from queue
+__device__ _WorkerMessage* _message_queue_next(_MessageQueue* q) {
+    if (q->_message_count == 0) return 0;
+    return &q->_messages[0];
+}
+
+// Consume (remove) next message
+__device__ int _message_queue_consume(_MessageQueue* q) {
+    if (q->_message_count == 0) return -1;
+
+    q->_processed_count++;
+
+    // Shift messages up
+    for (int i = 0; i < q->_message_count - 1; i++) {
+        q->_messages[i] = q->_messages[i+1];
+    }
+    q->_message_count--;
+    return 1;
+}
+
+// ── Worker Thread Context ──────────────────────────────────────────────────────
+// Isolated global context for worker thread
+struct _WorkerContext {
+    const char* _worker_id;         // "worker-0", "worker-1", etc.
+    _GlobalThis _global_this;       // Isolated globalThis
+    _GlobalState _global_state;     // Isolated global state
+    _GlobalErrorHandler _error_handler;
+    _MessageQueue _incoming;        // Messages from parent
+    _MessageQueue _outgoing;        // Messages to parent
+    int _is_main_thread;            // 0=worker, 1=main
+    int _terminated;                // 1=terminated, 0=running
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create worker context (isolated global state)
+__device__ _WorkerContext _create_worker_context(int worker_num, const char* span_id) {
+    _WorkerContext w;
+    char buf[32];
+    sprintf(buf, "worker-%d", worker_num);
+    w._worker_id = buf;
+    w._global_this = _create_global_this(span_id);
+    w._global_state = _create_global_state(span_id);
+    w._error_handler = _create_global_error_handler(span_id);
+    w._incoming = _create_message_queue(buf, span_id);
+    w._outgoing = _create_message_queue(buf, span_id);
+    w._is_main_thread = 0;
+    w._terminated = 0;
+    w._created_at = (unsigned long long)Date::now();
+    w._span_id = span_id;
+    return w;
+}
+
+// ── Worker Thread Pool ─────────────────────────────────────────────────────────
+// Pool of worker threads
+struct _WorkerPool {
+    const char* _id;                // "worker-pool"
+    _WorkerContext _workers[8];     // Up to 8 workers
+    int _worker_count;
+    int _active_workers;            // Currently running
+    int _next_worker_id;            // Next worker number
+    int _load_balance_strategy;     // 0=round-robin, 1=least-busy
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create worker pool
+__device__ _WorkerPool _create_worker_pool(int initial_workers, const char* span_id) {
+    _WorkerPool p;
+    p._id = "worker-pool";
+    p._worker_count = initial_workers;
+    p._active_workers = 0;
+    p._next_worker_id = 0;
+    p._load_balance_strategy = 0;  // Round-robin default
+    p._created_at = (unsigned long long)Date::now();
+    p._span_id = span_id;
+
+    for (int i = 0; i < initial_workers; i++) {
+        p._workers[i] = _create_worker_context(i, span_id);
+    }
+    return p;
+}
+
+// Get worker by ID
+__device__ _WorkerContext* _worker_pool_get(_WorkerPool* p, int worker_id) {
+    if (worker_id < 0 || worker_id >= p->_worker_count) return 0;
+    return &p->_workers[worker_id];
+}
+
+// Get next worker (round-robin)
+__device__ _WorkerContext* _worker_pool_next(_WorkerPool* p) {
+    if (p->_worker_count == 0) return 0;
+
+    _WorkerContext* w = &p->_workers[p->_next_worker_id];
+    p->_next_worker_id = (p->_next_worker_id + 1) % p->_worker_count;
+    return w;
+}
+
+// Get least-busy worker
+__device__ _WorkerContext* _worker_pool_least_busy(_WorkerPool* p) {
+    if (p->_worker_count == 0) return 0;
+
+    int min_queue = INT_MAX;
+    int min_idx = 0;
+
+    for (int i = 0; i < p->_worker_count; i++) {
+        if (p->_workers[i]._incoming._message_count < min_queue) {
+            min_queue = p->_workers[i]._incoming._message_count;
+            min_idx = i;
+        }
+    }
+    return &p->_workers[min_idx];
+}
+
+// ── Message Channel (bidirectional communication) ────────────────────────────
+// Bidirectional message channel
+struct _MessageChannel {
+    const char* _id;                // Channel identifier
+    _MessageQueue _port1;           // First port messages
+    _MessageQueue _port2;           // Second port messages
+    int _connected;                 // 1=connected, 0=disconnected
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create message channel
+__device__ _MessageChannel _create_message_channel(const char* channel_id, const char* span_id) {
+    _MessageChannel c;
+    c._id = channel_id;
+    c._port1 = _create_message_queue("port1", span_id);
+    c._port2 = _create_message_queue("port2", span_id);
+    c._connected = 1;
+    c._created_at = (unsigned long long)Date::now();
+    c._span_id = span_id;
+    return c;
+}
+
+// Post message to channel (port1 → port2)
+__device__ int _message_channel_post(_MessageChannel* c, int type, const char* data,
+                                      int data_len, int from_port, const char* span_id) {
+    if (!c->_connected) return -1;
+
+    _MessageQueue* target = (from_port == 1) ? &c->_port2 : &c->_port1;
+    const char* source = (from_port == 1) ? "port1" : "port2";
+    return _message_queue_post(target, type, data, data_len, source, 0, span_id);
+}
+
+// ── Shared Array Buffer (simulated) ────────────────────────────────────────────
+// Simulated shared array (in real GPU would use unified memory)
+struct _SharedArrayBuffer {
+    const char* _id;                // Buffer identifier
+    uint8_t _data[512];             // Up to 512 bytes shared
+    int _length;
+    int _reader_count;              // Workers reading
+    int _writer_count;              // Workers writing (for conflict detection)
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create shared array buffer
+__device__ _SharedArrayBuffer _create_shared_array_buffer(int size, const char* span_id) {
+    _SharedArrayBuffer b;
+    b._id = "shared-buffer";
+    b._length = (size > 512) ? 512 : size;
+    b._reader_count = 0;
+    b._writer_count = 0;
+    b._created_at = (unsigned long long)Date::now();
+    b._span_id = span_id;
+    return b;
+}
+
+// ── Worker Pool Manager ────────────────────────────────────────────────────────
+// Manages worker pool lifecycle
+struct _WorkerPoolManager {
+    const char* _id;                // "worker-manager"
+    _WorkerPool _pool;
+    _MessageChannel _channels[4];   // Up to 4 message channels
+    int _channel_count;
+    int _total_messages_sent;       // Metrics
+    int _total_messages_received;
+    int _workers_crashed;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create worker manager
+__device__ _WorkerPoolManager _create_worker_pool_manager(int workers, const char* span_id) {
+    _WorkerPoolManager m;
+    m._id = "worker-manager";
+    m._pool = _create_worker_pool(workers, span_id);
+    m._channel_count = 0;
+    m._total_messages_sent = 0;
+    m._total_messages_received = 0;
+    m._workers_crashed = 0;
+    m._created_at = (unsigned long long)Date::now();
+    m._span_id = span_id;
+    return m;
+}
+
+// Post message to worker
+__device__ int _worker_manager_post_to_worker(_WorkerPoolManager* m, int worker_id,
+                                               int msg_type, const char* data, const char* span_id) {
+    _WorkerContext* w = _worker_pool_get(&m->_pool, worker_id);
+    if (!w || w->_terminated) return -1;
+
+    int result = _message_queue_post(&w->_incoming, msg_type, data, -1, "main", 0, span_id);
+    if (result >= 0) m->_total_messages_sent++;
+    return result;
+}
+
+// Process worker messages (in main thread)
+__device__ int _worker_manager_process_messages(_WorkerPoolManager* m) {
+    int processed = 0;
+
+    for (int i = 0; i < m->_pool._worker_count; i++) {
+        _WorkerContext* w = &m->_pool._workers[i];
+        _WorkerMessage* msg = _message_queue_next(&w->_outgoing);
+
+        if (msg) {
+            // Handle message (in real implementation, would execute callback)
+            _message_queue_consume(&w->_outgoing);
+            m->_total_messages_received++;
+            processed++;
+        }
+    }
+
+    return processed;
+}
+
+// JSON formatting
+__device__ const char* _format_worker_context_status(_WorkerContext* w) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"worker\\":\"%s\\",\\"terminated\\":%d,\\"inbox\\":%d,\\"outbox\\":%d}",
+                   w->_worker_id, w->_terminated, w->_incoming._message_count, w->_outgoing._message_count);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_worker_pool_status(_WorkerPool* p) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"total\\":%d,\\"active\\":%d,\\"strategy\\":%d}",
+                   p->_worker_count, p->_active_workers, p->_load_balance_strategy);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_message_queue_status(_MessageQueue* q) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"pending\\":%d,\\"processed\\":%d}",
+                   q->_message_count, q->_processed_count);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_worker_manager_status(_WorkerPoolManager* m) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"workers\\":%d,\\"channels\\":%d,\\"sent\\":%d,\\"received\\":%d,\\"crashed\\":%d}",
+                   m->_pool._worker_count, m->_channel_count, m->_total_messages_sent,
+                   m->_total_messages_received, m->_workers_crashed);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -8428,6 +8756,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG13) result += PRELUDE_FRAG13; // Global timers
     if (PRELUDE_FRAG14) result += PRELUDE_FRAG14; // Global utilities
     if (PRELUDE_FRAG15) result += PRELUDE_FRAG15; // Advanced scheduling
+    if (PRELUDE_FRAG16) result += PRELUDE_FRAG16; // Worker threads
     return result;
 }
 
