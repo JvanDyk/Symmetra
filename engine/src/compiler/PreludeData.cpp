@@ -9063,6 +9063,330 @@ __device__ const char* _format_sla_status(_SLAMonitor* sm) {
 }
 )";
 
+// Fragment 18: Decorator Support and Metaprogramming
+static const char* PRELUDE_FRAG18 = R"(
+// ── Decorator Context ─────────────────────────────────────────────────────────
+// Target types for decorators
+enum _DecoratorTargetType {
+    TARGET_CLASS        = 0,        // Class decorator
+    TARGET_METHOD       = 1,        // Method decorator
+    TARGET_FIELD        = 2,        // Field decorator
+    TARGET_ACCESSOR     = 3,        // Getter/setter decorator
+    TARGET_PARAMETER    = 4         // Parameter decorator
+};
+
+// Decorator metadata
+struct _DecoratorMetadata {
+    const char* _name;              // Decorator function name
+    _DecoratorTargetType _target;   // What it decorates
+    const char* _class_name;        // Class being decorated (if applicable)
+    const char* _member_name;       // Member being decorated (method/field)
+    int _applied;                   // 1=applied, 0=pending
+    unsigned long long _applied_at;
+    const char* _span_id;
+};
+
+// Decorated field descriptor
+struct _DecoratedField {
+    const char* _name;              // Field name
+    const char* _value;             // Current value
+    int _writable;                  // Writable flag
+    int _enumerable;
+    int _configurable;
+    _DecoratorMetadata _decorators[4];  // Up to 4 decorators per field
+    int _decorator_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create decorated field
+__device__ _DecoratedField _create_decorated_field(const char* name, const char* value, const char* span_id) {
+    _DecoratedField df;
+    df._name = name;
+    df._value = value;
+    df._writable = 1;
+    df._enumerable = 1;
+    df._configurable = 1;
+    df._decorator_count = 0;
+    df._created_at = (unsigned long long)Date::now();
+    df._span_id = span_id;
+    return df;
+}
+
+// Add decorator to field
+__device__ int _decorated_field_add_decorator(_DecoratedField* df, const char* decorator_name,
+                                              const char* class_name, const char* span_id) {
+    if (df->_decorator_count >= 4) return -1;
+    _DecoratorMetadata* dm = &df->_decorators[df->_decorator_count++];
+    dm->_name = decorator_name;
+    dm->_target = TARGET_FIELD;
+    dm->_class_name = class_name;
+    dm->_member_name = df->_name;
+    dm->_applied = 0;
+    dm->_applied_at = 0;
+    dm->_span_id = span_id;
+    return df->_decorator_count - 1;
+}
+
+// ── Decorated Method ──────────────────────────────────────────────────────────
+// Decorated method descriptor
+struct _DecoratedMethod {
+    const char* _name;              // Method name
+    const char* _signature;         // Method signature (param types)
+    int _is_async;                  // 1=async, 0=sync
+    int _is_static;                 // 1=static, 0=instance
+    _DecoratorMetadata _decorators[4];  // Up to 4 decorators
+    int _decorator_count;
+    int _call_count;                // Number of times called
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create decorated method
+__device__ _DecoratedMethod _create_decorated_method(const char* name, const char* signature,
+                                                      int is_async, const char* span_id) {
+    _DecoratedMethod dm;
+    dm._name = name;
+    dm._signature = signature;
+    dm._is_async = is_async;
+    dm._is_static = 0;
+    dm._decorator_count = 0;
+    dm._call_count = 0;
+    dm._created_at = (unsigned long long)Date::now();
+    dm._span_id = span_id;
+    return dm;
+}
+
+// Add decorator to method
+__device__ int _decorated_method_add_decorator(_DecoratedMethod* dm, const char* decorator_name,
+                                               const char* class_name, const char* span_id) {
+    if (dm->_decorator_count >= 4) return -1;
+    _DecoratorMetadata* dec = &dm->_decorators[dm->_decorator_count++];
+    dec->_name = decorator_name;
+    dec->_target = TARGET_METHOD;
+    dec->_class_name = class_name;
+    dec->_member_name = dm->_name;
+    dec->_applied = 0;
+    dec->_applied_at = 0;
+    dec->_span_id = span_id;
+    return dm->_decorator_count - 1;
+}
+
+// ── Decorated Class ───────────────────────────────────────────────────────────
+// Decorated class descriptor
+struct _DecoratedClass {
+    const char* _name;              // Class name
+    const char* _base_class;        // Parent class (if any)
+    _DecoratedField _fields[8];     // Up to 8 fields
+    int _field_count;
+    _DecoratedMethod _methods[16];  // Up to 16 methods
+    int _method_count;
+    _DecoratorMetadata _decorators[4];  // Class decorators
+    int _decorator_count;
+    int _instantiation_count;       // Times instantiated
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create decorated class
+__device__ _DecoratedClass _create_decorated_class(const char* name, const char* base_class, const char* span_id) {
+    _DecoratedClass dc;
+    dc._name = name;
+    dc._base_class = base_class;
+    dc._field_count = 0;
+    dc._method_count = 0;
+    dc._decorator_count = 0;
+    dc._instantiation_count = 0;
+    dc._created_at = (unsigned long long)Date::now();
+    dc._span_id = span_id;
+    return dc;
+}
+
+// Add field to class
+__device__ int _decorated_class_add_field(_DecoratedClass* dc, _DecoratedField field) {
+    if (dc->_field_count >= 8) return -1;
+    dc->_fields[dc->_field_count++] = field;
+    return dc->_field_count - 1;
+}
+
+// Add method to class
+__device__ int _decorated_class_add_method(_DecoratedClass* dc, _DecoratedMethod method) {
+    if (dc->_method_count >= 16) return -1;
+    dc->_methods[dc->_method_count++] = method;
+    return dc->_method_count - 1;
+}
+
+// Add class decorator
+__device__ int _decorated_class_add_decorator(_DecoratedClass* dc, const char* decorator_name, const char* span_id) {
+    if (dc->_decorator_count >= 4) return -1;
+    _DecoratorMetadata* dec = &dc->_decorators[dc->_decorator_count++];
+    dec->_name = decorator_name;
+    dec->_target = TARGET_CLASS;
+    dec->_class_name = dc->_name;
+    dec->_member_name = 0;
+    dec->_applied = 0;
+    dec->_applied_at = 0;
+    dec->_span_id = span_id;
+    return dc->_decorator_count - 1;
+}
+
+// ── Decorator Registry ────────────────────────────────────────────────────────
+// Registry of all decorated classes
+struct _DecoratorRegistry {
+    const char* _id;                // "decorator-registry"
+    _DecoratedClass _classes[16];   // Up to 16 decorated classes
+    int _class_count;
+    int _total_decorators_applied;
+    int _total_fields_decorated;
+    int _total_methods_decorated;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create decorator registry
+__device__ _DecoratorRegistry _create_decorator_registry(const char* span_id) {
+    _DecoratorRegistry dr;
+    dr._id = "decorator-registry";
+    dr._class_count = 0;
+    dr._total_decorators_applied = 0;
+    dr._total_fields_decorated = 0;
+    dr._total_methods_decorated = 0;
+    dr._created_at = (unsigned long long)Date::now();
+    dr._span_id = span_id;
+    return dr;
+}
+
+// Register decorated class
+__device__ int _decorator_registry_register(_DecoratorRegistry* dr, _DecoratedClass dc) {
+    if (dr->_class_count >= 16) return -1;
+    dr->_classes[dr->_class_count++] = dc;
+    dr->_total_decorators_applied += dc._decorator_count;
+    dr->_total_fields_decorated += dc._field_count;
+    dr->_total_methods_decorated += dc._method_count;
+    return dr->_class_count - 1;
+}
+
+// Get decorated class by name
+__device__ _DecoratedClass* _decorator_registry_get(_DecoratorRegistry* dr, const char* class_name) {
+    for (int i = 0; i < dr->_class_count; i++) {
+        if (symm_str_eq(dr->_classes[i]._name, class_name)) {
+            return &dr->_classes[i];
+        }
+    }
+    return 0;
+}
+
+// Apply all pending decorators
+__device__ int _decorator_registry_apply_all(_DecoratorRegistry* dr) {
+    int applied = 0;
+
+    for (int i = 0; i < dr->_class_count; i++) {
+        _DecoratedClass* dc = &dr->_classes[i];
+
+        // Apply class decorators
+        for (int j = 0; j < dc->_decorator_count; j++) {
+            if (!dc->_decorators[j]._applied) {
+                dc->_decorators[j]._applied = 1;
+                dc->_decorators[j]._applied_at = (unsigned long long)Date::now();
+                applied++;
+            }
+        }
+
+        // Apply field decorators
+        for (int j = 0; j < dc->_field_count; j++) {
+            for (int k = 0; k < dc->_fields[j]._decorator_count; k++) {
+                if (!dc->_fields[j]._decorators[k]._applied) {
+                    dc->_fields[j]._decorators[k]._applied = 1;
+                    dc->_fields[j]._decorators[k]._applied_at = (unsigned long long)Date::now();
+                    applied++;
+                }
+            }
+        }
+
+        // Apply method decorators
+        for (int j = 0; j < dc->_method_count; j++) {
+            for (int k = 0; k < dc->_methods[j]._decorator_count; k++) {
+                if (!dc->_methods[j]._decorators[k]._applied) {
+                    dc->_methods[j]._decorators[k]._applied = 1;
+                    dc->_methods[j]._decorators[k]._applied_at = (unsigned long long)Date::now();
+                    applied++;
+                }
+            }
+        }
+    }
+
+    return applied;
+}
+
+// ── Metadata Storage ──────────────────────────────────────────────────────────
+// Stores metadata attached by decorators
+struct _DecoratorMetadataStore {
+    const char* _id;                // "metadata-store"
+    const char* _keys[32];          // Metadata keys
+    const char* _values[32];        // Metadata values
+    int _entry_count;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create metadata store
+__device__ _DecoratorMetadataStore _create_metadata_store(const char* span_id) {
+    _DecoratorMetadataStore dms;
+    dms._id = "metadata-store";
+    dms._entry_count = 0;
+    dms._created_at = (unsigned long long)Date::now();
+    dms._span_id = span_id;
+    return dms;
+}
+
+// Set metadata
+__device__ int _metadata_store_set(_DecoratorMetadataStore* dms, const char* key, const char* value) {
+    if (dms->_entry_count >= 32) return -1;
+    dms->_keys[dms->_entry_count] = key;
+    dms->_values[dms->_entry_count] = value;
+    dms->_entry_count++;
+    return dms->_entry_count - 1;
+}
+
+// Get metadata
+__device__ const char* _metadata_store_get(_DecoratorMetadataStore* dms, const char* key) {
+    for (int i = 0; i < dms->_entry_count; i++) {
+        if (symm_str_eq(dms->_keys[i], key)) {
+            return dms->_values[i];
+        }
+    }
+    return 0;
+}
+
+// JSON formatting
+__device__ const char* _format_decorated_class_status(_DecoratedClass* dc) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"class\\":\"%s\\",\\"fields\\":%d,\\"methods\\":%d,\\"decorators\\":%d,\\"instantiations\\":%d}",
+                   dc->_name, dc->_field_count, dc->_method_count, dc->_decorator_count, dc->_instantiation_count);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_decorator_registry_status(_DecoratorRegistry* dr) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"classes\\":%d,\\"decorators_applied\\":%d,\\"fields\\":%d,\\"methods\\":%d}",
+                   dr->_class_count, dr->_total_decorators_applied, dr->_total_fields_decorated, dr->_total_methods_decorated);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_decorator_metadata_status(_DecoratorMetadata* dm) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"name\\":\"%s\\",\\"target\\":%d,\\"applied\\":%d}",
+                   dm->_name, dm->_target, dm->_applied);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -9085,6 +9409,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG15) result += PRELUDE_FRAG15; // Advanced scheduling
     if (PRELUDE_FRAG16) result += PRELUDE_FRAG16; // Worker threads
     if (PRELUDE_FRAG17) result += PRELUDE_FRAG17; // Advanced monitoring
+    if (PRELUDE_FRAG18) result += PRELUDE_FRAG18; // Decorators
     return result;
 }
 

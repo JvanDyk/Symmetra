@@ -15865,6 +15865,205 @@ static void testPhase56AdvancedMonitoring() {
     });
 }
 
+// Phase 6.0: Decorator Support and Metaprogramming
+static void testPhase60Decorators() {
+    std::cout << "\n=== Phase 6.0: Decorators ===\n";
+
+    TEST("_DecoratorTargetType enum — target types (CLASS to PARAMETER)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enum _DecoratorTargetType");
+        ASSERT_CONTAINS(src, "TARGET_CLASS");
+        ASSERT_CONTAINS(src, "TARGET_FIELD");
+    });
+
+    TEST("_DecoratorMetadata — decorator information", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratorMetadata");
+        ASSERT_CONTAINS(src, "_target");
+        ASSERT_CONTAINS(src, "_applied");
+    });
+
+    TEST("_DecoratedField — field with decorators (4 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratedField");
+        ASSERT_CONTAINS(src, "_decorators[4]");
+        ASSERT_CONTAINS(src, "_writable");
+    });
+
+    TEST("_create_decorated_field — create field", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_decorated_field");
+    });
+
+    TEST("_decorated_field_add_decorator — attach decorator to field", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorated_field_add_decorator");
+    });
+
+    TEST("_DecoratedMethod — method with decorators (4 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratedMethod");
+        ASSERT_CONTAINS(src, "_is_async");
+        ASSERT_CONTAINS(src, "_is_static");
+        ASSERT_CONTAINS(src, "_call_count");
+    });
+
+    TEST("_create_decorated_method — create method", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_decorated_method");
+    });
+
+    TEST("_decorated_method_add_decorator — attach decorator to method", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorated_method_add_decorator");
+    });
+
+    TEST("_DecoratedClass — class with fields/methods/decorators", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratedClass");
+        ASSERT_CONTAINS(src, "_fields[8]");
+        ASSERT_CONTAINS(src, "_methods[16]");
+        ASSERT_CONTAINS(src, "_instantiation_count");
+    });
+
+    TEST("_create_decorated_class — create class", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_decorated_class");
+    });
+
+    TEST("_decorated_class_add_field — register field", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorated_class_add_field");
+    });
+
+    TEST("_decorated_class_add_method — register method", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorated_class_add_method");
+    });
+
+    TEST("_decorated_class_add_decorator — attach class decorator", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorated_class_add_decorator");
+    });
+
+    TEST("_DecoratorRegistry — registry of decorated classes (16 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratorRegistry");
+        ASSERT_CONTAINS(src, "_classes[16]");
+        ASSERT_CONTAINS(src, "_total_decorators_applied");
+    });
+
+    TEST("_create_decorator_registry — initialize registry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_decorator_registry");
+    });
+
+    TEST("_decorator_registry_register — register class", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorator_registry_register");
+    });
+
+    TEST("_decorator_registry_get — lookup class by name", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorator_registry_get");
+    });
+
+    TEST("_decorator_registry_apply_all — apply pending decorators", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_decorator_registry_apply_all");
+    });
+
+    TEST("_DecoratorMetadataStore — metadata key-value store (32 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratorMetadataStore");
+        ASSERT_CONTAINS(src, "_keys[32]");
+        ASSERT_CONTAINS(src, "_values[32]");
+    });
+
+    TEST("_create_metadata_store — create metadata store", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_metadata_store");
+    });
+
+    TEST("_metadata_store_set — store metadata", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_metadata_store_set");
+    });
+
+    TEST("_metadata_store_get — retrieve metadata", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_metadata_store_get");
+    });
+
+    TEST("Decorator targets — class/method/field/accessor/parameter", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "TARGET_CLASS");
+        ASSERT_CONTAINS(src, "TARGET_METHOD");
+        ASSERT_CONTAINS(src, "TARGET_FIELD");
+    });
+
+    TEST("Class instantiation tracking — _instantiation_count", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_instantiation_count");
+    });
+
+    TEST("Method call tracking — _call_count per method", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_call_count");
+    });
+
+    TEST("Decorator application state — _applied flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_applied");
+        ASSERT_CONTAINS(src, "_applied_at");
+    });
+
+    TEST("_format_decorated_class_status — JSON class status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_decorated_class_status");
+    });
+
+    TEST("_format_decorator_registry_status — JSON registry status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_decorator_registry_status");
+    });
+
+    TEST("_format_decorator_metadata_status — JSON metadata status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_decorator_metadata_status");
+    });
+
+    TEST("Decorator tracing — all structures have _span_id", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _DecoratedClass");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Async method support — _is_async flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_is_async");
+    });
+
+    TEST("Static method support — _is_static flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_is_static");
+    });
+
+    TEST("Field descriptor — writable/enumerable/configurable", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_writable");
+        ASSERT_CONTAINS(src, "_enumerable");
+        ASSERT_CONTAINS(src, "_configurable");
+    });
+
+    TEST("Registry metrics — track applied decorators", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_total_decorators_applied");
+        ASSERT_CONTAINS(src, "_total_fields_decorated");
+        ASSERT_CONTAINS(src, "_total_methods_decorated");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -16147,6 +16346,9 @@ int main() {
 
     // Phase 5.6: Advanced Monitoring
     symm::testPhase56AdvancedMonitoring();
+
+    // Phase 6.0: Decorators
+    symm::testPhase60Decorators();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
