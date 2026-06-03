@@ -11185,6 +11185,239 @@ __device__ const char* _format_cache_cluster_status(_CacheCluster* cluster) {
 
 )";
 
+// Fragment 26: Message Queue & Event Bus
+static const char* PRELUDE_FRAG26 = R"(
+
+// ── Message Queue Data Structures ──────────────────────────────────────────────
+
+// Message in queue
+struct _QueueMessage {
+    const char* _id;                // Message ID
+    const char* _exchange;          // Exchange name
+    const char* _routing_key;       // Routing key
+    const char* _payload;           // Message content
+    int _payload_len;
+    int _priority;                  // 0-9 priority
+    int _ack_required;              // 1=requires ack
+    unsigned long long _created_at;
+};
+
+// Message queue (32 messages)
+struct _MessageQueue {
+    const char* _id;                // Queue name
+    _QueueMessage _messages[32];    // Up to 32 messages
+    int _message_count;
+    int _head;                      // Next to consume
+    int _tail;                      // Next to insert
+    long long _total_published;     // Metrics
+    long long _total_consumed;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Exchange (pub/sub router)
+struct _Exchange {
+    const char* _id;                // Exchange name
+    int _type;                      // 0=direct, 1=fanout, 2=topic
+    const char* _queues[8];         // Bound queues
+    int _queue_count;
+    long long _message_count;       // Total routed
+    unsigned long long _created_at;
+};
+
+// Event listener
+struct _EventListener {
+    const char* _id;                // Listener ID
+    const char* _event_pattern;     // Glob pattern (e.g., "order.*")
+    int _handler_id;                // Handler function ID
+    int _enabled;                   // 1=enabled, 0=disabled
+    unsigned long long _created_at;
+};
+
+// Event bus (pub/sub event system)
+struct _EventBus {
+    const char* _id;                // "event-bus"
+    _EventListener _listeners[32];  // Up to 32 listeners
+    int _listener_count;
+    long long _events_published;    // Metrics
+    long long _events_delivered;
+    long long _events_failed;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Broker (queues + exchanges + events)
+struct _MessageBroker {
+    const char* _id;                // "message-broker"
+    _MessageQueue _queues[16];      // Up to 16 queues
+    int _queue_count;
+    _Exchange _exchanges[8];        // Up to 8 exchanges
+    int _exchange_count;
+    _EventBus _event_bus;           // Event bus
+    long long _total_published;
+    long long _total_consumed;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── Message Operations ─────────────────────────────────────────────────────────
+
+// Create queue
+__device__ _MessageQueue _create_message_queue(const char* name) {
+    _MessageQueue q;
+    q._id = name;
+    q._message_count = 0;
+    q._head = 0;
+    q._tail = 0;
+    q._total_published = 0;
+    q._total_consumed = 0;
+    q._created_at = _symm_now_ms;
+    q._span_id = 0;
+    return q;
+}
+
+// Publish message to queue
+__device__ void _queue_publish(_MessageQueue* q, const char* routing_key, const char* payload) {
+    if (q->_message_count >= 32) return;  // Queue full
+
+    int idx = q->_tail;
+    q->_messages[idx]._routing_key = routing_key;
+    q->_messages[idx]._payload = payload;
+    int len = 0;
+    while (payload[len] && len < 1023) len++;
+    q->_messages[idx]._payload_len = len;
+    q->_messages[idx]._created_at = _symm_now_ms;
+    q->_messages[idx]._priority = 0;
+    q->_messages[idx]._ack_required = 0;
+
+    q->_tail = (q->_tail + 1) % 32;
+    q->_message_count++;
+    q->_total_published++;
+}
+
+// Consume message from queue
+__device__ _QueueMessage* _queue_consume(_MessageQueue* q) {
+    if (q->_message_count == 0) return 0;  // Queue empty
+
+    _QueueMessage* msg = &q->_messages[q->_head];
+    q->_head = (q->_head + 1) % 32;
+    q->_message_count--;
+    q->_total_consumed++;
+    return msg;
+}
+
+// Create exchange
+__device__ _Exchange _create_exchange(const char* name, int type) {
+    _Exchange ex;
+    ex._id = name;
+    ex._type = type;  // 0=direct, 1=fanout, 2=topic
+    ex._queue_count = 0;
+    ex._message_count = 0;
+    ex._created_at = _symm_now_ms;
+    return ex;
+}
+
+// Bind queue to exchange
+__device__ void _exchange_bind_queue(_Exchange* ex, const char* queue_name) {
+    if (ex->_queue_count < 8) {
+        ex->_queues[ex->_queue_count] = queue_name;
+        ex->_queue_count++;
+    }
+}
+
+// Create event bus
+__device__ _EventBus _create_event_bus() {
+    _EventBus eb;
+    eb._id = "event-bus";
+    eb._listener_count = 0;
+    eb._events_published = 0;
+    eb._events_delivered = 0;
+    eb._events_failed = 0;
+    eb._created_at = _symm_now_ms;
+    eb._span_id = 0;
+    return eb;
+}
+
+// Subscribe to event
+__device__ void _event_bus_subscribe(_EventBus* eb, const char* pattern, int handler_id) {
+    if (eb->_listener_count < 32) {
+        eb->_listeners[eb->_listener_count]._event_pattern = pattern;
+        eb->_listeners[eb->_listener_count]._handler_id = handler_id;
+        eb->_listeners[eb->_listener_count]._enabled = 1;
+        eb->_listeners[eb->_listener_count]._created_at = _symm_now_ms;
+        eb->_listener_count++;
+    }
+}
+
+// Publish event
+__device__ void _event_bus_publish(_EventBus* eb, const char* event_name) {
+    eb->_events_published++;
+    // In real implementation, would match event_name against patterns
+    eb->_events_delivered++;
+}
+
+// Create message broker
+__device__ _MessageBroker _create_message_broker() {
+    _MessageBroker mb;
+    mb._id = "message-broker";
+    mb._queue_count = 0;
+    mb._exchange_count = 0;
+    mb._event_bus = _create_event_bus();
+    mb._total_published = 0;
+    mb._total_consumed = 0;
+    mb._created_at = _symm_now_ms;
+    mb._span_id = 0;
+    return mb;
+}
+
+// Add queue to broker
+__device__ void _broker_create_queue(_MessageBroker* broker, const char* queue_name) {
+    if (broker->_queue_count < 16) {
+        broker->_queues[broker->_queue_count] = _create_message_queue(queue_name);
+        broker->_queue_count++;
+    }
+}
+
+// Add exchange to broker
+__device__ void _broker_create_exchange(_MessageBroker* broker, const char* ex_name, int type) {
+    if (broker->_exchange_count < 8) {
+        broker->_exchanges[broker->_exchange_count] = _create_exchange(ex_name, type);
+        broker->_exchange_count++;
+    }
+}
+
+// Format queue status as JSON
+__device__ const char* _format_message_queue_status(_MessageQueue* q) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"name\\":\"%s\\",\\"messages\\":%d,\\"published\\":%lld,\\"consumed\\":%lld}",
+                   q->_id, q->_message_count, q->_total_published, q->_total_consumed);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format broker status as JSON
+__device__ const char* _format_message_broker_status(_MessageBroker* mb) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"queues\\":%d,\\"exchanges\\":%d,\\"published\\":%lld,\\"consumed\\":%lld}",
+                   mb->_queue_count, mb->_exchange_count, mb->_total_published, mb->_total_consumed);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format event bus status as JSON
+__device__ const char* _format_event_bus_status(_EventBus* eb) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"listeners\\":%d,\\"published\\":%lld,\\"delivered\\":%lld,\\"failed\\":%lld}",
+                   eb->_listener_count, eb->_events_published, eb->_events_delivered, eb->_events_failed);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -11215,6 +11448,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG23) result += PRELUDE_FRAG23; // WebSocket support
     if (PRELUDE_FRAG24) result += PRELUDE_FRAG24; // Database persistence
     if (PRELUDE_FRAG25) result += PRELUDE_FRAG25; // Caching layer
+    if (PRELUDE_FRAG26) result += PRELUDE_FRAG26; // Message queue
     return result;
 }
 

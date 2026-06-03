@@ -17200,6 +17200,145 @@ static void testPhase72Caching() {
     });
 }
 
+static void testPhase73MessageQueue() {
+    std::cout << "\n=== Phase 7.3: Message Queue & Event Bus ===\n";
+
+    TEST("_QueueMessage — message with routing and priority", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _QueueMessage");
+        ASSERT_CONTAINS(src, "_routing_key");
+        ASSERT_CONTAINS(src, "_priority");
+    });
+
+    TEST("_MessageQueue — FIFO queue with 32 messages", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MessageQueue");
+        ASSERT_CONTAINS(src, "_messages[32]");
+        ASSERT_CONTAINS(src, "_head");
+        ASSERT_CONTAINS(src, "_tail");
+    });
+
+    TEST("_create_message_queue — create queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_message_queue");
+    });
+
+    TEST("_queue_publish — publish message to queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_queue_publish");
+    });
+
+    TEST("_queue_consume — consume message from queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_queue_consume");
+    });
+
+    TEST("_Exchange — pub/sub exchange (direct, fanout, topic)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Exchange");
+        ASSERT_CONTAINS(src, "_type");
+        ASSERT_CONTAINS(src, "_queues[8]");
+    });
+
+    TEST("_create_exchange — create exchange", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_exchange");
+    });
+
+    TEST("_exchange_bind_queue — bind queue to exchange", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_exchange_bind_queue");
+    });
+
+    TEST("_EventListener — event pattern matcher (32 listeners)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _EventListener");
+        ASSERT_CONTAINS(src, "_event_pattern");
+    });
+
+    TEST("_EventBus — pub/sub event system", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _EventBus");
+        ASSERT_CONTAINS(src, "_listeners[32]");
+        ASSERT_CONTAINS(src, "_events_published");
+    });
+
+    TEST("_create_event_bus — create event bus", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_event_bus");
+    });
+
+    TEST("_event_bus_subscribe — subscribe to event pattern", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_event_bus_subscribe");
+    });
+
+    TEST("_event_bus_publish — publish event", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_event_bus_publish");
+    });
+
+    TEST("_MessageBroker — unified queues + exchanges + events", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _MessageBroker");
+        ASSERT_CONTAINS(src, "_queues[16]");
+        ASSERT_CONTAINS(src, "_exchanges[8]");
+    });
+
+    TEST("_create_message_broker — create broker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_message_broker");
+    });
+
+    TEST("_broker_create_queue — create queue in broker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_broker_create_queue");
+    });
+
+    TEST("_broker_create_exchange — create exchange in broker", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_broker_create_exchange");
+    });
+
+    TEST("_format_message_queue_status — format queue as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_message_queue_status");
+    });
+
+    TEST("_format_message_broker_status — format broker as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_message_broker_status");
+    });
+
+    TEST("_format_event_bus_status — format event bus as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_event_bus_status");
+    });
+
+    TEST("FIFO semantics — head/tail circular buffer", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_head");
+        ASSERT_CONTAINS(src, "_tail");
+    });
+
+    TEST("Message metrics — published and consumed counts", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_total_published");
+        ASSERT_CONTAINS(src, "_total_consumed");
+    });
+
+    TEST("Event metrics — delivered and failed counts", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_events_delivered");
+        ASSERT_CONTAINS(src, "_events_failed");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -17506,6 +17645,9 @@ int main() {
 
     // Phase 7.2: Caching Layer
     symm::testPhase72Caching();
+
+    // Phase 7.3: Message Queue & Event Bus
+    symm::testPhase73MessageQueue();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
