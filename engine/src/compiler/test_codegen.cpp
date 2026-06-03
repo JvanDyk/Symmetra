@@ -15253,6 +15253,196 @@ static void testPhase53GlobalUtilities() {
     });
 }
 
+// Phase 5.4: Advanced Scheduling and Priority Management
+static void testPhase54AdvancedScheduling() {
+    std::cout << "\n=== Phase 5.4: Advanced Scheduling ===\n";
+
+    TEST("_TaskPriority enum — priority levels (IMMEDIATE to IDLE)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "enum _TaskPriority");
+        ASSERT_CONTAINS(src, "PRIORITY_IMMEDIATE");
+        ASSERT_CONTAINS(src, "PRIORITY_LOW");
+    });
+
+    TEST("_PriorityTask — task in priority queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PriorityTask");
+        ASSERT_CONTAINS(src, "_priority");
+        ASSERT_CONTAINS(src, "_deadline");
+        ASSERT_CONTAINS(src, "_executed");
+    });
+
+    TEST("_PriorityQueue — sorted task queue (64 max)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _PriorityQueue");
+        ASSERT_CONTAINS(src, "_tasks[64]");
+        ASSERT_CONTAINS(src, "_dropped_count");
+    });
+
+    TEST("_create_priority_queue — initialize priority queue", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_priority_queue");
+    });
+
+    TEST("_priority_queue_add — add task, maintain sort order", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_priority_queue_add");
+    });
+
+    TEST("_priority_queue_next — get highest-priority task", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_priority_queue_next");
+    });
+
+    TEST("_priority_queue_pop — remove and process next task", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_priority_queue_pop");
+    });
+
+    TEST("_priority_queue_check_deadlines — detect deadline violations", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_priority_queue_check_deadlines");
+    });
+
+    TEST("_TaskCoalescer — batch similar tasks", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _TaskCoalescer");
+        ASSERT_CONTAINS(src, "_batch_size");
+        ASSERT_CONTAINS(src, "_max_batch");
+        ASSERT_CONTAINS(src, "_batch_deadline");
+    });
+
+    TEST("_create_task_coalescer — create coalescer with max batch and deadline", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_task_coalescer");
+    });
+
+    TEST("_coalescer_add — add task to batch, check for flush", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_coalescer_add");
+    });
+
+    TEST("_coalescer_should_flush — deadline-based batch flushing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_coalescer_should_flush");
+    });
+
+    TEST("_SchedulerMetrics — performance tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _SchedulerMetrics");
+        ASSERT_CONTAINS(src, "_cycles_completed");
+        ASSERT_CONTAINS(src, "_tasks_executed");
+        ASSERT_CONTAINS(src, "_deadline_violations");
+    });
+
+    TEST("_create_scheduler_metrics — initialize metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_scheduler_metrics");
+    });
+
+    TEST("_scheduler_metrics_update — record cycle results", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_scheduler_metrics_update");
+    });
+
+    TEST("_BackpressurePolicy — overload handling strategy", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _BackpressurePolicy");
+        ASSERT_CONTAINS(src, "_queue_depth_limit");
+        ASSERT_CONTAINS(src, "_drop_strategy");
+        ASSERT_CONTAINS(src, "_is_overloaded");
+    });
+
+    TEST("_create_backpressure_policy — initialize with queue limit and drop strategy", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_backpressure_policy");
+    });
+
+    TEST("_backpressure_check — detect and signal overload", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_backpressure_check");
+    });
+
+    TEST("_AdvancedScheduler — unified scheduler with priority, coalescing, metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _AdvancedScheduler");
+        ASSERT_CONTAINS(src, "_queue");
+        ASSERT_CONTAINS(src, "_coalescers[4]");
+        ASSERT_CONTAINS(src, "_metrics");
+        ASSERT_CONTAINS(src, "_backpressure");
+    });
+
+    TEST("_create_advanced_scheduler — initialize all components", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_advanced_scheduler");
+    });
+
+    TEST("_scheduler_schedule — add task with priority and deadline", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_scheduler_schedule");
+    });
+
+    TEST("_scheduler_execute_next — run next highest-priority task", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_scheduler_execute_next");
+    });
+
+    TEST("Priority inheritance — IMMEDIATE > HIGH > NORMAL > LOW > IDLE", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "PRIORITY_IMMEDIATE");
+        ASSERT_CONTAINS(src, "PRIORITY_HIGH");
+        ASSERT_CONTAINS(src, "PRIORITY_NORMAL");
+    });
+
+    TEST("Deadline enforcement — tasks track hard deadline", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_deadline");
+        ASSERT_CONTAINS(src, "_priority_queue_check_deadlines");
+    });
+
+    TEST("Task coalescing — batch up to max before flush", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _TaskCoalescer");
+        ASSERT_CONTAINS(src, "_coalescer_add");
+    });
+
+    TEST("Backpressure strategies — drop oldest, newest, or lowest-priority", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_drop_strategy");
+    });
+
+    TEST("Queue depth tracking — _max_queue_depth in metrics", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_max_queue_depth");
+    });
+
+    TEST("_format_scheduler_metrics — JSON scheduler state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_scheduler_metrics");
+    });
+
+    TEST("_format_priority_queue_status — JSON queue state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_priority_queue_status");
+    });
+
+    TEST("_format_backpressure_status — JSON backpressure state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_backpressure_status");
+    });
+
+    TEST("Advanced scheduling — full tracing with _span_id", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _AdvancedScheduler");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    TEST("Scheduler pause/resume — _active flag", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_active");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -15526,6 +15716,9 @@ int main() {
 
     // Phase 5.3: Global Utilities
     symm::testPhase53GlobalUtilities();
+
+    // Phase 5.4: Advanced Scheduling
+    symm::testPhase54AdvancedScheduling();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

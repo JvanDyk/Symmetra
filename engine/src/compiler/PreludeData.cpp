@@ -8068,6 +8068,346 @@ __device__ const char* _format_microtask_queue_status(_MicrotaskQueue* q) {
 }
 )";
 
+// Fragment 15: Advanced Scheduling and Priority Management
+static const char* PRELUDE_FRAG15 = R"(
+// ── Task Priority Levels ──────────────────────────────────────────────────────
+// Different task types with different priorities
+enum _TaskPriority {
+    PRIORITY_IMMEDIATE    = 100,    // Microtasks, Promise.then
+    PRIORITY_HIGH         = 50,     // High-priority timers
+    PRIORITY_NORMAL       = 25,     // Standard setTimeout
+    PRIORITY_LOW          = 10,     // Background operations
+    PRIORITY_IDLE         = 1       // Idle callbacks
+};
+
+// Task in priority queue
+struct _PriorityTask {
+    const char* _id;                // Task identifier
+    int _priority;                  // Priority level (1-100)
+    const char* _callback_id;       // Callback function
+    long long _scheduled_time;      // When queued
+    long long _deadline;            // Hard deadline (-1 = no deadline)
+    int _executed;                  // 1=done, 0=pending
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Priority queue for scheduler
+struct _PriorityQueue {
+    const char* _id;                // "priority-queue"
+    _PriorityTask _tasks[64];       // Up to 64 tasks
+    int _task_count;
+    int _processed_count;
+    int _dropped_count;             // Tasks dropped due to backpressure
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create priority queue
+__device__ _PriorityQueue _create_priority_queue(const char* span_id) {
+    _PriorityQueue q;
+    q._id = "priority-queue";
+    q._task_count = 0;
+    q._processed_count = 0;
+    q._dropped_count = 0;
+    q._created_at = (unsigned long long)Date::now();
+    q._span_id = span_id;
+    return q;
+}
+
+// Add task to priority queue (maintains sorted order)
+__device__ int _priority_queue_add(_PriorityQueue* q, const char* id, int priority, const char* cb_id,
+                                    long long deadline, const char* span_id) {
+    if (q->_task_count >= 64) {
+        q->_dropped_count++;
+        return -1;  // Queue full, drop task
+    }
+
+    // Find insertion point (highest priority first)
+    int insert_pos = q->_task_count;
+    for (int i = 0; i < q->_task_count; i++) {
+        if (priority > q->_tasks[i]._priority) {
+            insert_pos = i;
+            break;
+        }
+    }
+
+    // Shift tasks down
+    for (int i = q->_task_count; i > insert_pos; i--) {
+        q->_tasks[i] = q->_tasks[i-1];
+    }
+
+    // Insert new task
+    _PriorityTask* t = &q->_tasks[insert_pos];
+    t->_id = id;
+    t->_priority = priority;
+    t->_callback_id = cb_id;
+    t->_scheduled_time = (long long)Date::now();
+    t->_deadline = deadline;
+    t->_executed = 0;
+    t->_created_at = (unsigned long long)Date::now();
+    t->_span_id = span_id;
+
+    q->_task_count++;
+    return insert_pos;
+}
+
+// Get highest-priority task
+__device__ _PriorityTask* _priority_queue_next(_PriorityQueue* q) {
+    if (q->_task_count == 0) return 0;
+    return &q->_tasks[0];
+}
+
+// Remove and process next task
+__device__ int _priority_queue_pop(_PriorityQueue* q) {
+    if (q->_task_count == 0) return -1;
+
+    _PriorityTask* first = &q->_tasks[0];
+    first->_executed = 1;
+    q->_processed_count++;
+
+    // Shift remaining tasks up
+    for (int i = 0; i < q->_task_count - 1; i++) {
+        q->_tasks[i] = q->_tasks[i+1];
+    }
+    q->_task_count--;
+    return 1;  // Task was processed
+}
+
+// Check for deadline violations
+__device__ int _priority_queue_check_deadlines(_PriorityQueue* q, long long now) {
+    int violated = 0;
+    for (int i = 0; i < q->_task_count; i++) {
+        if (q->_tasks[i]._deadline > 0 && now > q->_tasks[i]._deadline) {
+            violated++;
+            // In real implementation, would escalate priority or abort
+        }
+    }
+    return violated;
+}
+
+// ── Task Coalescing (Batching similar tasks) ──────────────────────────────────
+// Coalescer for batching related tasks
+struct _TaskCoalescer {
+    const char* _id;                // "coalescer"
+    const char* _operation_type;    // Operation being coalesced
+    int _batch_size;                // Current batch size
+    int _max_batch;                 // Max tasks per batch
+    long long _batch_deadline;      // When to force flush
+    int _coalesced_count;           // Total coalesced
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create task coalescer
+__device__ _TaskCoalescer _create_task_coalescer(const char* op_type, int max_batch, long long deadline_ms, const char* span_id) {
+    _TaskCoalescer c;
+    c._id = "coalescer";
+    c._operation_type = op_type;
+    c._batch_size = 0;
+    c._max_batch = max_batch;
+    c._batch_deadline = Date::now() + deadline_ms;
+    c._coalesced_count = 0;
+    c._created_at = (unsigned long long)Date::now();
+    c._span_id = span_id;
+    return c;
+}
+
+// Add task to coalescer
+__device__ int _coalescer_add(_TaskCoalescer* c) {
+    c->_batch_size++;
+    c->_coalesced_count++;
+    if (c->_batch_size >= c->_max_batch) {
+        int should_flush = 1;
+        c->_batch_size = 0;
+        return should_flush;
+    }
+    return 0;  // Keep batching
+}
+
+// Check if batch should flush (deadline reached)
+__device__ int _coalescer_should_flush(_TaskCoalescer* c, long long now) {
+    if (now >= c->_batch_deadline) {
+        c->_batch_deadline = now + 10;  // Reset deadline
+        return 1;
+    }
+    return 0;
+}
+
+// ── Scheduler Metrics ──────────────────────────────────────────────────────────
+// Scheduler performance metrics
+struct _SchedulerMetrics {
+    const char* _id;                // "scheduler-metrics"
+    long long _cycles_completed;    // Total scheduler cycles
+    long long _tasks_executed;      // Total tasks executed
+    long long _tasks_dropped;       // Tasks dropped (backpressure)
+    long long _microtasks_executed;
+    long long _timers_fired;
+    long long _deadline_violations;
+    long long _max_queue_depth;     // Highest queue size
+    long long _total_queue_time_us; // Sum of all task wait times
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create metrics
+__device__ _SchedulerMetrics _create_scheduler_metrics(const char* span_id) {
+    _SchedulerMetrics m;
+    m._id = "scheduler-metrics";
+    m._cycles_completed = 0;
+    m._tasks_executed = 0;
+    m._tasks_dropped = 0;
+    m._microtasks_executed = 0;
+    m._timers_fired = 0;
+    m._deadline_violations = 0;
+    m._max_queue_depth = 0;
+    m._total_queue_time_us = 0;
+    m._created_at = (unsigned long long)Date::now();
+    m._span_id = span_id;
+    return m;
+}
+
+// Update metrics after cycle
+__device__ void _scheduler_metrics_update(_SchedulerMetrics* m, int tasks, int microtasks, int timers) {
+    m->_cycles_completed++;
+    m->_tasks_executed += tasks;
+    m->_microtasks_executed += microtasks;
+    m->_timers_fired += timers;
+}
+
+// ── Backpressure Control ──────────────────────────────────────────────────────
+// Backpressure policy for overload situations
+struct _BackpressurePolicy {
+    const char* _id;                // "backpressure"
+    int _queue_depth_limit;         // Drop tasks if queue exceeds this
+    int _drop_strategy;             // 0=drop oldest, 1=drop newest, 2=drop lowest-priority
+    int _is_overloaded;             // 1=currently overloaded
+    int _tasks_dropped_this_cycle;
+    long long _overload_start_time;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create backpressure policy
+__device__ _BackpressurePolicy _create_backpressure_policy(int queue_limit, int drop_strategy, const char* span_id) {
+    _BackpressurePolicy p;
+    p._id = "backpressure";
+    p._queue_depth_limit = queue_limit;
+    p._drop_strategy = drop_strategy;
+    p._is_overloaded = 0;
+    p._tasks_dropped_this_cycle = 0;
+    p._overload_start_time = 0;
+    p._created_at = (unsigned long long)Date::now();
+    p._span_id = span_id;
+    return p;
+}
+
+// Check and apply backpressure
+__device__ int _backpressure_check(_BackpressurePolicy* p, int current_queue_depth) {
+    if (current_queue_depth > p->_queue_depth_limit) {
+        if (!p->_is_overloaded) {
+            p->_is_overloaded = 1;
+            p->_overload_start_time = (long long)Date::now();
+        }
+        p->_tasks_dropped_this_cycle++;
+        return 1;  // Apply backpressure (drop/defer)
+    } else if (p->_is_overloaded) {
+        p->_is_overloaded = 0;
+    }
+    return 0;  // No backpressure
+}
+
+// ── Advanced Scheduler ─────────────────────────────────────────────────────────
+// Combines all scheduling components
+struct _AdvancedScheduler {
+    const char* _id;                // "advanced-scheduler"
+    _PriorityQueue _queue;
+    _TaskCoalescer _coalescers[4];  // Up to 4 simultaneous coalescers
+    int _coalescer_count;
+    _SchedulerMetrics _metrics;
+    _BackpressurePolicy _backpressure;
+    int _active;                    // 1=running, 0=paused
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Create advanced scheduler
+__device__ _AdvancedScheduler _create_advanced_scheduler(const char* span_id) {
+    _AdvancedScheduler s;
+    s._id = "advanced-scheduler";
+    s._queue = _create_priority_queue(span_id);
+    s._coalescer_count = 0;
+    s._metrics = _create_scheduler_metrics(span_id);
+    s._backpressure = _create_backpressure_policy(48, 1, span_id);
+    s._active = 1;
+    s._created_at = (unsigned long long)Date::now();
+    s._span_id = span_id;
+    return s;
+}
+
+// Schedule task with priority
+__device__ int _scheduler_schedule(_AdvancedScheduler* s, const char* id, int priority,
+                                    const char* cb_id, long long deadline, const char* span_id) {
+    if (!s->_active) return -2;  // Scheduler stopped
+
+    // Check backpressure
+    if (_backpressure_check(&s->_backpressure, s->_queue._task_count)) {
+        s->_metrics._tasks_dropped++;
+        return -1;  // Task dropped due to backpressure
+    }
+
+    return _priority_queue_add(&s->_queue, id, priority, cb_id, deadline, span_id);
+}
+
+// Execute next task from scheduler
+__device__ int _scheduler_execute_next(_AdvancedScheduler* s) {
+    _PriorityTask* task = _priority_queue_next(&s->_queue);
+    if (!task) return 0;
+
+    long long now = Date::now();
+    int deadline_violated = 0;
+
+    if (task->_deadline > 0 && now > task->_deadline) {
+        deadline_violated = 1;
+        s->_metrics._deadline_violations++;
+    }
+
+    _priority_queue_pop(&s->_queue);
+    s->_metrics._tasks_executed++;
+    return 1;
+}
+
+// JSON formatting
+__device__ const char* _format_scheduler_metrics(_SchedulerMetrics* m) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"cycles\\":%lld,\\"tasks\\":%lld,\\"dropped\\":%lld,",
+                   m->_cycles_completed, m->_tasks_executed, m->_tasks_dropped);
+    len += sprintf(buf+len, "\\"deadline_violations\\":%lld,\\"max_queue\\":%lld}",
+                   m->_deadline_violations, m->_max_queue_depth);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_priority_queue_status(_PriorityQueue* q) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"pending\\":%d,\\"processed\\":%d,\\"dropped\\":%d}",
+                   q->_task_count, q->_processed_count, q->_dropped_count);
+    buf[len] = 0;
+    return buf;
+}
+
+__device__ const char* _format_backpressure_status(_BackpressurePolicy* p) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"overloaded\\":%d,\\"dropped_this_cycle\\":%d,\\"limit\\":%d}",
+                   p->_is_overloaded, p->_tasks_dropped_this_cycle, p->_queue_depth_limit);
+    buf[len] = 0;
+    return buf;
+}
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -8087,6 +8427,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG12) result += PRELUDE_FRAG12; // SHA-256 + HMAC
     if (PRELUDE_FRAG13) result += PRELUDE_FRAG13; // Global timers
     if (PRELUDE_FRAG14) result += PRELUDE_FRAG14; // Global utilities
+    if (PRELUDE_FRAG15) result += PRELUDE_FRAG15; // Advanced scheduling
     return result;
 }
 
