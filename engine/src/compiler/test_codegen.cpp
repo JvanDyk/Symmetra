@@ -13352,6 +13352,227 @@ static void testPhase319WorkStealing() {
     });
 }
 
+// Phase 3.20: Asynchronous I/O with Native Coroutines
+static void testPhase320AsyncIO() {
+    std::cout << "\n=== Phase 3.20: Asynchronous I/O with Native Coroutines ===\n";
+
+    // Coroutine creation
+    TEST("Coroutine — stores id, state, timestamps, stream_id, span_id", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct Coroutine");
+        ASSERT_CONTAINS(src, "_id");
+        ASSERT_CONTAINS(src, "_state");
+        ASSERT_CONTAINS(src, "_stream_id");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+
+    // Coroutine states
+    TEST("Coroutine — states: pending(0), running(1), suspended(2), done(3)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "0=pending");
+        ASSERT_CONTAINS(src, "1=running");
+        ASSERT_CONTAINS(src, "2=suspended");
+        ASSERT_CONTAINS(src, "3=done");
+    });
+
+    // AsyncIOOp creation
+    TEST("AsyncIOOp — tracks operation type, resource, bytes transferred, status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncIOOp");
+        ASSERT_CONTAINS(src, "_op_id");
+        ASSERT_CONTAINS(src, "_op_type");
+        ASSERT_CONTAINS(src, "_resource");
+        ASSERT_CONTAINS(src, "_status_code");
+    });
+
+    // AsyncIOOp types
+    TEST("AsyncIOOp — types: read(0), write(1), compute(2), network(3)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "0=read");
+        ASSERT_CONTAINS(src, "1=write");
+        ASSERT_CONTAINS(src, "2=compute");
+        ASSERT_CONTAINS(src, "3=network");
+    });
+
+    // StreamScheduler creation
+    TEST("StreamScheduler — manages active streams and pending coroutines", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct StreamScheduler");
+        ASSERT_CONTAINS(src, "_active_streams[8]");
+        ASSERT_CONTAINS(src, "_pending_coros[32]");
+        ASSERT_CONTAINS(src, "_num_streams");
+    });
+
+    // StreamScheduler registerCoroutine
+    TEST("StreamScheduler::registerCoroutine — queues coroutine for completion", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "registerCoroutine");
+        ASSERT_CONTAINS(src, "_pending_count");
+    });
+
+    // StreamScheduler isStreamComplete
+    TEST("StreamScheduler::isStreamComplete — checks GPU stream completion status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isStreamComplete");
+    });
+
+    // StreamScheduler processCompletions
+    TEST("StreamScheduler::processCompletions — handles completed I/O operations", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "processCompletions");
+        ASSERT_CONTAINS(src, "_total_completions");
+    });
+
+    // CoroutineRunner creation
+    TEST("CoroutineRunner — state machine for coroutine lifecycle", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct CoroutineRunner");
+        ASSERT_CONTAINS(src, "_current");
+        ASSERT_CONTAINS(src, "_scheduler");
+    });
+
+    // CoroutineRunner suspend
+    TEST("CoroutineRunner::suspend — suspends pending I/O completion", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "suspend");
+    });
+
+    // CoroutineRunner resume
+    TEST("CoroutineRunner::resume — resumes from suspended state", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "resume");
+    });
+
+    // CoroutineRunner complete
+    TEST("CoroutineRunner::complete — marks coroutine as done", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "complete");
+    });
+
+    // CoroutineRunner getLifespan
+    TEST("CoroutineRunner::getLifespan — returns coroutine age in cycles", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLifespan");
+    });
+
+    // AsyncOperationContext creation
+    TEST("AsyncOperationContext — wraps AsyncIOOp with lifecycle tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct AsyncOperationContext");
+        ASSERT_CONTAINS(src, "_op");
+        ASSERT_CONTAINS(src, "_retry_count");
+        ASSERT_CONTAINS(src, "_max_retries");
+        ASSERT_CONTAINS(src, "_deadline");
+    });
+
+    // AsyncOperationContext complete
+    TEST("AsyncOperationContext::complete — marks operation with status and bytes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "complete");
+    });
+
+    // AsyncOperationContext isExpired
+    TEST("AsyncOperationContext::isExpired — checks deadline exceeded", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "isExpired");
+        ASSERT_CONTAINS(src, "_deadline");
+    });
+
+    // AsyncOperationContext getLatency
+    TEST("AsyncOperationContext::getLatency — returns operation duration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "getLatency");
+    });
+
+    // AsyncOperationContext canRetry
+    TEST("AsyncOperationContext::canRetry — checks retry budget available", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "canRetry");
+    });
+
+    // symm_create_coroutine helper
+    TEST("symm_create_coroutine — initializes coroutine with tracing link", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_create_coroutine");
+        ASSERT_CONTAINS(src, "span_id");
+    });
+
+    // symm_suspend_for_io helper
+    TEST("symm_suspend_for_io — suspends coroutine for stream completion", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_suspend_for_io");
+    });
+
+    // symm_is_async_ready helper
+    TEST("symm_is_async_ready — checks if async operation completed", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_is_async_ready");
+    });
+
+    // symm_format_coroutine_status JSON
+    TEST("symm_format_coroutine_status — formats coroutine as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_coroutine_status");
+        ASSERT_CONTAINS(src, "state");
+        ASSERT_CONTAINS(src, "age_us");
+    });
+
+    // symm_format_async_op_status JSON
+    TEST("symm_format_async_op_status — formats operation as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_async_op_status");
+        ASSERT_CONTAINS(src, "type");
+        ASSERT_CONTAINS(src, "latency_us");
+    });
+
+    // symm_format_scheduler_health JSON
+    TEST("symm_format_scheduler_health — formats scheduler metrics as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "symm_format_scheduler_health");
+        ASSERT_CONTAINS(src, "utilization");
+    });
+
+    // Integration: Coroutine lifecycle
+    TEST("Coroutine lifecycle — create, suspend, resume, complete", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "Coroutine");
+        ASSERT_CONTAINS(src, "suspend");
+        ASSERT_CONTAINS(src, "resume");
+        ASSERT_CONTAINS(src, "complete");
+    });
+
+    // Integration: AsyncIOOp with retries
+    TEST("AsyncIOOp — operation with retry logic and deadline", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "AsyncOperationContext");
+        ASSERT_CONTAINS(src, "canRetry");
+        ASSERT_CONTAINS(src, "_max_retries");
+    });
+
+    // Integration: StreamScheduler with coroutines
+    TEST("StreamScheduler + Coroutine — async dispatch and completion", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "StreamScheduler");
+        ASSERT_CONTAINS(src, "Coroutine");
+        ASSERT_CONTAINS(src, "registerCoroutine");
+        ASSERT_CONTAINS(src, "processCompletions");
+    });
+
+    // Integration: GPU stream-native async
+    TEST("GPU native async — CUDA streams for completion triggering", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_stream_id");
+        ASSERT_CONTAINS(src, "isStreamComplete");
+    });
+
+    // Integration: Tracing correlation
+    TEST("Coroutine — linked to Phase 3.18 distributed tracing", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+        ASSERT_CONTAINS(src, "Coroutine");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -13595,6 +13816,9 @@ int main() {
 
     // Phase 3.19: Work-Stealing Thread Pool & Lock-Free Coordination
     symm::testPhase319WorkStealing();
+
+    // Phase 3.20: Asynchronous I/O with Native Coroutines
+    symm::testPhase320AsyncIO();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

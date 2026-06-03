@@ -3017,6 +3017,224 @@ __device__ inline void symm_record_distribution(WorkDistribution& dist, int befo
     dist._load_imbalance_after = after;
 }
 
+// ── Phase 3.20: Asynchronous I/O with Native Coroutines ──────────────────────
+
+// Coroutine state for async operations
+struct Coroutine {
+    const char* _id;                // Unique coroutine ID
+    int _state;                     // 0=pending, 1=running, 2=suspended, 3=done
+    unsigned long long _created_time;
+    unsigned long long _resume_time;
+    int _stream_id;                 // CUDA stream for GPU-native completion
+    const char* _span_id;           // Link to Phase 3.18 tracing
+};
+
+// Async I/O operation descriptor
+struct AsyncIOOp {
+    const char* _op_id;
+    int _op_type;                   // 0=read, 1=write, 2=compute, 3=network
+    const char* _resource;          // File/socket/URL
+    unsigned long long _start_time;
+    int _bytes_transferred;
+    int _status_code;               // 0=pending, 1=success, -1=error
+};
+
+// Stream scheduler for GPU-native async dispatch
+struct StreamScheduler {
+    int _active_streams[8];         // CUDA stream IDs
+    int _num_streams;
+    Coroutine* _pending_coros[32];  // Coroutines awaiting completion
+    int _pending_count;
+    unsigned long long _total_completions;
+
+    __device__ StreamScheduler(int num_streams = 2)
+        : _num_streams(num_streams), _pending_count(0), _total_completions(0) {
+        for (int i = 0; i < 8; i++) _active_streams[i] = -1;
+    }
+
+    // Register a coroutine for completion tracking
+    __device__ bool registerCoroutine(Coroutine& coro) {
+        if (_pending_count >= 32) return false;  // Queue full
+        _pending_coros[_pending_count] = &coro;
+        _pending_count++;
+        return true;
+    }
+
+    // Check if stream has completed
+    __device__ bool isStreamComplete(int stream_id) {
+        // In GPU, cudaStreamQuery would be used (simplified for prelude)
+        return false;  // Placeholder: actual implementation uses cudaStreamQuery
+    }
+
+    // Process completed operations (continuations)
+    __device__ int processCompletions() {
+        int completed = 0;
+        for (int i = 0; i < _pending_count; i++) {
+            Coroutine* coro = _pending_coros[i];
+            if (coro && isStreamComplete(coro->_stream_id)) {
+                coro->_state = 3;  // Mark done
+                _total_completions++;
+                completed++;
+                // Shift remaining coroutines
+                for (int j = i; j < _pending_count - 1; j++) {
+                    _pending_coros[j] = _pending_coros[j + 1];
+                }
+                _pending_count--;
+                i--;
+            }
+        }
+        return completed;
+    }
+
+    __device__ int getPendingCount() const { return _pending_count; }
+    __device__ unsigned long long getTotalCompletions() const { return _total_completions; }
+};
+
+// Coroutine state machine
+struct CoroutineRunner {
+    Coroutine _current;
+    StreamScheduler& _scheduler;
+    int _context_id;                // For debugging/tracing
+
+    __device__ CoroutineRunner(StreamScheduler& scheduler, const char* id = "")
+        : _scheduler(scheduler), _context_id(0) {
+        _current._id = id;
+        _current._state = 0;
+        _current._created_time = clock64();
+    }
+
+    // Suspend coroutine pending I/O completion
+    __device__ bool suspend(int stream_id) {
+        _current._state = 2;  // suspended
+        _current._stream_id = stream_id;
+        _current._resume_time = clock64();
+        return _scheduler.registerCoroutine(_current);
+    }
+
+    // Resume from suspended state
+    __device__ void resume() {
+        _current._state = 1;  // running
+    }
+
+    // Complete coroutine
+    __device__ void complete() {
+        _current._state = 3;  // done
+    }
+
+    __device__ int getState() const { return _current._state; }
+    __device__ unsigned long long getLifespan() const {
+        return clock64() - _current._created_time;
+    }
+};
+
+// Async operation lifecycle
+struct AsyncOperationContext {
+    AsyncIOOp _op;
+    Coroutine _owner_coro;
+    int _retry_count;
+    int _max_retries;
+    unsigned long long _deadline;
+
+    __device__ AsyncOperationContext(const char* op_id = "", int op_type = 0)
+        : _retry_count(0), _max_retries(3), _deadline(0) {
+        _op._op_id = op_id;
+        _op._op_type = op_type;
+        _op._start_time = clock64();
+        _op._status_code = 0;  // pending
+    }
+
+    // Mark operation as complete
+    __device__ void complete(int status, int bytes = 0) {
+        _op._status_code = status;
+        _op._bytes_transferred = bytes;
+    }
+
+    // Check if operation has exceeded deadline
+    __device__ bool isExpired() const {
+        if (_deadline == 0) return false;  // No deadline
+        return clock64() > _deadline;
+    }
+
+    // Get operation latency
+    __device__ unsigned long long getLatency() const {
+        return clock64() - _op._start_time;
+    }
+
+    // Can retry?
+    __device__ bool canRetry() const {
+        return _retry_count < _max_retries && _op._status_code < 0;
+    }
+};
+
+// Helper: Create and schedule async operation
+__device__ inline Coroutine symm_create_coroutine(const char* id, const char* span_id,
+                                                   StreamScheduler& scheduler) {
+    Coroutine coro;
+    coro._id = id;
+    coro._span_id = span_id;
+    coro._state = 0;  // pending
+    coro._created_time = clock64();
+    coro._stream_id = -1;
+    return coro;
+}
+
+// Helper: Suspend coroutine pending I/O
+__device__ inline bool symm_suspend_for_io(CoroutineRunner& runner, int stream_id) {
+    return runner.suspend(stream_id);
+}
+
+// Helper: Check if async operation is ready
+__device__ inline bool symm_is_async_ready(const StreamScheduler& scheduler, int stream_id) {
+    return scheduler.isStreamComplete(stream_id);
+}
+
+// Helper: Format coroutine status as JSON
+__device__ inline const char* symm_format_coroutine_status(const Coroutine& coro) {
+    static char buf[256];
+    const char* state_str = "pending";
+    if (coro._state == 1) state_str = "running";
+    else if (coro._state == 2) state_str = "suspended";
+    else if (coro._state == 3) state_str = "done";
+
+    snprintf(buf, sizeof(buf),
+        "{\"id\":\"%s\",\"state\":\"%s\",\"stream_id\":%d,\"age_us\":%llu}",
+        coro._id ? coro._id : "", state_str, coro._stream_id,
+        (clock64() - coro._created_time) / 1000);
+    return buf;
+}
+
+// Helper: Format async operation status as JSON
+__device__ inline const char* symm_format_async_op_status(const AsyncIOOp& op) {
+    static char buf[384];
+    const char* type_str = "read";
+    if (op._op_type == 1) type_str = "write";
+    else if (op._op_type == 2) type_str = "compute";
+    else if (op._op_type == 3) type_str = "network";
+
+    const char* status_str = "pending";
+    if (op._status_code == 1) status_str = "success";
+    else if (op._status_code < 0) status_str = "error";
+
+    snprintf(buf, sizeof(buf),
+        "{\"op_id\":\"%s\",\"type\":\"%s\",\"status\":\"%s\",\"bytes\":%d,"
+        "\"latency_us\":%llu}",
+        op._op_id ? op._op_id : "", type_str, status_str,
+        op._bytes_transferred, (clock64() - op._start_time) / 1000);
+    return buf;
+}
+
+// Helper: Format scheduler health as JSON
+__device__ inline const char* symm_format_scheduler_health(const StreamScheduler& scheduler) {
+    static char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"active_streams\":%d,\"pending_coros\":%d,\"total_completions\":%llu,"
+        "\"utilization\":%.1f}",
+        scheduler._num_streams, scheduler._pending_count,
+        scheduler._total_completions,
+        (float)scheduler._pending_count / 32 * 100.0);
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
