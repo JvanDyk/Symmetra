@@ -316,12 +316,12 @@ const DATA = [
   { name: "Named import",               code: "import { foo } from 'm'", st: "partial", eff: "m",   phase: "D", notes: "Symmetra compiles everything into a single CUDA translation unit. Multi-file support needs a bundler pre-pass." },
   { name: "Default import",             code: "import foo from 'm'",     st: "partial", eff: "m",   phase: "D", notes: "Same; bundled." },
   { name: "Namespace import",           code: "import * as m from 'm'",  st: "partial", eff: "m",   phase: "D", notes: "" },
-  { name: "Side-effect import",         code: "import 'm'",              st: "na",      eff: "na",  phase: "",  notes: "No side-effectful modules on GPU." },
+  { name: "Side-effect import",         code: "import 'm'",              st: "limited", eff: "na",  phase: "3.12", notes: "GPU architectural limitation: Single CUDA kernel compilation (no module linker). Side effects have no execution context on GPU. Workaround: Use bundler pre-pass (esbuild, webpack) to inline all imports into single file before compilation." },
   { name: "Named export",               code: "export { foo }",          st: "partial", eff: "m",   phase: "D", notes: "" },
   { name: "Default export",             code: "export default foo",      st: "partial", eff: "m",   phase: "D", notes: "" },
   { name: "Re-export",                  code: "export { x } from 'm'",   st: "partial", eff: "m",   phase: "D", notes: "" },
-  { name: "Dynamic import()",           code: "await import('m')",       st: "na",      eff: "na",  phase: "",  notes: "GPU kernel can't load new code at runtime." },
-  { name: "import.meta",                code: "import.meta.url",         st: "na",      eff: "na",  phase: "",  notes: "No module metadata inside CUDA kernels." },
+  { name: "Dynamic import()",           code: "await import('m')",       st: "limited", eff: "na",  phase: "3.12", notes: "GPU architectural limitation: Code loading at runtime not supported in CUDA kernels. Dynamic module loading requires file system access and JIT compilation, neither available on GPU. Workaround: Pre-bundle all dependencies with esbuild or webpack before compilation." },
+  { name: "import.meta",                code: "import.meta.url",         st: "limited", eff: "na",  phase: "3.12", notes: "GPU architectural limitation: No module metadata in CUDA kernels (single file compilation model). Workaround: Pass module metadata as compile-time constants or parameters via SymmCtx structure instead of accessing import.meta at runtime." },
   { name: "@symmetra/* built-ins",      code: "@symmetra/core",          st: "done",    eff: "na",  phase: "",  notes: "Core types are injected by Codegen prelude, not actually imported at runtime." },
 ]},
 
@@ -380,7 +380,7 @@ const DATA = [
 { cat: "Proxy & Reflect", icon: "🪞", rows: [
   { name: "Proxy (get trap)",           code: "new Proxy(t,{get(t,p){}}", st:"na",      eff: "na",  phase: "",  notes: "Dynamic traps require runtime dispatch the GPU SIMT model cannot support without major divergence." },
   { name: "Proxy (all traps)",          code: "set,has,deleteProperty…",  st:"na",      eff: "na",  phase: "",  notes: "" },
-  { name: "Reflect (all methods)",      code: "Reflect.get/set/…",        st:"na",      eff: "na",  phase: "",  notes: "" },
+  { name: "Reflect (all methods)",      code: "Reflect.get/set/…",        st:"limited", eff: "na",  phase: "3.12", notes: "GPU architectural limitation: No RTTI (Run-Time Type Information) on GPU. Reflect API requires runtime introspection of object structure, which is erased after codegen. Workaround: Use compile-time reflection via TypeScript generics, or manually define property accessors in struct types." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,7 +501,7 @@ const DATA = [
   { name: "Set — forEach / iteration",  code: "set.forEach(v=>…)",       st: "done",    eff: "na",  phase: "",  notes: "Implemented as symm_set_for_each(set, fn) — iterates _items[0.._count-1]. Callback receives (value, value, set) matching the JS spec." },
   { name: "Set — for…of",              code: "for(const v of set)",     st: "partial", eff: "s",   phase: "C", notes: "for…of over a Set emits iteration over the internal _items[0.._count-1] array. Works for string and numeric values. Use set.forEach() as a reliable alternative." },
   { name: "Set — keys/values/entries",  code: "set.values()",           st: "partial", eff: "s",   phase: "C", notes: "symm_set_values/entries() return JSON-encoded strings — NOT iterators (same limitation as Map.keys()). Use set.forEach() for iteration." },
-  { name: "WeakMap / WeakSet",          code: "new WeakMap()",           st: "na",       eff: "na",  phase: "",  notes: "GC semantics do not apply on GPU — VRAM is slab-allocated and reset in O(1). WeakMap/WeakSet require weak references which have no equivalent in the CUDA memory model." },
+  { name: "WeakMap / WeakSet",          code: "new WeakMap()",           st: "limited",  eff: "na",  phase: "3.12", notes: "GPU architectural limitation: No garbage collection on GPU (VRAM is slab-allocated and reset in O(1) at kernel boundaries). Weak references have no semantic meaning. Implementation exists (uses Map/Set behavior), but weak semantics don't apply. Workaround: Use regular Map/Set with explicit cleanup in your code." },
   { name: "WeakRef / FinalizationRegistry", code:"new WeakRef(obj)",     st: "na",       eff: "na",  phase: "",  notes: "Weak references require a garbage collector to clear them. GPU uses manual slab allocation with no GC. FinalizationRegistry callbacks cannot fire without a GC cycle." },
 ]},
 
@@ -567,7 +567,7 @@ const DATA = [
   { name: "console.assert",            code: "console.assert(cond,msg)",st: "done",    eff: "na",  phase: "",  notes: "Dispatches to console.assert_(cond, msg) — writes to debug buffer if condition is false." },
   { name: "setTimeout / clearTimeout", code: "setTimeout(f, 100)",      st: "done",    eff: "na",  phase: "",  notes: "CPU-side TimerQueue fires callback; response via BatchScheduler." },
   { name: "setInterval / clearInterval",code:"setInterval(f, 1000)",    st: "done",    eff: "na",  phase: "",  notes: "" },
-  { name: "queueMicrotask",            code: "queueMicrotask(f)",       st: "partial", eff: "xs",  phase: "D", notes: "Implemented as immediate synchronous invocation — callback is called inline. Matches GPU's synchronous execution model but does not replicate task-queue ordering semantics (callback runs before, not after, the current call stack unwinds)." },
+  { name: "queueMicrotask",            code: "queueMicrotask(f)",       st: "limited", eff: "xs",  phase: "3.12", notes: "GPU architectural limitation: No event loop or microtask queue on GPU. Implemented as immediate synchronous invocation — callback called inline. Functionally works but violates task-queue ordering semantics (callback runs before, not after, current call stack unwinds). Architectural blocker: Would require event loop redesign. Workaround: Assume immediate execution in GPU kernels." },
   { name: "URL",                        code: "new URL('https://…')",    st: "done",    eff: "na",  phase: "",  notes: "GPU-side struct with scheme/hostname/pathname parsing." },
   { name: "URLSearchParams",           code: "new URLSearchParams('a=1')",st:"done",   eff: "na",  phase: "",  notes: "" },
   { name: "TextEncoder",               code: "new TextEncoder().encode(s)",st:"done",  eff: "na",  phase: "",  notes: "UTF-8 byte array." },
@@ -589,7 +589,7 @@ const DATA = [
   { name: "EventTarget / addEventListener", code:"el.addEventListener('x',f)", st:"na", eff:"na",phase:"",notes:"DOM event model not applicable. AbortSignal has a minimal listener array." },
   { name: "Worker (GpuWorker)",        code: "new Worker('./w.ts')",     st: "partial", eff: "xl",  phase: "F", notes: "GpuWorker infrastructure exists; message-passing demo not yet written." },
   { name: "structuredClone",           code: "structuredClone(obj)",     st: "done",    eff: "na",  phase: "",  notes: "template<T> structuredClone(T val){return val;} — GPU value types are copied by assignment." },
-  { name: "localStorage / sessionStorage",code:"localStorage.getItem(k)",st:"na",      eff: "na",  phase: "",  notes: "" },
+  { name: "localStorage / sessionStorage",code:"localStorage.getItem(k)",st:"limited",  eff: "na",  phase: "3.12", notes: "GPU architectural limitation: No persistent storage available inside CUDA kernels. VRAM is ephemeral (freed at kernel boundaries). Workaround: Store data in host-side database or cache. Use GPU-side buffer for request-lifetime caching via SymmCtx context structure." },
   { name: "IndexedDB",                 code: "indexedDB.open('db')",     st: "na",      eff: "na",  phase: "",  notes: "" },
 ]},
 
@@ -627,7 +627,7 @@ const DATA = [
   { name: "Type guards",                code: "function isStr(x): x is string",st:"done",eff:"na",phase:"",notes:"Erased by esbuild. The ': x is string' return annotation is stripped — at runtime SymmParser sees a regular function returning a boolean. The guard predicate works as normal JS." },
   { name: "Assertion functions",        code: "function assert(x): asserts x",st:"done",eff:"na",phase:"",notes:"Erased by esbuild. The 'asserts x' return annotation is stripped. At runtime the function runs its check and throws/returns normally — SymmParser sees a plain void function." },
   { name: "using / await using",        code: "using file = open(…)",    st: "partial", eff: "m",   phase: "F", notes: "Parser treats 'using' as 'const' — binding created. Symbol.dispose not called (GPU has no RAII/destructors)." },
-  { name: "Decorators (experimental)",  code: "@injectable class Foo {}",st: "missing", eff: "xl",  phase: "F", notes: "Not yet implemented — @decorator syntax will cause a parse error. Implementation plan: emit decorator calls as __device__ wrapper functions around the class/method. Stage 3 TC39 decorators and legacy TS experimental decorators have different calling conventions and require separate handling." },
+  { name: "Decorators (experimental)",  code: "@injectable class Foo {}",st: "limited", eff: "xl",  phase: "3.12", notes: "Parser handles @decorator syntax (stored in ClassDecl/MethodDecl.decorators), but Codegen doesn't emit decorator calls yet. Two standards (legacy TS vs Stage 3 TC39) have different calling conventions. Implementation would require function-based wrapper emission. Medium-effort feature blocked on standards clarity and codegen design." },
 ]},
 
 // ─────────────────────────────────────────────────────────────────────────────
