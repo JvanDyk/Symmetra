@@ -17077,6 +17077,129 @@ static void testPhase71Database() {
     });
 }
 
+static void testPhase72Caching() {
+    std::cout << "\n=== Phase 7.2: Caching Layer ===\n";
+
+    TEST("_CacheEntry — cache entry with TTL", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _CacheEntry");
+        ASSERT_CONTAINS(src, "_expires_at");
+        ASSERT_CONTAINS(src, "_hit_count");
+    });
+
+    TEST("_CacheStats — cache statistics (hits, misses)", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _CacheStats");
+        ASSERT_CONTAINS(src, "_hits");
+        ASSERT_CONTAINS(src, "_misses");
+        ASSERT_CONTAINS(src, "_hit_rate");
+    });
+
+    TEST("_Cache — LRU cache with 32 entries", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _Cache");
+        ASSERT_CONTAINS(src, "_entries[32]");
+        ASSERT_CONTAINS(src, "_max_memory_bytes");
+    });
+
+    TEST("_create_cache — create cache with memory limit", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_cache");
+    });
+
+    TEST("_cache_set — set cache value", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_set");
+    });
+
+    TEST("_cache_get — get cache value with TTL check", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_get");
+    });
+
+    TEST("_cache_delete — delete cache entry", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_delete");
+    });
+
+    TEST("_cache_clear — clear all entries", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_clear");
+    });
+
+    TEST("_cache_set_ttl — set time-to-live", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_set_ttl");
+    });
+
+    TEST("_CacheCluster — cluster of 4 caches", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _CacheCluster");
+        ASSERT_CONTAINS(src, "_caches[4]");
+    });
+
+    TEST("_create_cache_cluster — create cluster", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_cache_cluster");
+    });
+
+    TEST("_cache_cluster_add — add cache to cluster", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_cluster_add");
+    });
+
+    TEST("_cache_cluster_get — get cache by key hash", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_cluster_get");
+    });
+
+    TEST("_format_cache_stats_json — format stats as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_cache_stats_json");
+    });
+
+    TEST("_format_cache_status — format cache as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_cache_status");
+    });
+
+    TEST("_format_cache_cluster_status — format cluster as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_cache_cluster_status");
+    });
+
+    TEST("LRU eviction — oldest entry tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_CacheLRU");
+    });
+
+    TEST("TTL expiration — automatic expiry on get", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_expires_at");
+    });
+
+    TEST("Memory tracking — current and max usage", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_current_memory_bytes");
+        ASSERT_CONTAINS(src, "_max_memory_bytes");
+    });
+
+    TEST("Hit rate calculation — percentage of hits", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_hit_rate");
+    });
+
+    TEST("Key hashing — distribution across cluster", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_cache_cluster_get");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -17380,6 +17503,9 @@ int main() {
 
     // Phase 7.1: Database & Persistence
     symm::testPhase71Database();
+
+    // Phase 7.2: Caching Layer
+    symm::testPhase72Caching();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";

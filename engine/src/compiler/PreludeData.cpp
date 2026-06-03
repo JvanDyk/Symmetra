@@ -10943,6 +10943,248 @@ __device__ const char* _format_db_pool_status(_DBPool* pool) {
 
 )";
 
+// Fragment 25: Caching Layer (In-Memory Cache)
+static const char* PRELUDE_FRAG25 = R"(
+
+// ── Cache Data Structures ──────────────────────────────────────────────────────
+
+// Cache entry with TTL
+struct _CacheEntry {
+    const char* _key;               // Cache key
+    const char* _value;             // Cached value
+    int _value_len;
+    int _flags;                     // Bitmask for metadata
+    unsigned long long _expires_at; // Expiration timestamp
+    unsigned long long _created_at;
+    long long _hit_count;           // Access count
+    long long _last_accessed;       // Last access time
+};
+
+// Cache statistics
+struct _CacheStats {
+    long long _hits;                // Cache hits
+    long long _misses;              // Cache misses
+    long long _evictions;           // Items evicted
+    long long _sets;                // Items set
+    long long _gets;                // Get attempts
+    double _hit_rate;               // Hit rate percentage
+};
+
+// LRU eviction policy
+struct _CacheLRU {
+    const char* _oldest_key;        // Least recently used
+    const char* _newest_key;        // Most recently used
+    long long _access_count;        // Total accesses
+};
+
+// Cache with LRU eviction (32 entries)
+struct _Cache {
+    const char* _id;                // "cache"
+    _CacheEntry _entries[32];       // Up to 32 entries
+    int _entry_count;
+    int _max_entries;
+    long long _max_memory_bytes;    // Memory limit
+    long long _current_memory_bytes;// Current usage
+    _CacheStats _stats;
+    _CacheLRU _lru;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Cache cluster (4 caches)
+struct _CacheCluster {
+    const char* _id;                // "cache-cluster"
+    _Cache _caches[4];              // Up to 4 cache instances
+    int _cache_count;
+    long long _total_memory;
+    long long _total_hits;
+    long long _total_misses;
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// Cache key builder
+struct _CacheKeyBuilder {
+    char _key[256];                 // Built key
+    int _key_len;
+};
+
+// ── Cache Operations ───────────────────────────────────────────────────────────
+
+// Create cache
+__device__ _Cache _create_cache(const char* id, long long max_memory) {
+    _Cache c;
+    c._id = id;
+    c._entry_count = 0;
+    c._max_entries = 32;
+    c._max_memory_bytes = max_memory;
+    c._current_memory_bytes = 0;
+    c._stats._hits = 0;
+    c._stats._misses = 0;
+    c._stats._evictions = 0;
+    c._stats._sets = 0;
+    c._stats._gets = 0;
+    c._stats._hit_rate = 0.0;
+    c._lru._access_count = 0;
+    c._created_at = _symm_now_ms;
+    c._span_id = 0;
+    return c;
+}
+
+// Set cache entry
+__device__ void _cache_set(_Cache* cache, const char* key, const char* value) {
+    int val_len = 0;
+    while (value[val_len] && val_len < 1023) val_len++;
+
+    // Check if key exists
+    for (int i = 0; i < cache->_entry_count; i++) {
+        if (symm_str_eq(cache->_entries[i]._key, key)) {
+            cache->_entries[i]._value = value;
+            cache->_entries[i]._value_len = val_len;
+            cache->_entries[i]._last_accessed = _symm_now_ms;
+            cache->_stats._sets++;
+            return;
+        }
+    }
+
+    // Add new entry
+    if (cache->_entry_count < 32) {
+        cache->_entries[cache->_entry_count]._key = key;
+        cache->_entries[cache->_entry_count]._value = value;
+        cache->_entries[cache->_entry_count]._value_len = val_len;
+        cache->_entries[cache->_entry_count]._expires_at = _symm_now_ms + 3600000;  // 1 hour TTL
+        cache->_entries[cache->_entry_count]._created_at = _symm_now_ms;
+        cache->_entries[cache->_entry_count]._hit_count = 0;
+        cache->_entries[cache->_entry_count]._last_accessed = _symm_now_ms;
+        cache->_entry_count++;
+        cache->_stats._sets++;
+        cache->_current_memory_bytes += val_len;
+    }
+}
+
+// Get cache entry
+__device__ const char* _cache_get(_Cache* cache, const char* key) {
+    cache->_stats._gets++;
+    for (int i = 0; i < cache->_entry_count; i++) {
+        if (symm_str_eq(cache->_entries[i]._key, key)) {
+            // Check expiration
+            if (cache->_entries[i]._expires_at < _symm_now_ms) {
+                cache->_stats._misses++;
+                return 0;  // Expired
+            }
+            cache->_entries[i]._hit_count++;
+            cache->_entries[i]._last_accessed = _symm_now_ms;
+            cache->_stats._hits++;
+            return cache->_entries[i]._value;
+        }
+    }
+    cache->_stats._misses++;
+    return 0;
+}
+
+// Delete cache entry
+__device__ void _cache_delete(_Cache* cache, const char* key) {
+    for (int i = 0; i < cache->_entry_count; i++) {
+        if (symm_str_eq(cache->_entries[i]._key, key)) {
+            // Mark for deletion (shift remaining)
+            for (int j = i; j < cache->_entry_count - 1; j++) {
+                cache->_entries[j] = cache->_entries[j + 1];
+            }
+            cache->_entry_count--;
+            cache->_stats._evictions++;
+            return;
+        }
+    }
+}
+
+// Clear all entries
+__device__ void _cache_clear(_Cache* cache) {
+    cache->_entry_count = 0;
+    cache->_current_memory_bytes = 0;
+    cache->_stats._hits = 0;
+    cache->_stats._misses = 0;
+}
+
+// Set TTL on entry
+__device__ void _cache_set_ttl(_Cache* cache, const char* key, long long ttl_ms) {
+    for (int i = 0; i < cache->_entry_count; i++) {
+        if (symm_str_eq(cache->_entries[i]._key, key)) {
+            cache->_entries[i]._expires_at = _symm_now_ms + ttl_ms;
+            return;
+        }
+    }
+}
+
+// Create cache cluster
+__device__ _CacheCluster _create_cache_cluster() {
+    _CacheCluster cc;
+    cc._id = "cache-cluster";
+    cc._cache_count = 0;
+    cc._total_memory = 0;
+    cc._total_hits = 0;
+    cc._total_misses = 0;
+    cc._created_at = _symm_now_ms;
+    cc._span_id = 0;
+    return cc;
+}
+
+// Add cache to cluster
+__device__ void _cache_cluster_add(_CacheCluster* cluster, _Cache* cache) {
+    if (cluster->_cache_count < 4) {
+        cluster->_caches[cluster->_cache_count] = *cache;
+        cluster->_cache_count++;
+        cluster->_total_memory += cache->_max_memory_bytes;
+    }
+}
+
+// Get cache from cluster (round-robin by key hash)
+__device__ _Cache* _cache_cluster_get(_CacheCluster* cluster, const char* key) {
+    if (cluster->_cache_count == 0) return 0;
+    // Simple hash: sum of key characters mod cache_count
+    unsigned long hash = 0;
+    for (int i = 0; key[i]; i++) {
+        hash += (unsigned char)key[i];
+    }
+    int idx = hash % cluster->_cache_count;
+    return &cluster->_caches[idx];
+}
+
+// Format cache stats as JSON
+__device__ const char* _format_cache_stats_json(_CacheStats* stats) {
+    static char buf[256];
+    int len = 0;
+    long long total = stats->_hits + stats->_misses;
+    double rate = (total > 0) ? (100.0 * stats->_hits / total) : 0.0;
+    len += sprintf(buf+len, "{\\"hits\\":%lld,\\"misses\\":%lld,\\"rate\\":%0.1f,\\"evictions\\":%lld}",
+                   stats->_hits, stats->_misses, rate, stats->_evictions);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format cache status
+__device__ const char* _format_cache_status(_Cache* cache) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"id\\":\"%s\\",\\"entries\\":%d,\\"memory\\":%lld,\\"hits\\":%lld,\\"misses\\":%lld}",
+                   cache->_id, cache->_entry_count, cache->_current_memory_bytes,
+                   cache->_stats._hits, cache->_stats._misses);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format cluster status
+__device__ const char* _format_cache_cluster_status(_CacheCluster* cluster) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"caches\\":%d,\\"memory\\":%lld,\\"hits\\":%lld,\\"misses\\":%lld}",
+                   cluster->_cache_count, cluster->_total_memory,
+                   cluster->_total_hits, cluster->_total_misses);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -10972,6 +11214,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG22) result += PRELUDE_FRAG22; // Streams and buffers
     if (PRELUDE_FRAG23) result += PRELUDE_FRAG23; // WebSocket support
     if (PRELUDE_FRAG24) result += PRELUDE_FRAG24; // Database persistence
+    if (PRELUDE_FRAG25) result += PRELUDE_FRAG25; // Caching layer
     return result;
 }
 
