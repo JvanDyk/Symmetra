@@ -3615,6 +3615,150 @@ static void testJsonParsStringify() {
         // Verify toJSON method support is available
         ASSERT_CONTAINS(src, "symm_handler_0");
     });
+
+    // ── Phase 3.13: Edge Case Hardening ────────────────────────────────────────
+    TEST("JSON.stringify with empty object — emitted", {
+        auto src = codegen(
+            "app.get('/jse', (ctx) => {\n"
+            "  const s = JSON.stringify({});\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle empty object without errors
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with empty array — emitted", {
+        auto src = codegen(
+            "app.get('/jsea', (ctx) => {\n"
+            "  const s = JSON.stringify([]);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle empty array without errors
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with null value — emitted", {
+        auto src = codegen(
+            "app.get('/jsnull', (ctx) => {\n"
+            "  const s = JSON.stringify(null);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle null correctly
+        ASSERT_CONTAINS(src, "symm_json_stringify");
+    });
+
+    TEST("JSON.stringify with undefined — handled", {
+        auto src = codegen(
+            "app.get('/jsundef', (ctx) => {\n"
+            "  const x = undefined;\n"
+            "  const s = JSON.stringify(x);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle undefined
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with boolean values — emitted", {
+        auto src = codegen(
+            "app.get('/jsbool', (ctx) => {\n"
+            "  const s = JSON.stringify({ t: true, f: false });\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with NaN and Infinity — handled", {
+        auto src = codegen(
+            "app.get('/jsnan', (ctx) => {\n"
+            "  const s = JSON.stringify({ nan: NaN, inf: Infinity });\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should convert NaN/Infinity to null per JSON spec
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("JSON.stringify with special characters — escaped", {
+        auto src = codegen(
+            "app.get('/jsspc', (ctx) => {\n"
+            "  const s = JSON.stringify({ text: 'line1\\nline2\\ttab' });\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should properly escape control characters
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("String.repeat with large count — bounded", {
+        auto src = codegen(
+            "app.get('/repeat', (ctx) => {\n"
+            "  const s = 'x'.repeat(1000000);\n"
+            "  ctx.json({ len: s.length });\n"
+            "});"
+        );
+        // Should be bounded to prevent buffer overflow
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("String.padStart with large target — bounded", {
+        auto src = codegen(
+            "app.get('/pad', (ctx) => {\n"
+            "  const s = 'hi'.padStart(10000, '0');\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Array.join with large array — bounded", {
+        auto src = codegen(
+            "app.get('/join', (ctx) => {\n"
+            "  const arr = new Array(10000).fill('x');\n"
+            "  const s = arr.join(',');\n"
+            "  ctx.json({ len: s.length });\n"
+            "});"
+        );
+        // Should handle without buffer overflow
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Nested array with mixed types — serialized", {
+        auto src = codegen(
+            "app.get('/jsmix2', (ctx) => {\n"
+            "  const s = JSON.stringify([1, 'two', true, null, [4, 5]]);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should handle mixed type arrays
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Object with numeric keys — serialized", {
+        auto src = codegen(
+            "app.get('/jsnum', (ctx) => {\n"
+            "  const s = JSON.stringify({ '1': 'one', '2': 'two' });\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
+
+    TEST("Deeply nested large structure — not infinite loop", {
+        auto src = codegen(
+            "app.get('/jsbig', (ctx) => {\n"
+            "  const big = { a: { b: { c: { d: { e: { f: { g: 'deep' } } } } } } };\n"
+            "  const s = JSON.stringify(big);\n"
+            "  ctx.json({ s });\n"
+            "});"
+        );
+        // Should not hang or overflow
+        ASSERT_CONTAINS(src, "symm_handler_0");
+    });
 }
 
 // ── Array functional methods ──────────────────────────────────────────────────
