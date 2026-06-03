@@ -3,6 +3,15 @@
 
 #include <string>
 
+// Handle __device__ for MSVC (which doesn't understand CUDA keywords)
+#ifdef _MSC_VER
+#define __device__
+#define __host__
+#define __global__
+#define __constant__
+#define __shared__
+#endif
+
 namespace symm {
 
 // Fragment 1: Core types, structs, and utility functions
