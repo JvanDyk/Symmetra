@@ -2674,6 +2674,125 @@ __device__ inline const char* symm_format_metrics_json(const MetricsCollector& m
     return buf;
 }
 
+// ── Phase 3.18: Distributed Tracing & Request Correlation ──────────────────────
+// Request ID generation and trace context propagation for multi-instance deployments
+
+struct TraceContext {
+    const char* _trace_id;        // Unique trace identifier (correlates requests)
+    const char* _span_id;         // Current operation span
+    const char* _parent_span_id;  // Parent operation (for chaining)
+    int _trace_flags;             // 1=sampled, 0=not sampled
+    unsigned long long _start_time;  // Trace start time (clock64)
+
+    __device__ TraceContext(const char* tid = "", const char* sid = "", const char* parent = "")
+        : _trace_id(tid), _span_id(sid), _parent_span_id(parent), _trace_flags(1),
+          _start_time(clock64()) {}
+
+    __device__ bool isSampled() const { return _trace_flags == 1; }
+    __device__ void setSampled(bool sampled) { _trace_flags = sampled ? 1 : 0; }
+};
+
+// Request ID generator (simple counter-based)
+struct RequestIDGenerator {
+    unsigned long long _counter;
+    const char* _instance_id;  // GPU instance identifier
+
+    __device__ RequestIDGenerator(const char* instance_id = "gpu-0")
+        : _counter(0), _instance_id(instance_id) {}
+
+    __device__ const char* generateRequestID() {
+        static char buf[64];
+        _counter++;
+        // Format: instance-id-counter (e.g., "gpu-0-12345")
+        snprintf(buf, sizeof(buf), "%s-%llu", _instance_id, _counter);
+        return buf;
+    }
+};
+
+// Span tracking for operation timing
+struct Span {
+    const char* _span_id;         // This span's ID
+    const char* _operation_name;  // Operation being traced
+    unsigned long long _start_time;
+    unsigned long long _end_time;
+    int _status_code;             // HTTP status or error code
+    const char* _tags[5];         // Key-value pairs for debugging (simplified)
+
+    __device__ Span(const char* span_id = "", const char* op = "")
+        : _span_id(span_id), _operation_name(op), _start_time(clock64()),
+          _end_time(0), _status_code(0) {
+        for (int i = 0; i < 5; i++) _tags[i] = nullptr;
+    }
+
+    __device__ void finish(int status) {
+        _end_time = clock64();
+        _status_code = status;
+    }
+
+    __device__ float durationMs() const {
+        if (_end_time <= _start_time) return 0.0f;
+        unsigned long long cycles = _end_time - _start_time;
+        return (float)cycles / 1700.0f / 1000.0f;
+    }
+
+    __device__ void addTag(const char* key, const char* value) {
+        for (int i = 0; i < 5; i++) {
+            if (!_tags[i]) {
+                _tags[i] = key;  // Simplified: store key only
+                break;
+            }
+        }
+    }
+};
+
+// Trace correlation helper for distributed systems
+struct TraceCorrelation {
+    const char* _request_id;      // Request ID from header
+    const char* _trace_id;        // Trace ID for correlation
+    const char* _caller_service;  // Calling service identifier
+    int _hop_count;               // Number of service hops
+
+    __device__ TraceCorrelation(const char* req_id = "", const char* trace_id = "")
+        : _request_id(req_id), _trace_id(trace_id), _caller_service(""), _hop_count(0) {}
+
+    __device__ void recordHop(const char* service) {
+        _hop_count++;
+        _caller_service = service;
+    }
+
+    __device__ int getTotalHops() const { return _hop_count; }
+};
+
+// Helper: Generate trace context from request headers
+__device__ inline TraceContext symm_extract_trace_context(const char* trace_header) {
+    if (!trace_header) return TraceContext();
+    // Format: "trace-id:span-id:parent-span-id:flags"
+    // Simplified: just store the header as trace_id
+    return TraceContext(trace_header, "", "");
+}
+
+// Helper: Format trace context for propagation to downstream services
+__device__ inline const char* symm_format_trace_header(const TraceContext& ctx) {
+    static char buf[256];
+    if (!ctx._trace_id || !ctx._trace_id[0]) {
+        snprintf(buf, sizeof(buf), "");
+        return buf;
+    }
+    snprintf(buf, sizeof(buf), "%s:%s:%s:%d",
+             ctx._trace_id, ctx._span_id, ctx._parent_span_id, ctx._trace_flags);
+    return buf;
+}
+
+// Helper: Correlate request IDs across service boundaries
+__device__ inline const char* symm_correlate_request(const char* incoming_id, const char* instance_id) {
+    static char buf[128];
+    if (incoming_id && incoming_id[0]) {
+        snprintf(buf, sizeof(buf), "%s->%s", incoming_id, instance_id);
+        return buf;
+    }
+    return instance_id;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
