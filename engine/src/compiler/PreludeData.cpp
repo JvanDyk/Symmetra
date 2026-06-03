@@ -9645,6 +9645,265 @@ __device__ const char* _format_fs_manager_status(_FileSystemManager* fsm) {
 
 )";
 
+// Fragment 20: HTTP Request/Response Utilities
+static const char* PRELUDE_FRAG20 = R"(
+
+// ── HTTP Data Structures ──────────────────────────────────────────────────────
+
+// HTTP request
+struct _HTTPRequest {
+    const char* _id;                // Request identifier
+    const char* _method;            // GET, POST, PUT, DELETE, PATCH, HEAD
+    const char* _path;              // URL path
+    const char* _query;             // Query string
+    const char* _body;              // Request body
+    int _body_len;
+    const char* _headers[16];       // Up to 16 headers (key:value)
+    int _header_count;
+    const char* _content_type;      // "application/json", etc.
+    long long _created_at;
+    const char* _span_id;
+};
+
+// HTTP response
+struct _HTTPResponse {
+    const char* _id;                // Response identifier
+    int _status_code;               // 200, 404, 500, etc.
+    const char* _status_text;       // "OK", "Not Found", etc.
+    char _body[4096];               // Response body (up to 4KB)
+    int _body_len;
+    const char* _headers[16];       // Up to 16 response headers
+    int _header_count;
+    const char* _content_type;      // Content-Type header
+    long long _created_at;
+    const char* _span_id;
+};
+
+// HTTP header (key-value pair)
+struct _HTTPHeader {
+    const char* _name;              // Header name
+    const char* _value;             // Header value
+    unsigned long long _created_at;
+};
+
+// HTTP router (maps paths to handlers)
+struct _HTTPRouter {
+    const char* _id;                // "http-router"
+    struct {
+        const char* _method;        // GET, POST, etc.
+        const char* _path;          // /api/users, /api/posts/:id, etc.
+        int _handler_id;            // Handler function ID
+    } _routes[32];                  // Up to 32 routes
+    int _route_count;
+    int _request_count;             // Metrics
+    int _response_count;
+    long long _total_bytes_sent;    // Response bytes sent
+    long long _total_bytes_received;// Request bytes received
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// HTTP middleware
+struct _HTTPMiddleware {
+    const char* _id;                // Middleware identifier
+    const char* _name;              // Middleware name
+    int _enabled;                   // 1=enabled, 0=disabled
+    int _priority;                  // Execution order
+    int _call_count;                // Invocation count
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// HTTP request/response pair
+struct _HTTPExchange {
+    const char* _id;                // Exchange identifier
+    _HTTPRequest _request;
+    _HTTPResponse _response;
+    long long _duration_ms;         // Time to process
+    int _status;                    // 0=pending, 1=completed, 2=errored
+    unsigned long long _created_at;
+    const char* _span_id;
+};
+
+// ── HTTP Operations ───────────────────────────────────────────────────────────
+
+// Create HTTP request
+__device__ _HTTPRequest _create_http_request(const char* method, const char* path) {
+    _HTTPRequest req;
+    req._id = path;
+    req._method = method;
+    req._path = path;
+    req._query = 0;
+    req._body = 0;
+    req._body_len = 0;
+    req._header_count = 0;
+    req._content_type = "text/plain";
+    req._created_at = _symm_now_ms;
+    req._span_id = 0;
+    return req;
+}
+
+// Create HTTP response
+__device__ _HTTPResponse _create_http_response(int status_code) {
+    _HTTPResponse resp;
+    resp._id = 0;
+    resp._status_code = status_code;
+    resp._status_text = (status_code == 200) ? "OK" : "Error";
+    resp._body_len = 0;
+    resp._header_count = 0;
+    resp._content_type = "text/plain";
+    resp._created_at = _symm_now_ms;
+    resp._span_id = 0;
+    return resp;
+}
+
+// Add request header
+__device__ void _http_request_add_header(_HTTPRequest* req, const char* name, const char* value) {
+    if (req->_header_count < 16) {
+        static char buf[256];
+        int len = 0;
+        len += sprintf(buf+len, "%s: %s", name, value);
+        buf[len] = 0;
+        req->_headers[req->_header_count] = buf;
+        req->_header_count++;
+    }
+}
+
+// Add response header
+__device__ void _http_response_add_header(_HTTPResponse* resp, const char* name, const char* value) {
+    if (resp->_header_count < 16) {
+        static char buf[256];
+        int len = 0;
+        len += sprintf(buf+len, "%s: %s", name, value);
+        buf[len] = 0;
+        resp->_headers[resp->_header_count] = buf;
+        resp->_header_count++;
+    }
+}
+
+// Set response body
+__device__ void _http_response_set_body(_HTTPResponse* resp, const char* body) {
+    int len = 0;
+    while (body[len] && len < 4095) len++;
+    for (int i = 0; i < len; i++) {
+        resp->_body[i] = body[i];
+    }
+    resp->_body[len] = 0;
+    resp->_body_len = len;
+}
+
+// Create HTTP router
+__device__ _HTTPRouter _create_http_router() {
+    _HTTPRouter router;
+    router._id = "http-router";
+    router._route_count = 0;
+    router._request_count = 0;
+    router._response_count = 0;
+    router._total_bytes_sent = 0;
+    router._total_bytes_received = 0;
+    router._created_at = _symm_now_ms;
+    router._span_id = 0;
+    return router;
+}
+
+// Register route
+__device__ void _http_router_register(_HTTPRouter* router, const char* method, const char* path, int handler_id) {
+    if (router->_route_count < 32) {
+        router->_routes[router->_route_count]._method = method;
+        router->_routes[router->_route_count]._path = path;
+        router->_routes[router->_route_count]._handler_id = handler_id;
+        router->_route_count++;
+    }
+}
+
+// Match route
+__device__ int _http_router_match(_HTTPRouter* router, const char* method, const char* path) {
+    for (int i = 0; i < router->_route_count; i++) {
+        if (symm_str_eq(router->_routes[i]._method, method) &&
+            symm_str_eq(router->_routes[i]._path, path)) {
+            router->_request_count++;
+            return router->_routes[i]._handler_id;
+        }
+    }
+    return -1;
+}
+
+// Create middleware
+__device__ _HTTPMiddleware _create_http_middleware(const char* name) {
+    _HTTPMiddleware mw;
+    mw._id = name;
+    mw._name = name;
+    mw._enabled = 1;
+    mw._priority = 0;
+    mw._call_count = 0;
+    mw._created_at = _symm_now_ms;
+    mw._span_id = 0;
+    return mw;
+}
+
+// Create exchange
+__device__ _HTTPExchange _create_http_exchange(const char* method, const char* path) {
+    _HTTPExchange ex;
+    ex._id = path;
+    ex._request = _create_http_request(method, path);
+    ex._response = _create_http_response(200);
+    ex._duration_ms = 0;
+    ex._status = 0;  // pending
+    ex._created_at = _symm_now_ms;
+    ex._span_id = 0;
+    return ex;
+}
+
+// Complete exchange
+__device__ void _http_exchange_complete(_HTTPExchange* ex, int status_code, long long duration_ms) {
+    ex->_response._status_code = status_code;
+    ex->_duration_ms = duration_ms;
+    ex->_status = 1;  // completed
+}
+
+// Format request as JSON
+__device__ const char* _format_http_request_json(_HTTPRequest* req) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"method\\":\"%s\\",\\"path\\":\"%s\\",\\"headers\\":%d,\\"body_len\\":%d}",
+                   req->_method, req->_path, req->_header_count, req->_body_len);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format response as JSON
+__device__ const char* _format_http_response_json(_HTTPResponse* resp) {
+    static char buf[512];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"status\\":%d,\\"headers\\":%d,\\"body_len\\":%d,\\"content_type\\":\"%s\\"}",
+                   resp->_status_code, resp->_header_count, resp->_body_len, resp->_content_type);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format router status
+__device__ const char* _format_http_router_status(_HTTPRouter* router) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"routes\\":%d,\\"requests\\":%d,\\"responses\\":%d,\\"sent_bytes\\":%lld,\\"recv_bytes\\":%lld}",
+                   router->_route_count, router->_request_count, router->_response_count,
+                   router->_total_bytes_sent, router->_total_bytes_received);
+    buf[len] = 0;
+    return buf;
+}
+
+// Format exchange status
+__device__ const char* _format_http_exchange_status(_HTTPExchange* ex) {
+    static char buf[256];
+    int len = 0;
+    len += sprintf(buf+len, "{\\"method\\":\"%s\\",\\"path\\":\"%s\\",\\"status\\":%d,\\"duration_ms\\":%lld,\\"code\\":%d}",
+                   ex->_request._method, ex->_request._path, ex->_status, ex->_duration_ms, ex->_response._status_code);
+    buf[len] = 0;
+    return buf;
+}
+
+)";
+
 // Prelude builder: concatenates all fragments into single string
 static std::string _build_complete_prelude() {
     std::string result;
@@ -9669,6 +9928,7 @@ static std::string _build_complete_prelude() {
     if (PRELUDE_FRAG17) result += PRELUDE_FRAG17; // Advanced monitoring
     if (PRELUDE_FRAG18) result += PRELUDE_FRAG18; // Decorators
     if (PRELUDE_FRAG19) result += PRELUDE_FRAG19; // File system
+    if (PRELUDE_FRAG20) result += PRELUDE_FRAG20; // HTTP utilities
     return result;
 }
 

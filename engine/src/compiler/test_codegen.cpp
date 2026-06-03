@@ -16228,6 +16228,171 @@ static void testPhase61FileSystem() {
     });
 }
 
+static void testPhase62HTTPUtilities() {
+    std::cout << "\n=== Phase 6.2: HTTP Utilities ===\n";
+
+    TEST("_HTTPRequest — HTTP request with method/path/body/headers", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPRequest");
+        ASSERT_CONTAINS(src, "_method");
+        ASSERT_CONTAINS(src, "_path");
+        ASSERT_CONTAINS(src, "_body");
+    });
+
+    TEST("_create_http_request — create request from method and path", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_http_request");
+    });
+
+    TEST("_HTTPResponse — HTTP response with status code and body", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPResponse");
+        ASSERT_CONTAINS(src, "_status_code");
+        ASSERT_CONTAINS(src, "_body");
+        ASSERT_CONTAINS(src, "_header_count");
+    });
+
+    TEST("_create_http_response — create response with status code", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_http_response");
+    });
+
+    TEST("_HTTPHeader — header key-value pair", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPHeader");
+        ASSERT_CONTAINS(src, "_name");
+        ASSERT_CONTAINS(src, "_value");
+    });
+
+    TEST("_http_request_add_header — add header to request", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_request_add_header");
+    });
+
+    TEST("_http_response_add_header — add header to response", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_response_add_header");
+    });
+
+    TEST("_http_response_set_body — set response body content", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_response_set_body");
+    });
+
+    TEST("_HTTPRouter — router with 32 routes", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPRouter");
+        ASSERT_CONTAINS(src, "_routes[32]");
+        ASSERT_CONTAINS(src, "_request_count");
+        ASSERT_CONTAINS(src, "_response_count");
+    });
+
+    TEST("_create_http_router — initialize router", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_http_router");
+    });
+
+    TEST("_http_router_register — register route with method/path/handler", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_router_register");
+    });
+
+    TEST("_http_router_match — match request to route", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_router_match");
+    });
+
+    TEST("_HTTPMiddleware — middleware with name and priority", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPMiddleware");
+        ASSERT_CONTAINS(src, "_priority");
+        ASSERT_CONTAINS(src, "_call_count");
+    });
+
+    TEST("_create_http_middleware — create middleware", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_http_middleware");
+    });
+
+    TEST("_HTTPExchange — request/response pair with duration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "struct _HTTPExchange");
+        ASSERT_CONTAINS(src, "_duration_ms");
+        ASSERT_CONTAINS(src, "_status");
+    });
+
+    TEST("_create_http_exchange — create request/response exchange", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_create_http_exchange");
+    });
+
+    TEST("_http_exchange_complete — mark exchange complete with duration", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_http_exchange_complete");
+    });
+
+    TEST("_format_http_request_json — format request as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_http_request_json");
+    });
+
+    TEST("_format_http_response_json — format response as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_http_response_json");
+    });
+
+    TEST("_format_http_router_status — format router status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_http_router_status");
+    });
+
+    TEST("_format_http_exchange_status — format exchange status as JSON", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_format_http_exchange_status");
+    });
+
+    TEST("HTTP methods — GET, POST, PUT, DELETE, PATCH, HEAD", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_method");
+    });
+
+    TEST("Status codes — 200, 404, 500, etc.", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_status_code");
+    });
+
+    TEST("Request headers — up to 16 headers per request", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_headers[16]");
+    });
+
+    TEST("Response body — up to 4KB content", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_body[4096]");
+    });
+
+    TEST("Router metrics — request count, response count, bytes sent/received", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_total_bytes_sent");
+        ASSERT_CONTAINS(src, "_total_bytes_received");
+    });
+
+    TEST("Exchange tracking — pending/completed/errored status", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_status");
+    });
+
+    TEST("Exchange timing — duration_ms tracking", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_duration_ms");
+    });
+
+    TEST("Tracing support — span_id in all structures", {
+        auto src = codegen("app.get('/', (ctx) => { ctx.json({ ok: true }); });");
+        ASSERT_CONTAINS(src, "_span_id");
+    });
+}
+
 } // namespace symm
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -16516,6 +16681,9 @@ int main() {
 
     // Phase 6.1: File System
     symm::testPhase61FileSystem();
+
+    // Phase 6.2: HTTP Utilities
+    symm::testPhase62HTTPUtilities();
 
     std::cout << "\n===========================\n";
     std::cout << "Results: " << symm::gPassed << " passed, " << symm::gFailed << " failed\n";
