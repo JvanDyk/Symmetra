@@ -2503,6 +2503,177 @@ __device__ inline const char* symm_format_stats(const RequestCounter& c) {
     return buf;
 }
 
+// ── Phase 3.17: Advanced Performance Metrics ────────────────────────────────────
+// Latency histogram for tracking request duration distribution
+
+struct HistogramMetrics {
+    int _bucket_0_10ms;     // 0-10ms
+    int _bucket_10_50ms;    // 10-50ms
+    int _bucket_50_100ms;   // 50-100ms
+    int _bucket_100_500ms;  // 100-500ms
+    int _bucket_500ms_plus; // 500ms+
+    int _total_requests;
+
+    __device__ HistogramMetrics()
+        : _bucket_0_10ms(0), _bucket_10_50ms(0), _bucket_50_100ms(0),
+          _bucket_100_500ms(0), _bucket_500ms_plus(0), _total_requests(0) {}
+
+    __device__ void recordLatency(float latency_ms) {
+        _total_requests++;
+        if (latency_ms < 10.0f) _bucket_0_10ms++;
+        else if (latency_ms < 50.0f) _bucket_10_50ms++;
+        else if (latency_ms < 100.0f) _bucket_50_100ms++;
+        else if (latency_ms < 500.0f) _bucket_100_500ms++;
+        else _bucket_500ms_plus++;
+    }
+
+    __device__ float p50() const {
+        if (_total_requests == 0) return 0.0f;
+        int half = _total_requests / 2;
+        int cumsum = 0;
+        if (cumsum + _bucket_0_10ms >= half) return 5.0f;
+        cumsum += _bucket_0_10ms;
+        if (cumsum + _bucket_10_50ms >= half) return 30.0f;
+        cumsum += _bucket_10_50ms;
+        if (cumsum + _bucket_50_100ms >= half) return 75.0f;
+        cumsum += _bucket_50_100ms;
+        if (cumsum + _bucket_100_500ms >= half) return 300.0f;
+        return 750.0f;
+    }
+
+    __device__ float p99() const {
+        if (_total_requests == 0) return 0.0f;
+        int threshold = (int)(_total_requests * 0.99f);
+        int cumsum = 0;
+        if (cumsum + _bucket_0_10ms >= threshold) return 10.0f;
+        cumsum += _bucket_0_10ms;
+        if (cumsum + _bucket_10_50ms >= threshold) return 50.0f;
+        cumsum += _bucket_10_50ms;
+        if (cumsum + _bucket_50_100ms >= threshold) return 100.0f;
+        cumsum += _bucket_50_100ms;
+        if (cumsum + _bucket_100_500ms >= threshold) return 500.0f;
+        return 750.0f;
+    }
+};
+
+// Per-endpoint metrics tracking
+struct EndpointMetrics {
+    const char* _endpoint;      // "/api/users", "/api/posts", etc.
+    int _total_requests;
+    int _successful;
+    int _errors;
+    float _total_time_ms;
+    float _min_latency_ms;
+    float _max_latency_ms;
+
+    __device__ EndpointMetrics(const char* endpoint = "")
+        : _endpoint(endpoint), _total_requests(0), _successful(0), _errors(0),
+          _total_time_ms(0.0f), _min_latency_ms(999999.0f), _max_latency_ms(0.0f) {}
+
+    __device__ void recordRequest(float latency_ms, int status_code) {
+        _total_requests++;
+        _total_time_ms += latency_ms;
+        if (latency_ms < _min_latency_ms) _min_latency_ms = latency_ms;
+        if (latency_ms > _max_latency_ms) _max_latency_ms = latency_ms;
+        if (status_code >= 200 && status_code < 300) _successful++;
+        else _errors++;
+    }
+
+    __device__ float avgLatency() const {
+        return _total_requests > 0 ? _total_time_ms / _total_requests : 0.0f;
+    }
+
+    __device__ float errorRate() const {
+        return _total_requests > 0 ? (float)_errors * 100.0f / _total_requests : 0.0f;
+    }
+};
+
+// GPU resource usage tracking
+struct ResourceMetrics {
+    unsigned long long _kernel_start_time;  // clock64() at kernel start
+    unsigned long long _kernel_end_time;    // clock64() at kernel end
+    int _vram_bytes_used;                   // Approximate VRAM usage
+    int _max_vram_bytes;                    // Peak VRAM usage
+
+    __device__ ResourceMetrics()
+        : _kernel_start_time(0), _kernel_end_time(0), _vram_bytes_used(0),
+          _max_vram_bytes(0) {}
+
+    __device__ void recordKernelStart() {
+        _kernel_start_time = clock64();
+    }
+
+    __device__ void recordKernelEnd() {
+        _kernel_end_time = clock64();
+    }
+
+    __device__ void recordMemoryUsage(int bytes) {
+        _vram_bytes_used = bytes;
+        if (bytes > _max_vram_bytes) _max_vram_bytes = bytes;
+    }
+
+    __device__ float kernelTimeMs() const {
+        if (_kernel_end_time <= _kernel_start_time) return 0.0f;
+        unsigned long long cycles = _kernel_end_time - _kernel_start_time;
+        return (float)cycles / 1700.0f / 1000.0f;  // ~1700 cycles/ms at 1.7 GHz
+    }
+
+    __device__ float throughputMBps() const {
+        float time_ms = kernelTimeMs();
+        if (time_ms < 0.001f) return 0.0f;
+        return _vram_bytes_used / (1024.0f * 1024.0f) / (time_ms / 1000.0f);
+    }
+};
+
+// Combined metrics collector
+struct MetricsCollector {
+    HistogramMetrics _latency_hist;
+    EndpointMetrics _endpoints[5];  // Track up to 5 endpoints
+    int _endpoint_count;
+    ResourceMetrics _resources;
+    RequestCounter _counter;
+
+    __device__ MetricsCollector()
+        : _endpoint_count(0) {}
+
+    __device__ void recordRequest(const char* endpoint, float latency_ms, int status_code) {
+        _latency_hist.recordLatency(latency_ms);
+        _counter.recordResponse(status_code);
+
+        // Find or create endpoint
+        int idx = -1;
+        for (int i = 0; i < _endpoint_count; i++) {
+            if (symm_str_eq(_endpoints[i]._endpoint, endpoint)) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1 && _endpoint_count < 5) {
+            idx = _endpoint_count++;
+            _endpoints[idx]._endpoint = endpoint;
+        }
+        if (idx >= 0) {
+            _endpoints[idx].recordRequest(latency_ms, status_code);
+        }
+    }
+
+    __device__ float getLatencyPercentile(float percentile) const {
+        if (percentile < 0.5f) return _latency_hist.p50();
+        if (percentile < 0.99f) return _latency_hist.p99();
+        return _latency_hist._bucket_500ms_plus > 0 ? 750.0f : 100.0f;
+    }
+};
+
+// Helper: Format metrics as JSON for response
+__device__ inline const char* symm_format_metrics_json(const MetricsCollector& m) {
+    static char buf[512];
+    snprintf(buf, sizeof(buf),
+             "{\"requests\":%d,\"success\":%.1f,\"p50\":%.1f,\"p99\":%.1f,\"kernel_ms\":%.1f}",
+             m._counter._total, m._counter.successRate(), m._latency_hist.p50(),
+             m._latency_hist.p99(), m._resources.kernelTimeMs());
+    return buf;
+}
+
 // ── Security & Input Validation ────────────────────────────────────────────────
 
 // Input length validation
